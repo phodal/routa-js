@@ -9,7 +9,7 @@
  *   - Right area: Chat panel
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { SkillPanel } from "@/client/components/skill-panel";
 import { ChatPanel } from "@/client/components/chat-panel";
 import { SessionPanel } from "@/client/components/session-panel";
@@ -23,6 +23,14 @@ export default function HomePage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentRole>("CRAFTER");
   const [showAgentToast, setShowAgentToast] = useState(false);
   const acp = useAcp();
+
+  // Auto-connect on mount so providers are loaded immediately
+  useEffect(() => {
+    if (!acp.connected && !acp.loading) {
+      acp.connect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const bumpRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);

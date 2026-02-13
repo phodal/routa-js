@@ -16,6 +16,7 @@ import {
 } from "react";
 import type { AcpSessionNotification } from "../acp-client";
 import type { UseAcpActions, UseAcpState } from "../hooks/use-acp";
+import { TiptapInput } from "./tiptap-input";
 
 // ─── Message Types ─────────────────────────────────────────────────────
 
@@ -58,13 +59,11 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const { connected, loading, error, updates, prompt } = acp;
 
-  const [input, setInput] = useState("");
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
   >({});
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const streamingMsgIdRef = useRef<Record<string, string | null>>({});
   const streamingThoughtIdRef = useRef<Record<string, string | null>>({});
@@ -287,13 +286,10 @@ export function ChatPanel({
 
   // ── Actions ──────────────────────────────────────────────────────────
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim()) return;
+  const handleSend = useCallback(async (text: string) => {
+    if (!text.trim()) return;
     const sid = activeSessionId ?? (await onEnsureSession());
     if (!sid) return;
-
-    const text = input;
-    setInput("");
 
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
@@ -310,28 +306,7 @@ export function ChatPanel({
 
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
-  }, [input, activeSessionId, onEnsureSession, prompt]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend]
-  );
-
-  // Auto-resize textarea
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setInput(e.target.value);
-      const el = e.target;
-      el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 160) + "px";
-    },
-    []
-  );
+  }, [activeSessionId, onEnsureSession, prompt]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
@@ -383,11 +358,8 @@ export function ChatPanel({
       <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1117]">
         <div className="max-w-3xl mx-auto px-5 py-3">
           <div className="flex gap-2 items-end">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
+            <TiptapInput
+              onSend={handleSend}
               placeholder={
                 connected
                   ? activeSessionId
@@ -395,14 +367,18 @@ export function ChatPanel({
                     : "Type a message to auto-create a session..."
                   : "Connect first..."
               }
-              disabled={!connected || loading}
-              rows={1}
-              className="flex-1 px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#161922] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-40 placeholder:text-gray-400 dark:placeholder:text-gray-500 resize-none overflow-hidden"
-              style={{ minHeight: "42px", maxHeight: "160px" }}
+              disabled={!connected}
+              loading={loading}
             />
             <button
-              onClick={handleSend}
-              disabled={!connected || loading || !input.trim()}
+              onClick={() => {
+                // The TiptapInput handles Enter-to-send internally.
+                // This button is a fallback for mouse users.
+                // We'll dispatch a custom event that the TiptapInput can listen to.
+                const event = new CustomEvent("tiptap:send-click");
+                window.dispatchEvent(event);
+              }}
+              disabled={!connected || loading}
               className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {loading ? (

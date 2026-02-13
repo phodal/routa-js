@@ -40,3 +40,122 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(128, 128, 128, 0.5);
 }
+
+/* ─── Tiptap Editor Styles ──────────────────────────────────────────── */
+
+/* Placeholder styling */
+.tiptap-chat-input p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: #9ca3af;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tiptap-chat-input p.is-editor-empty:first-child::before {
+    color: #6b7280;
+  }
+}
+
+/* Remove default paragraph margin in the input */
+.tiptap-chat-input p {
+  margin: 0;
+}
+
+.tiptap-chat-input > * + * {
+  margin-top: 0.25rem;
+}
+
+/* Code block inside editor */
+.tiptap-chat-input pre {
+  margin: 0.25rem 0;
+}
+
+.tiptap-chat-input pre code {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Inline code */
+.tiptap-chat-input code:not(pre code) {
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Task list styling */
+.tiptap-chat-input ul[data-type="taskList"] {
+  padding: 0;
+  list-style: none;
+}
+
+.tiptap-chat-input ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.tiptap-chat-input ul[data-type="taskList"] li label {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+/* Image styling inside editor */
+.tiptap-chat-input img {
+  max-width: 100%;
+  max-height: 120px;
+  border-radius: 0.375rem;
+  margin: 0.25rem 0;
+}
+
+/* Selection styling */
+.tiptap-chat-input ::selection {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+/* Focus outline removal - handled by wrapper */
+.tiptap-chat-input:focus {
+  outline: none;
+}
+
+.ProseMirror:focus {
+  outline: none;
+}
+
+/* Lowlight / hljs code block theme for dark mode */
+@media (prefers-color-scheme: dark) {
+  .hljs {
+    color: #c9d1d9;
+    background: #0d1117;
+  }
+  .hljs-comment,
+  .hljs-quote {
+    color: #8b949e;
+    font-style: italic;
+  }
+  .hljs-keyword,
+  .hljs-selector-tag {
+    color: #ff7b72;
+  }
+  .hljs-string,
+  .hljs-addition {
+    color: #a5d6ff;
+  }
+  .hljs-number {
+    color: #79c0ff;
+  }
+  .hljs-built_in {
+    color: #d2a8ff;
+  }
+  .hljs-title,
+  .hljs-section {
+    color: #d2a8ff;
+    font-weight: bold;
+  }
+  .hljs-attr,
+  .hljs-attribute {
+    color: #79c0ff;
+  }
+}
