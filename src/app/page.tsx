@@ -14,6 +14,7 @@ import { SkillPanel } from "@/client/components/skill-panel";
 import { ChatPanel } from "@/client/components/chat-panel";
 import { SessionPanel } from "@/client/components/session-panel";
 import { useAcp } from "@/client/hooks/use-acp";
+import { useSkills } from "@/client/hooks/use-skills";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE";
 
@@ -23,6 +24,7 @@ export default function HomePage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentRole>("CRAFTER");
   const [showAgentToast, setShowAgentToast] = useState(false);
   const acp = useAcp();
+  const skillsHook = useSkills();
 
   // Auto-connect on mount so providers are loaded immediately
   useEffect(() => {
@@ -64,10 +66,10 @@ export default function HomePage() {
     [acp, ensureConnected, bumpRefresh]
   );
 
-  const ensureSessionForChat = useCallback(async (): Promise<string | null> => {
+  const ensureSessionForChat = useCallback(async (cwd?: string): Promise<string | null> => {
     await ensureConnected();
     if (activeSessionId) return activeSessionId;
-    const result = await acp.createSession();
+    const result = await acp.createSession(cwd, acp.selectedProvider);
     if (result?.sessionId) {
       setActiveSessionId(result.sessionId);
       bumpRefresh();
@@ -75,6 +77,11 @@ export default function HomePage() {
     }
     return null;
   }, [acp, activeSessionId, ensureConnected, bumpRefresh]);
+
+  const handleLoadSkill = useCallback(async (name: string): Promise<string | null> => {
+    const skill = await skillsHook.loadSkill(name);
+    return skill?.content ?? null;
+  }, [skillsHook]);
 
   const handleAgentChange = useCallback((role: AgentRole) => {
     if (role !== "CRAFTER") {
@@ -210,6 +217,8 @@ export default function HomePage() {
             acp={acp}
             activeSessionId={activeSessionId}
             onEnsureSession={ensureSessionForChat}
+            skills={skillsHook.skills}
+            onLoadSkill={handleLoadSkill}
           />
         </main>
       </div>

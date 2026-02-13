@@ -159,3 +159,42 @@ body {
     color: #79c0ff;
   }
 }
+
+/* ─── Mention Pills ────────────────────────────────────────────────── */
+
+.agent-mention {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  white-space: nowrap;
+}
+
+.skill-mention {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: dark) {
+  .agent-mention {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+  }
+  .skill-mention {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+  }
+}

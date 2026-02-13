@@ -16,7 +16,8 @@ import {
 } from "react";
 import type { AcpSessionNotification } from "../acp-client";
 import type { UseAcpActions, UseAcpState } from "../hooks/use-acp";
-import { TiptapInput } from "./tiptap-input";
+import { TiptapInput, type InputContext } from "./tiptap-input";
+import type { SkillSummary } from "../skill-client";
 
 // ─── Message Types ─────────────────────────────────────────────────────
 
@@ -47,7 +48,9 @@ interface PlanEntry {
 interface ChatPanelProps {
   acp: UseAcpState & UseAcpActions;
   activeSessionId: string | null;
-  onEnsureSession: () => Promise<string | null>;
+  onEnsureSession: (cwd?: string) => Promise<string | null>;
+  skills?: SkillSummary[];
+  onLoadSkill?: (name: string) => Promise<string | null>;
 }
 
 // ─── Main Component ────────────────────────────────────────────────────
@@ -56,9 +59,12 @@ export function ChatPanel({
   acp,
   activeSessionId,
   onEnsureSession,
+  skills = [],
+  onLoadSkill,
 }: ChatPanelProps) {
   const { connected, loading, error, updates, prompt } = acp;
 
+  const [clonedCwd, setClonedCwd] = useState<string | null>(null);
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
   >({});
@@ -286,27 +292,59 @@ export function ChatPanel({
 
   // ── Actions ──────────────────────────────────────────────────────────
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleClone = useCallback(async (url: string) => {
+    const res = await fetch("/api/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Clone failed");
+    setClonedCwd(data.path);
+  }, []);
+
+  const handleSend = useCallback(async (text: string, context: InputContext) => {
     if (!text.trim()) return;
-    const sid = activeSessionId ?? (await onEnsureSession());
+
+    // Use cwd from clone if set
+    const cwd = context.cwd || clonedCwd || undefined;
+
+    // Ensure we have a session — pass cwd so the session is created in the right directory
+    const sid = activeSessionId ?? (await onEnsureSession(cwd));
     if (!sid) return;
 
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
 
+    // Build the final prompt:
+    // - If a skill is selected, prepend its content
+    // - The user's text is the main prompt
+    let finalPrompt = text;
+    if (context.skill && onLoadSkill) {
+      const skillContent = await onLoadSkill(context.skill);
+      if (skillContent) {
+        finalPrompt = `[Skill: ${context.skill}]\n${skillContent}\n\n---\n\n${text}`;
+      }
+    }
+
+    // Show the user message (just the user's text, not the skill prefix)
     setMessagesBySession((prev) => {
       const next = { ...prev };
       const arr = next[sid] ? [...next[sid]] : [];
-      arr.push({ id: crypto.randomUUID(), role: "user", content: text, timestamp: new Date() });
+      const displayParts: string[] = [];
+      if (context.agent) displayParts.push(`@${context.agent}`);
+      if (context.skill) displayParts.push(`/${context.skill}`);
+      const prefix = displayParts.length ? displayParts.join(" ") + " " : "";
+      arr.push({ id: crypto.randomUUID(), role: "user", content: prefix + text, timestamp: new Date() });
       next[sid] = arr;
       return next;
     });
 
-    await prompt(text);
+    await prompt(finalPrompt);
 
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
-  }, [activeSessionId, onEnsureSession, prompt]);
+  }, [activeSessionId, onEnsureSession, prompt, clonedCwd, onLoadSkill]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
@@ -363,12 +401,15 @@ export function ChatPanel({
               placeholder={
                 connected
                   ? activeSessionId
-                    ? "Type a message... (Enter to send, Shift+Enter for newline)"
+                    ? "Type a message... @ agent, / skill, Enter to send"
                     : "Type a message to auto-create a session..."
                   : "Connect first..."
               }
               disabled={!connected}
               loading={loading}
+              skills={skills}
+              clonedCwd={clonedCwd}
+              onClone={handleClone}
             />
             <button
               onClick={() => {
