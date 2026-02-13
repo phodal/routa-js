@@ -1,49 +1,25 @@
 /**
- * ACP Server API Route - /api/acp (OpenCode compatible)
+ * ACP Server API Route - /api/acp
  *
- * Implements standard ACP JSON-RPC methods and streams `session/update` notifications via SSE.
+ * Proxies ACP JSON-RPC to a spawned `opencode acp` process per session.
  *
- * - POST: JSON-RPC request/response (initialize, session/new, session/prompt, session/load, etc.)
- * - GET : SSE stream for `session/update`
+ * - POST: JSON-RPC requests (initialize, session/new, session/prompt, etc.)
+ *         → forwarded to opencode via stdin, responses returned to client
+ * - GET : SSE stream for `session/update` notifications from opencode
+ *
+ * Flow:
+ *   1. Client sends `initialize` → we return our capabilities (no process yet)
+ *   2. Client sends `session/new` → we spawn opencode, initialize it, create session
+ *   3. Client connects SSE with sessionId → we pipe opencode's session/update to SSE
+ *   4. Client sends `session/prompt` → we forward to opencode, it streams via session/update
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import type {
-  Agent,
-  AgentSideConnection,
-  InitializeRequest,
-  LoadSessionRequest,
-  NewSessionRequest,
-  PromptRequest,
-} from "@agentclientprotocol/sdk";
-import { getRoutaSystem } from "@/core/routa-system";
-import { SkillRegistry } from "@/core/skills/skill-registry";
-import { createRoutaAcpAgent } from "@/core/acp";
+import { getOpenCodeProcessManager } from "@/core/acp/opencode-process";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
+import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
-
-let agentHandler:
-  | ((connection: AgentSideConnection) => Agent)
-  | undefined;
-
-function getAgentHandler() {
-  if (!agentHandler) {
-    const system = getRoutaSystem();
-    const skillRegistry = new SkillRegistry({ projectDir: process.cwd() });
-    agentHandler = createRoutaAcpAgent(system, skillRegistry);
-  }
-  return agentHandler;
-}
-
-function getConnection(): AgentSideConnection {
-  const store = getHttpSessionStore();
-  return {
-    sessionUpdate(notification) {
-      store.pushNotification(notification);
-    },
-  } as AgentSideConnection;
-}
 
 // ─── GET: SSE stream for session/update ────────────────────────────────
 
@@ -95,77 +71,153 @@ export async function POST(request: NextRequest) {
       params?: Record<string, unknown>;
     };
 
-    const handler = getAgentHandler();
-    const agent = handler(getConnection());
-
-    // ACP core methods
+    // ── initialize ─────────────────────────────────────────────────────
+    // No opencode process yet; return our own capabilities.
     if (method === "initialize") {
-      const req = (params ?? {}) as unknown as InitializeRequest;
-      const result = await agent.initialize(req);
-      return jsonrpcResponse(id ?? null, result);
+      return jsonrpcResponse(id ?? null, {
+        protocolVersion: (params as { protocolVersion?: number })?.protocolVersion ?? 1,
+        agentCapabilities: {
+          loadSession: false,
+        },
+        agentInfo: {
+          name: "routa-acp-opencode",
+          version: "0.1.0",
+        },
+      });
     }
 
+    // ── session/new ────────────────────────────────────────────────────
+    // Spawn a new opencode process and create an ACP session.
     if (method === "session/new") {
       const p = (params ?? {}) as Record<string, unknown>;
-      const req = {
-        cwd: (p.cwd as string | undefined) ?? process.cwd(),
-        mcpServers: (p.mcpServers as unknown[]) ?? [],
-        _meta: (p._meta as object | null | undefined) ?? null,
-      } as unknown as NewSessionRequest;
-      const result = await agent.newSession(req);
-      return jsonrpcResponse(id ?? null, result);
-    }
+      const cwd = (p.cwd as string | undefined) ?? process.cwd();
+      const sessionId = uuidv4();
 
-    if (method === "session/prompt") {
-      const req = (params ?? {}) as unknown as PromptRequest;
-      const result = await agent.prompt(req);
-      return jsonrpcResponse(id ?? null, result);
-    }
+      const store = getHttpSessionStore();
+      const manager = getOpenCodeProcessManager();
 
-    if (method === "session/load") {
-      const p = (params ?? {}) as Record<string, unknown>;
-      const req = {
-        sessionId: p.sessionId as string,
-        cwd: (p.cwd as string | undefined) ?? process.cwd(),
-        mcpServers: (p.mcpServers as unknown[]) ?? [],
-        _meta: (p._meta as object | null | undefined) ?? null,
-      } as unknown as LoadSessionRequest;
-      if (!agent.loadSession) {
-        return jsonrpcResponse(id ?? null, null, {
-          code: -32601,
-          message: "Method not supported: session/load",
-        });
-      }
-      const result = await agent.loadSession(req);
-      return jsonrpcResponse(id ?? null, result);
-    }
-
-    if (method === "session/cancel") {
-      // notification per spec, but allow response if id provided
-      if (agent.cancel) {
-        await agent.cancel((params ?? {}) as never);
-      }
-      return jsonrpcResponse(id ?? null, {});
-    }
-
-    if (method === "session/set_mode") {
-      // Not implemented in Routa agent yet; return empty success
-      return jsonrpcResponse(id ?? null, {});
-    }
-
-    // Extension methods must start with "_"
-    if (method.startsWith("_")) {
-      if (!agent.extMethod) {
-        return jsonrpcResponse(id ?? null, null, {
-          code: -32601,
-          message: `Method not supported: ${method}`,
-        });
-      }
-      const result = await agent.extMethod(
-        method,
-        (params ?? {}) as Record<string, unknown>
+      // Spawn opencode and wire up notification forwarding
+      const acpSessionId = await manager.createSession(
+        sessionId,
+        cwd,
+        (msg) => {
+          // Forward all notifications from opencode to SSE
+          if (msg.method === "session/update" && msg.params) {
+            // Rewrite the sessionId: opencode uses its own internal ID,
+            // but the browser knows our sessionId.
+            const params = msg.params as Record<string, unknown>;
+            store.pushNotification({
+              ...params,
+              sessionId, // Override with our sessionId (MUST come after spread)
+            } as never);
+          }
+        }
       );
-      return jsonrpcResponse(id ?? null, result);
+
+      // Persist session for UI listing
+      store.upsertSession({
+        sessionId,
+        cwd,
+        workspaceId: "default",
+        routaAgentId: acpSessionId,
+        createdAt: new Date().toISOString(),
+      });
+
+      console.log(
+        `[ACP Route] Session created: ${sessionId} (opencode session: ${acpSessionId})`
+      );
+
+      return jsonrpcResponse(id ?? null, { sessionId });
+    }
+
+    // ── session/prompt ─────────────────────────────────────────────────
+    // Forward prompt to the opencode process.
+    if (method === "session/prompt") {
+      const p = (params ?? {}) as Record<string, unknown>;
+      const sessionId = p.sessionId as string;
+
+      if (!sessionId) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32602,
+          message: "Missing sessionId",
+        });
+      }
+
+      const manager = getOpenCodeProcessManager();
+      const proc = manager.getProcess(sessionId);
+      const acpSessionId = manager.getAcpSessionId(sessionId);
+
+      if (!proc || !acpSessionId) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32000,
+          message: `No opencode process for session: ${sessionId}`,
+        });
+      }
+
+      if (!proc.alive) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32000,
+          message: "opencode process is not running",
+        });
+      }
+
+      // Extract prompt text
+      const promptBlocks = p.prompt as Array<{ type: string; text?: string }> | undefined;
+      const promptText =
+        promptBlocks
+          ?.filter((b) => b.type === "text")
+          .map((b) => b.text ?? "")
+          .join("\n") ?? "";
+
+      try {
+        // Forward to opencode (responses stream via session/update → SSE)
+        const result = await proc.prompt(acpSessionId, promptText);
+        return jsonrpcResponse(id ?? null, result);
+      } catch (err) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32000,
+          message: err instanceof Error ? err.message : "Prompt failed",
+        });
+      }
+    }
+
+    // ── session/cancel ─────────────────────────────────────────────────
+    if (method === "session/cancel") {
+      const p = (params ?? {}) as Record<string, unknown>;
+      const sessionId = p.sessionId as string;
+
+      if (sessionId) {
+        const manager = getOpenCodeProcessManager();
+        const proc = manager.getProcess(sessionId);
+        const acpSessionId = manager.getAcpSessionId(sessionId);
+        if (proc && acpSessionId) {
+          await proc.cancel(acpSessionId);
+        }
+      }
+
+      return jsonrpcResponse(id ?? null, {});
+    }
+
+    // ── session/load ───────────────────────────────────────────────────
+    if (method === "session/load") {
+      return jsonrpcResponse(id ?? null, null, {
+        code: -32601,
+        message: "session/load not supported - create a new session instead",
+      });
+    }
+
+    // ── session/set_mode ───────────────────────────────────────────────
+    if (method === "session/set_mode") {
+      // TODO: forward to opencode when supported
+      return jsonrpcResponse(id ?? null, {});
+    }
+
+    // ── Extension methods ──────────────────────────────────────────────
+    if (method.startsWith("_")) {
+      return jsonrpcResponse(id ?? null, null, {
+        code: -32601,
+        message: `Extension method not supported: ${method}`,
+      });
     }
 
     return jsonrpcResponse(id ?? null, null, {
@@ -173,12 +225,15 @@ export async function POST(request: NextRequest) {
       message: `Method not found: ${method}`,
     });
   } catch (error) {
+    console.error("[ACP Route] Error:", error);
     return jsonrpcResponse(null, null, {
       code: -32603,
       message: error instanceof Error ? error.message : "Internal error",
     });
   }
 }
+
+// ─── Helpers ───────────────────────────────────────────────────────────
 
 function jsonrpcResponse(
   id: string | number | null,

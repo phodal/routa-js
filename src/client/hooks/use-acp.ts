@@ -3,8 +3,11 @@
 /**
  * useAcp - React hook for ACP client connection
  *
- * - OpenCode-compatible ACP client wrapper
- * - Uses refs for sessionId to avoid stale closure bugs
+ * Manages BrowserAcpClient lifecycle and provides React state for:
+ *   - Connection status
+ *   - Session management (create, select)
+ *   - Prompt sending
+ *   - SSE update stream
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -28,7 +31,6 @@ export interface UseAcpActions {
   selectSession: (sessionId: string) => void;
   prompt: (text: string) => Promise<void>;
   cancel: () => Promise<void>;
-  callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   disconnect: () => void;
 }
 
@@ -144,15 +146,6 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     await client.cancel(sessionId);
   }, []);
 
-  const callTool = useCallback(
-    async (name: string, args: Record<string, unknown>) => {
-      const client = clientRef.current;
-      if (!client) throw new Error("Not connected");
-      return client.callTool(name, args);
-    },
-    []
-  );
-
   const disconnect = useCallback(() => {
     clientRef.current?.disconnect();
     clientRef.current = null;
@@ -173,7 +166,6 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     selectSession,
     prompt,
     cancel,
-    callTool,
     disconnect,
   };
 }

@@ -1,23 +1,25 @@
 /**
- * Browser ACP Client (OpenCode-compatible)
+ * Browser ACP Client
  *
  * Connects to `/api/acp` via JSON-RPC over HTTP and receives `session/update`
  * notifications via SSE.
  *
- * This client intentionally follows ACP schema:
- *   - `session/update` params are `{ sessionId, update }`
- *   - `session/prompt` returns `{ stopReason }` while content streams over SSE
+ * The backend spawns an opencode process per session and proxies:
+ *   - JSON-RPC requests → opencode stdin
+ *   - opencode stdout → SSE session/update
  */
 
 export interface AcpSessionNotification {
   sessionId: string;
-  update: Record<string, unknown>;
-  _meta?: Record<string, unknown> | null;
+  update?: Record<string, unknown>;
+  /** Flat fields from opencode (sessionUpdate, content, etc.) */
+  [key: string]: unknown;
 }
 
 export interface AcpInitializeResult {
-  protocolVersion: string;
+  protocolVersion: string | number;
   agentCapabilities: Record<string, unknown>;
+  agentInfo?: { name: string; version: string };
 }
 
 export interface AcpNewSessionResult {
@@ -46,17 +48,17 @@ export class BrowserAcpClient {
   }
 
   /**
-   * Initialize the ACP connection
+   * Initialize the ACP connection.
    */
   async initialize(
-    protocolVersion: string = "0.1.0"
+    protocolVersion: number | string = 1
   ): Promise<AcpInitializeResult> {
     return this.rpc("initialize", { protocolVersion });
   }
 
   /**
    * Create a new ACP session.
-   * Note: per ACP, SSE typically connects after sessionId is known.
+   * This spawns a new opencode process on the backend.
    */
   async newSession(params: {
     cwd?: string;
@@ -84,12 +86,9 @@ export class BrowserAcpClient {
 
   /**
    * Send a prompt to the session.
-   * Returns the full response inline in JSON-RPC AND streams via SSE.
+   * Content streams via SSE session/update notifications.
    */
-  async prompt(
-    sessionId: string,
-    text: string
-  ): Promise<AcpPromptResult> {
+  async prompt(sessionId: string, text: string): Promise<AcpPromptResult> {
     return this.rpc("session/prompt", {
       sessionId,
       prompt: [{ type: "text", text }],
@@ -97,70 +96,14 @@ export class BrowserAcpClient {
   }
 
   /**
-   * Cancel the current prompt
+   * Cancel the current prompt.
    */
   async cancel(sessionId: string): Promise<void> {
     await this.rpc("session/cancel", { sessionId });
   }
 
   /**
-   * List available skills
-   */
-  async listSkills(): Promise<{
-    skills: Array<{
-      name: string;
-      description: string;
-      license?: string;
-      compatibility?: string;
-    }>;
-  }> {
-    return this.rpc("skills/list", {});
-  }
-
-  /**
-   * Load a specific skill
-   */
-  async loadSkill(
-    name: string
-  ): Promise<{
-    name: string;
-    description: string;
-    content: string;
-    license?: string;
-    metadata?: Record<string, string>;
-  }> {
-    return this.rpc("skills/load", { name });
-  }
-
-  /**
-   * List agents
-   */
-  async listAgents(
-    workspaceId?: string
-  ): Promise<
-    Array<{
-      id: string;
-      name: string;
-      role: string;
-      status: string;
-      parentId?: string;
-    }>
-  > {
-    return this.rpc("agents/list", { workspaceId });
-  }
-
-  /**
-   * Call an MCP tool through ACP
-   */
-  async callTool(
-    name: string,
-    args: Record<string, unknown>
-  ): Promise<unknown> {
-    return this.rpc("tools/call", { name, arguments: args });
-  }
-
-  /**
-   * Register a handler for session updates (SSE)
+   * Register a handler for session updates (SSE).
    */
   onUpdate(handler: SessionUpdateHandler): () => void {
     this.updateHandlers.push(handler);
@@ -170,7 +113,7 @@ export class BrowserAcpClient {
   }
 
   /**
-   * Disconnect and clean up
+   * Disconnect and clean up.
    */
   disconnect(): void {
     if (this.eventSource) {
@@ -196,10 +139,11 @@ export class BrowserAcpClient {
       try {
         const data = JSON.parse(event.data);
         if (data.method === "session/update" && data.params) {
-          const update = data.params as AcpSessionNotification;
+          const notification = data.params as AcpSessionNotification;
+
           for (const handler of this.updateHandlers) {
             try {
-              handler(update);
+              handler(notification);
             } catch (err) {
               console.error("[AcpClient] Handler error:", err);
             }
@@ -235,7 +179,9 @@ export class BrowserAcpClient {
     const data = await response.json();
 
     if (data.error) {
-      throw new Error(`ACP Error [${data.error.code}]: ${data.error.message}`);
+      throw new Error(
+        `ACP Error [${data.error.code}]: ${data.error.message}`
+      );
     }
 
     return data.result as T;

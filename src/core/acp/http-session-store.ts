@@ -1,4 +1,12 @@
-import type { SessionNotification } from "@agentclientprotocol/sdk";
+/**
+ * HttpSessionStore - In-memory store for ACP sessions and SSE delivery.
+ *
+ * Tracks sessions for UI listing and delivers `session/update` notifications
+ * from opencode processes to the browser via Server-Sent Events.
+ *
+ * - Buffers notifications until SSE connects (avoids losing early updates)
+ * - Supports multiple concurrent sessions with independent SSE streams
+ */
 
 export interface RoutaSessionRecord {
   sessionId: string;
@@ -10,16 +18,16 @@ export interface RoutaSessionRecord {
 
 type Controller = ReadableStreamDefaultController<Uint8Array>;
 
-/**
- * Singleton in-memory store for ACP sessions and SSE delivery.
- *
- * - Tracks sessions for UI (list/select)
- * - Buffers `session/update` notifications until SSE connects, to avoid losing early updates
- */
+interface SessionUpdateNotification {
+  sessionId: string;
+  update?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 class HttpSessionStore {
   private sessions = new Map<string, RoutaSessionRecord>();
   private sseControllers = new Map<string, Controller>();
-  private pendingNotifications = new Map<string, SessionNotification[]>();
+  private pendingNotifications = new Map<string, SessionUpdateNotification[]>();
 
   upsertSession(record: RoutaSessionRecord) {
     this.sessions.set(record.sessionId, record);
@@ -27,7 +35,8 @@ class HttpSessionStore {
 
   listSessions(): RoutaSessionRecord[] {
     return Array.from(this.sessions.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
 
@@ -46,10 +55,13 @@ class HttpSessionStore {
 
   /**
    * Push a session/update notification. If SSE isn't connected yet, buffer it.
+   *
+   * Accepts the raw notification params from opencode (which may have different shapes).
    */
-  pushNotification(notification: SessionNotification) {
+  pushNotification(notification: SessionUpdateNotification) {
     const sessionId = notification.sessionId;
     const controller = this.sseControllers.get(sessionId);
+
     if (controller) {
       this.writeSse(controller, {
         jsonrpc: "2.0",
@@ -65,7 +77,7 @@ class HttpSessionStore {
   }
 
   /**
-   * Send a one-off "connected" event (not part of ACP spec, but useful for UI).
+   * Send a one-off "connected" event (useful for UI).
    */
   pushConnected(sessionId: string) {
     const controller = this.sseControllers.get(sessionId);
@@ -77,7 +89,7 @@ class HttpSessionStore {
         sessionId,
         update: {
           sessionUpdate: "agent_thought_chunk",
-          content: { type: "text", text: "SSE connected." },
+          content: { type: "text", text: "Connected to opencode." },
         },
       },
     });
@@ -106,8 +118,7 @@ class HttpSessionStore {
     try {
       controller.enqueue(encoder.encode(event));
     } catch {
-      // drop controller on write error
-      // caller should reconnect
+      // controller closed - drop silently
     }
   }
 }
@@ -118,4 +129,3 @@ export function getHttpSessionStore(): HttpSessionStore {
   if (!singleton) singleton = new HttpSessionStore();
   return singleton;
 }
-

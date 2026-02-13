@@ -4,3 +4,7 @@ export {
   type AcpAgentConfig,
   type AcpSessionInfo,
 } from "./acp-session-manager";
+export {
+  OpenCodeProcess,
+  getOpenCodeProcessManager,
+} from "./opencode-process";

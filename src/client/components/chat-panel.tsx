@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * ChatPanel - ACP-based chat interface for interacting with Routa
+ * ChatPanel - ACP-based chat interface
  *
- * OpenCode-compatible: renders from `session/update` SSE notifications.
- * When switching sessions, shows that session's stored message history.
+ * Renders streaming `session/update` SSE notifications from an opencode process.
+ * Accumulates `agent_message_chunk` into a single growing assistant message.
+ * Shows tool calls, thoughts, and plans inline.
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type ReactElement } from "react";
 import type { AcpSessionNotification } from "../acp-client";
 import type { UseAcpActions, UseAcpState } from "../hooks/use-acp";
 
@@ -16,6 +17,10 @@ interface ChatMessage {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   timestamp: Date;
+  /** For tool messages: tool name and status */
+  toolName?: string;
+  toolStatus?: string;
+  toolCallId?: string;
 }
 
 interface ChatPanelProps {
@@ -24,8 +29,13 @@ interface ChatPanelProps {
   onEnsureSession: () => Promise<string | null>;
 }
 
-export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelProps) {
-  const { connected, loading, error, updates, connect, prompt, disconnect } = acp;
+export function ChatPanel({
+  acp,
+  activeSessionId,
+  onEnsureSession,
+}: ChatPanelProps) {
+  const { connected, loading, error, updates, connect, prompt, disconnect } =
+    acp;
 
   const [input, setInput] = useState("");
   const [messagesBySession, setMessagesBySession] = useState<
@@ -33,6 +43,8 @@ export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelPr
   >({});
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Track the current streaming assistant message ID per session
+  const streamingMsgIdRef = useRef<Record<string, string | null>>({});
 
   // Auto-scroll
   useEffect(() => {
@@ -53,59 +65,164 @@ export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelPr
     if (!updates.length) return;
     const last = updates[updates.length - 1] as AcpSessionNotification;
     const sid = last.sessionId;
-    const update = last.update as Record<string, unknown>;
+
+    // Support both nested (update.sessionUpdate) and flat (params.sessionUpdate) formats
+    const update = (last.update ?? last) as Record<string, unknown>;
     const kind = update.sessionUpdate as string | undefined;
 
-    const push = (msg: ChatMessage) => {
-      setMessagesBySession((prev) => {
-        const next = { ...prev };
-        const arr = next[sid] ? [...next[sid]] : [];
-        arr.push(msg);
-        next[sid] = arr;
-        return next;
-      });
+    if (!kind) return;
+
+    const extractText = (): string => {
+      // Try content.text (ACP standard)
+      const content = update.content as
+        | { type: string; text?: string }
+        | undefined;
+      if (content?.text) return content.text;
+      // Try top-level text
+      if (typeof update.text === "string") return update.text;
+      return "";
     };
 
     if (kind === "agent_message_chunk") {
-      const content = (update.content as { type: string; text?: string } | undefined)
-        ?.text ?? "";
-      push({
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content,
-        timestamp: new Date(),
+      const text = extractText();
+      if (!text) return;
+
+      setMessagesBySession((prev) => {
+        const next = { ...prev };
+        const arr = next[sid] ? [...next[sid]] : [];
+        const streamingId = streamingMsgIdRef.current[sid];
+
+        // Find existing streaming message to append to
+        const existingIdx = streamingId
+          ? arr.findIndex((m) => m.id === streamingId)
+          : -1;
+
+        if (existingIdx >= 0) {
+          // Append to the existing streaming assistant message
+          arr[existingIdx] = {
+            ...arr[existingIdx],
+            content: arr[existingIdx].content + text,
+          };
+        } else {
+          // Start a new streaming assistant message
+          const newId = crypto.randomUUID();
+          streamingMsgIdRef.current[sid] = newId;
+          arr.push({
+            id: newId,
+            role: "assistant",
+            content: text,
+            timestamp: new Date(),
+          });
+        }
+
+        next[sid] = arr;
+        return next;
       });
     } else if (kind === "agent_thought_chunk") {
-      const content = (update.content as { type: string; text?: string } | undefined)
-        ?.text ?? "";
-      push({
-        id: crypto.randomUUID(),
-        role: "system",
-        content: `[Thinking] ${content}`,
-        timestamp: new Date(),
+      const text = extractText();
+      if (!text) return;
+
+      setMessagesBySession((prev) => {
+        const next = { ...prev };
+        const arr = next[sid] ? [...next[sid]] : [];
+        // Thoughts are shown as system messages (don't accumulate)
+        arr.push({
+          id: crypto.randomUUID(),
+          role: "system",
+          content: text,
+          timestamp: new Date(),
+        });
+        next[sid] = arr;
+        return next;
       });
     } else if (kind === "tool_call") {
-      push({
-        id: crypto.randomUUID(),
-        role: "tool",
-        content: `Tool call started`,
-        timestamp: new Date(),
+      // Start of a new tool call
+      const toolCallId = update.toolCallId as string | undefined;
+      const title = (update.title as string) ?? "tool";
+      const rawInput = update.rawInput
+        ? JSON.stringify(update.rawInput, null, 2)
+        : "";
+
+      setMessagesBySession((prev) => {
+        const next = { ...prev };
+        const arr = next[sid] ? [...next[sid]] : [];
+        arr.push({
+          id: toolCallId ?? crypto.randomUUID(),
+          role: "tool",
+          content: rawInput
+            ? `${title}\n\nInput:\n${rawInput}`
+            : title,
+          timestamp: new Date(),
+          toolName: title,
+          toolStatus: (update.status as string) ?? "running",
+          toolCallId,
+        });
+        next[sid] = arr;
+        return next;
       });
     } else if (kind === "tool_call_update") {
-      push({
-        id: crypto.randomUUID(),
-        role: "tool",
-        content: `Tool call update`,
-        timestamp: new Date(),
+      const toolCallId = update.toolCallId as string | undefined;
+      const status = (update.status as string) ?? "completed";
+      const rawOutput = update.rawOutput
+        ? typeof update.rawOutput === "string"
+          ? update.rawOutput
+          : JSON.stringify(update.rawOutput, null, 2)
+        : "";
+
+      if (toolCallId) {
+        setMessagesBySession((prev) => {
+          const next = { ...prev };
+          const arr = next[sid] ? [...next[sid]] : [];
+
+          // Find the matching tool_call and update it
+          const idx = arr.findIndex(
+            (m) => m.toolCallId === toolCallId
+          );
+          if (idx >= 0) {
+            arr[idx] = {
+              ...arr[idx],
+              toolStatus: status,
+              content: rawOutput
+                ? `${arr[idx].toolName ?? "tool"}\n\nOutput:\n${rawOutput}`
+                : arr[idx].content,
+            };
+          } else {
+            // No matching tool_call found, add as new
+            arr.push({
+              id: crypto.randomUUID(),
+              role: "tool",
+              content: rawOutput || `Tool ${status}`,
+              timestamp: new Date(),
+              toolStatus: status,
+              toolCallId,
+            });
+          }
+
+          next[sid] = arr;
+          return next;
+        });
+      }
+    } else if (kind === "plan") {
+      const planText =
+        typeof update.plan === "string"
+          ? update.plan
+          : JSON.stringify(update.plan, null, 2);
+      setMessagesBySession((prev) => {
+        const next = { ...prev };
+        const arr = next[sid] ? [...next[sid]] : [];
+        arr.push({
+          id: crypto.randomUUID(),
+          role: "system",
+          content: `Plan:\n${planText}`,
+          timestamp: new Date(),
+        });
+        next[sid] = arr;
+        return next;
       });
     } else if (kind === "available_commands_update") {
-      push({
-        id: crypto.randomUUID(),
-        role: "system",
-        content: `Commands updated.`,
-        timestamp: new Date(),
-      });
+      // Silently note commands update
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updates]);
 
   const handleConnect = useCallback(async () => {
@@ -120,7 +237,10 @@ export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelPr
     const text = input;
     setInput("");
 
-    // store user msg in active session transcript
+    // Clear the streaming message ID so the next response starts fresh
+    streamingMsgIdRef.current[sid] = null;
+
+    // Store user msg in active session transcript
     setMessagesBySession((prev) => {
       const next = { ...prev };
       const arr = next[sid] ? [...next[sid]] : [];
@@ -135,6 +255,9 @@ export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelPr
     });
 
     await prompt(text);
+
+    // After prompt completes, clear streaming ID
+    streamingMsgIdRef.current[sid] = null;
   }, [input, activeSessionId, onEnsureSession, prompt]);
 
   return (
@@ -184,9 +307,9 @@ export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelPr
           <div className="text-center text-gray-400 dark:text-gray-500 text-sm py-12">
             {connected
               ? activeSessionId
-                ? 'Send a message to this session. (ACP/OpenCode compatible)'
+                ? "Send a message. Each session runs its own opencode instance."
                 : "Select or create a session on the left."
-              : "Click Connect to start a session with the Routa coordinator."}
+              : "Click Connect to start."}
           </div>
         )}
         {visibleMessages.map((msg) => (
@@ -211,7 +334,9 @@ export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelPr
             }
             disabled={!connected || loading}
             className="flex-1 px-4 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            onKeyDown={(e) =>
+              e.key === "Enter" && !e.shiftKey && handleSend()
+            }
           />
           <button
             onClick={handleSend}
@@ -229,7 +354,7 @@ export function ChatPanel({ acp, activeSessionId, onEnsureSession }: ChatPanelPr
 // ─── Message Bubble Component ──────────────────────────────────────────
 
 function MessageBubble({ message }: { message: ChatMessage }) {
-  const { role, content } = message;
+  const { role, content, toolName, toolStatus } = message;
 
   if (role === "user") {
     return (
@@ -241,20 +366,37 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     );
   }
 
+  if (role === "system") {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[90%] px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
   if (role === "tool") {
+    const statusColor =
+      toolStatus === "completed"
+        ? "bg-green-500"
+        : toolStatus === "running"
+          ? "bg-yellow-500 animate-pulse"
+          : "bg-gray-400";
+
     return (
       <div className="flex justify-start">
         <div className="max-w-[90%] rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden">
           <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
             <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
-              tool
+              {toolName ?? "tool"}
             </span>
             <span className="text-xs text-gray-400 dark:text-gray-500">
-              completed
+              {toolStatus ?? "completed"}
             </span>
           </div>
-          <div className="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-32 overflow-y-auto bg-gray-50/50 dark:bg-gray-800/50">
+          <div className="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto bg-gray-50/50 dark:bg-gray-800/50">
             {content}
           </div>
         </div>
@@ -262,7 +404,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     );
   }
 
-  // Assistant message - render markdown-like formatting
+  // Assistant message
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] px-4 py-3 rounded-2xl bg-gray-100 dark:bg-gray-700 text-sm text-gray-900 dark:text-gray-100">
@@ -274,9 +416,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 // ─── Simple Markdown-like formatter ────────────────────────────────────
 
-/** Render inline markdown: **bold** and `code` */
 function InlineMarkdown({ text }: { text: string }) {
-  // Split on **bold** and `code` patterns
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/);
 
   return (
@@ -307,46 +447,140 @@ function InlineMarkdown({ text }: { text: string }) {
 
 function FormattedContent({ content }: { content: string }) {
   const lines = content.split("\n");
+  let inCodeBlock = false;
+  let codeBlockLines: string[] = [];
+  let codeBlockLang = "";
+  const elements: ReactElement[] = [];
 
-  return (
-    <div className="space-y-1">
-      {lines.map((line, i) => {
-        // List items (with inline markdown)
-        if (line.startsWith("- ")) {
-          return (
-            <div key={i} className="pl-3 flex gap-1.5">
-              <span className="text-gray-400 shrink-0">•</span>
-              <span>
-                <InlineMarkdown text={line.slice(2)} />
-              </span>
-            </div>
-          );
-        }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-        // Blockquote
-        if (line.startsWith("> ")) {
-          return (
-            <div
-              key={i}
-              className="pl-3 border-l-2 border-gray-300 dark:border-gray-500 text-gray-600 dark:text-gray-400 italic"
-            >
-              <InlineMarkdown text={line.slice(2)} />
-            </div>
-          );
-        }
-
-        // Empty line
-        if (line.trim() === "") {
-          return <div key={i} className="h-1" />;
-        }
-
-        // Normal text (with inline markdown)
-        return (
-          <div key={i}>
-            <InlineMarkdown text={line} />
+    // Code block handling
+    if (line.startsWith("```")) {
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeBlockLang = line.slice(3).trim();
+        codeBlockLines = [];
+        continue;
+      } else {
+        // End of code block
+        inCodeBlock = false;
+        elements.push(
+          <div key={i} className="my-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+            {codeBlockLang && (
+              <div className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600">
+                {codeBlockLang}
+              </div>
+            )}
+            <pre className="px-3 py-2 text-xs font-mono overflow-x-auto bg-gray-50 dark:bg-gray-800">
+              {codeBlockLines.join("\n")}
+            </pre>
           </div>
         );
-      })}
-    </div>
-  );
+        continue;
+      }
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      continue;
+    }
+
+    // Heading
+    if (line.startsWith("### ")) {
+      elements.push(
+        <div key={i} className="font-semibold mt-2 text-sm">
+          {line.slice(4)}
+        </div>
+      );
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      elements.push(
+        <div key={i} className="font-bold mt-2">
+          {line.slice(3)}
+        </div>
+      );
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      elements.push(
+        <div key={i} className="font-bold mt-2 text-lg">
+          {line.slice(2)}
+        </div>
+      );
+      continue;
+    }
+
+    // List items
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      elements.push(
+        <div key={i} className="pl-3 flex gap-1.5">
+          <span className="text-gray-400 shrink-0">•</span>
+          <span>
+            <InlineMarkdown text={line.slice(2)} />
+          </span>
+        </div>
+      );
+      continue;
+    }
+
+    // Numbered list
+    const numberedMatch = line.match(/^(\d+)\.\s+(.*)/);
+    if (numberedMatch) {
+      elements.push(
+        <div key={i} className="pl-3 flex gap-1.5">
+          <span className="text-gray-400 shrink-0">{numberedMatch[1]}.</span>
+          <span>
+            <InlineMarkdown text={numberedMatch[2]} />
+          </span>
+        </div>
+      );
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith("> ")) {
+      elements.push(
+        <div
+          key={i}
+          className="pl-3 border-l-2 border-gray-300 dark:border-gray-500 text-gray-600 dark:text-gray-400 italic"
+        >
+          <InlineMarkdown text={line.slice(2)} />
+        </div>
+      );
+      continue;
+    }
+
+    // Empty line
+    if (line.trim() === "") {
+      elements.push(<div key={i} className="h-1" />);
+      continue;
+    }
+
+    // Normal text
+    elements.push(
+      <div key={i}>
+        <InlineMarkdown text={line} />
+      </div>
+    );
+  }
+
+  // Handle unclosed code block
+  if (inCodeBlock && codeBlockLines.length > 0) {
+    elements.push(
+      <div key="unclosed-code" className="my-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+        {codeBlockLang && (
+          <div className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600">
+            {codeBlockLang}
+          </div>
+        )}
+        <pre className="px-3 py-2 text-xs font-mono overflow-x-auto bg-gray-50 dark:bg-gray-800">
+          {codeBlockLines.join("\n")}
+        </pre>
+      </div>
+    );
+  }
+
+  return <div className="space-y-1">{elements}</div>;
 }
