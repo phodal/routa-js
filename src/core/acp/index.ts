@@ -24,4 +24,9 @@ export {
   detectInstalledPresets,
 } from "./acp-presets";
 export { which } from "./utils";
-export {AcpProcess} from "@/core/acp/acp-process";
+export { AcpProcess } from "@/core/acp/acp-process";
+export {
+  ClaudeCodeProcess,
+  buildClaudeCodeConfig,
+  type ClaudeCodeProcessConfig,
+} from "@/core/acp/claude-code-process";

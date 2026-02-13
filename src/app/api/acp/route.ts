@@ -2,7 +2,7 @@
  * ACP Server API Route - /api/acp
  *
  * Proxies ACP JSON-RPC to a spawned ACP agent process per session.
- * Supports multiple ACP providers (opencode, gemini, codex-acp, auggie, copilot).
+ * Supports multiple ACP providers (opencode, gemini, codex-acp, auggie, copilot, claude).
  *
  * - POST: JSON-RPC requests (initialize, session/new, session/prompt, etc.)
  *         → forwarded to the ACP agent via stdin, responses returned to client
@@ -12,6 +12,7 @@
  *   1. Client sends `initialize` → we return our capabilities (no process yet)
  *   2. Client sends `session/new` → we spawn agent, initialize it, create session
  *      - Optional `provider` param selects the agent (default: "opencode")
+ *      - For `claude` provider: spawns Claude Code with stream-json protocol
  *   3. Client connects SSE with sessionId → we pipe agent's session/update to SSE
  *   4. Client sends `session/prompt` → we forward to agent, it streams via session/update
  */
@@ -19,7 +20,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAcpProcessManager } from "@/core/acp/processer";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
-import { getStandardPresets } from "@/core/acp/acp-presets";
+import { getStandardPresets, getPresetById } from "@/core/acp/acp-presets";
 import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +93,7 @@ export async function POST(request: NextRequest) {
     // ── session/new ────────────────────────────────────────────────────
     // Spawn an ACP agent process and create a session.
     // Optional `provider` param selects the agent (default: "opencode").
+    // For `claude` provider: spawns Claude Code with stream-json + MCP.
     if (method === "session/new") {
       const p = (params ?? {}) as Record<string, unknown>;
       const cwd = (p.cwd as string | undefined) ?? process.cwd();
@@ -101,24 +103,49 @@ export async function POST(request: NextRequest) {
       const store = getHttpSessionStore();
       const manager = getAcpProcessManager();
 
-      // Spawn the selected ACP agent and wire up notification forwarding
-      const acpSessionId = await manager.createSession(
-        sessionId,
-        cwd,
-        (msg) => {
-          // Forward all notifications from the agent to SSE
-          if (msg.method === "session/update" && msg.params) {
-            // Rewrite the sessionId: the agent uses its own internal ID,
-            // but the browser knows our sessionId.
-            const params = msg.params as Record<string, unknown>;
-            store.pushNotification({
-              ...params,
-              sessionId, // Override with our sessionId (MUST come after spread)
-            } as never);
-          }
-        },
-        provider // Pass the selected provider preset ID
-      );
+      const preset = getPresetById(provider);
+      const isClaudeCode = preset?.nonStandardApi === true || provider === "claude";
+
+      let acpSessionId: string;
+
+      if (isClaudeCode) {
+        // ── Claude Code: stream-json protocol with MCP ───────────────
+        // Build MCP config to inject the routa-mcp server into Claude Code
+        const mcpConfigs = buildMcpConfigForClaude();
+
+        acpSessionId = await manager.createClaudeSession(
+          sessionId,
+          cwd,
+          (msg) => {
+            // Forward translated session/update notifications to SSE
+            if (msg.method === "session/update" && msg.params) {
+              const params = msg.params as Record<string, unknown>;
+              store.pushNotification({
+                ...params,
+                sessionId,
+              } as never);
+            }
+          },
+          mcpConfigs,
+        );
+      } else {
+        // ── Standard ACP agent ───────────────────────────────────────
+        acpSessionId = await manager.createSession(
+          sessionId,
+          cwd,
+          (msg) => {
+            // Forward all notifications from the agent to SSE
+            if (msg.method === "session/update" && msg.params) {
+              const params = msg.params as Record<string, unknown>;
+              store.pushNotification({
+                ...params,
+                sessionId,
+              } as never);
+            }
+          },
+          provider,
+        );
+      }
 
       // Persist session for UI listing
       store.upsertSession({
@@ -138,7 +165,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── session/prompt ─────────────────────────────────────────────────
-    // Forward prompt to the ACP agent process.
+    // Forward prompt to the ACP agent process (or Claude Code).
     if (method === "session/prompt") {
       const p = (params ?? {}) as Record<string, unknown>;
       const sessionId = p.sessionId as string;
@@ -151,6 +178,44 @@ export async function POST(request: NextRequest) {
       }
 
       const manager = getAcpProcessManager();
+
+      // Extract prompt text
+      const promptBlocks = p.prompt as Array<{ type: string; text?: string }> | undefined;
+      const promptText =
+        promptBlocks
+          ?.filter((b) => b.type === "text")
+          .map((b) => b.text ?? "")
+          .join("\n") ?? "";
+
+      // ── Claude Code session ─────────────────────────────────────────
+      if (manager.isClaudeSession(sessionId)) {
+        const claudeProc = manager.getClaudeProcess(sessionId);
+        if (!claudeProc) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: `No Claude Code process for session: ${sessionId}`,
+          });
+        }
+
+        if (!claudeProc.alive) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: "Claude Code process is not running",
+          });
+        }
+
+        try {
+          const result = await claudeProc.prompt(sessionId, promptText);
+          return jsonrpcResponse(id ?? null, result);
+        } catch (err) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: err instanceof Error ? err.message : "Claude Code prompt failed",
+          });
+        }
+      }
+
+      // ── Standard ACP session ────────────────────────────────────────
       const proc = manager.getProcess(sessionId);
       const acpSessionId = manager.getAcpSessionId(sessionId);
 
@@ -168,14 +233,6 @@ export async function POST(request: NextRequest) {
           message: `ACP agent (${presetId}) process is not running`,
         });
       }
-
-      // Extract prompt text
-      const promptBlocks = p.prompt as Array<{ type: string; text?: string }> | undefined;
-      const promptText =
-        promptBlocks
-          ?.filter((b) => b.type === "text")
-          .map((b) => b.text ?? "")
-          .join("\n") ?? "";
 
       try {
         // Forward to agent (responses stream via session/update → SSE)
@@ -196,10 +253,19 @@ export async function POST(request: NextRequest) {
 
       if (sessionId) {
         const manager = getAcpProcessManager();
-        const proc = manager.getProcess(sessionId);
-        const acpSessionId = manager.getAcpSessionId(sessionId);
-        if (proc && acpSessionId) {
-          await proc.cancel(acpSessionId);
+
+        // Check if Claude Code session
+        if (manager.isClaudeSession(sessionId)) {
+          const claudeProc = manager.getClaudeProcess(sessionId);
+          if (claudeProc) {
+            await claudeProc.cancel();
+          }
+        } else {
+          const proc = manager.getProcess(sessionId);
+          const acpSessionId = manager.getAcpSessionId(sessionId);
+          if (proc && acpSessionId) {
+            await proc.cancel(acpSessionId);
+          }
         }
       }
 
@@ -222,15 +288,27 @@ export async function POST(request: NextRequest) {
 
     // ── Extension methods ──────────────────────────────────────────────
 
-    // _providers/list - List available ACP agent presets
+    // _providers/list - List available ACP agent presets (including Claude Code)
     if (method === "_providers/list") {
-      const presets = getStandardPresets().map((p) => ({
+      const standardProviders = getStandardPresets().map((p) => ({
         id: p.id,
         name: p.name,
         description: p.description,
         command: p.command,
       }));
-      return jsonrpcResponse(id ?? null, { providers: presets });
+
+      // Also include Claude Code as a provider
+      const claudePreset = getPresetById("claude");
+      if (claudePreset) {
+        standardProviders.push({
+          id: claudePreset.id,
+          name: claudePreset.name,
+          description: claudePreset.description,
+          command: claudePreset.command,
+        });
+      }
+
+      return jsonrpcResponse(id ?? null, { providers: standardProviders });
     }
 
     if (method.startsWith("_")) {
@@ -264,4 +342,31 @@ function jsonrpcResponse(
     return NextResponse.json({ jsonrpc: "2.0", id, error });
   }
   return NextResponse.json({ jsonrpc: "2.0", id, result });
+}
+
+/**
+ * Build MCP configuration JSON for Claude Code.
+ * Injects the routa-mcp server so Claude Code can use Routa coordination tools.
+ *
+ * Claude Code accepts --mcp-config with a JSON object like:
+ * {"mcpServers":{"routa":{"url":"http://localhost:3000/api/mcp","type":"sse"}}}
+ */
+function buildMcpConfigForClaude(): string[] {
+  // Determine the URL for the MCP server
+  // In development, the Next.js server is on localhost:3000
+  const port = process.env.PORT ?? "3000";
+  const host = process.env.HOST ?? "localhost";
+  const mcpUrl = `http://${host}:${port}/api/mcp`;
+
+  const mcpConfigJson = JSON.stringify({
+    mcpServers: {
+      routa: {
+        url: mcpUrl,
+        type: "sse",
+      },
+    },
+  });
+
+  console.log(`[ACP Route] MCP config for Claude Code: ${mcpConfigJson}`);
+  return [mcpConfigJson];
 }
