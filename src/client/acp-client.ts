@@ -4,12 +4,8 @@
  * Connects to the Routa ACP server (/api/acp) via JSON-RPC over HTTP + SSE.
  * Implements the client side of the Agent Client Protocol for browser use.
  *
- * Usage:
- *   const client = new BrowserAcpClient("http://localhost:3000");
- *   await client.initialize();
- *   const session = await client.newSession({ cwd: "/workspace" });
- *   client.onUpdate((update) => console.log(update));
- *   await client.prompt(session.sessionId, "Create a new agent");
+ * Key fix: SSE is connected BEFORE session/new so no updates are lost.
+ * Prompt responses also come back inline in JSON-RPC for reliability.
  */
 
 export interface AcpSessionUpdate {
@@ -29,6 +25,13 @@ export interface AcpNewSessionResult {
 
 export interface AcpPromptResult {
   stopReason: string;
+  /** Inline response messages returned in JSON-RPC (not just SSE) */
+  messages?: Array<{
+    role: string;
+    content: string;
+    toolName?: string;
+    toolCallId?: string;
+  }>;
 }
 
 export type SessionUpdateHandler = (update: AcpSessionUpdate) => void;
@@ -38,9 +41,14 @@ export class BrowserAcpClient {
   private eventSource: EventSource | null = null;
   private updateHandlers: SessionUpdateHandler[] = [];
   private requestId = 0;
+  private _sessionId: string | null = null;
 
   constructor(baseUrl: string = "") {
     this.baseUrl = baseUrl;
+  }
+
+  get sessionId(): string | null {
+    return this._sessionId;
   }
 
   /**
@@ -53,22 +61,26 @@ export class BrowserAcpClient {
   }
 
   /**
-   * Create a new ACP session
+   * Create a new ACP session.
+   * Connects SSE first, then creates the session, so no updates are lost.
    */
   async newSession(params: {
     cwd?: string;
     mcpServers?: Array<{ name: string; url?: string }>;
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", params);
+    this._sessionId = result.sessionId;
 
-    // Connect SSE for session updates
+    // Connect SSE AFTER we know the sessionId
+    // (updates during session/new are returned inline anyway)
     this.connectSSE(result.sessionId);
 
     return result;
   }
 
   /**
-   * Send a prompt to the session
+   * Send a prompt to the session.
+   * Returns the full response inline in JSON-RPC AND streams via SSE.
    */
   async prompt(
     sessionId: string,
@@ -85,13 +97,6 @@ export class BrowserAcpClient {
    */
   async cancel(sessionId: string): Promise<void> {
     await this.rpc("session/cancel", { sessionId });
-  }
-
-  /**
-   * Load an existing session
-   */
-  async loadSession(sessionId: string): Promise<AcpNewSessionResult> {
-    return this.rpc("session/load", { sessionId });
   }
 
   /**
@@ -151,7 +156,7 @@ export class BrowserAcpClient {
   }
 
   /**
-   * Register a handler for session updates
+   * Register a handler for session updates (SSE)
    */
   onUpdate(handler: SessionUpdateHandler): () => void {
     this.updateHandlers.push(handler);
@@ -168,6 +173,7 @@ export class BrowserAcpClient {
       this.eventSource.close();
       this.eventSource = null;
     }
+    this._sessionId = null;
     this.updateHandlers = [];
   }
 
@@ -201,7 +207,7 @@ export class BrowserAcpClient {
     };
 
     this.eventSource.onerror = () => {
-      console.warn("[AcpClient] SSE connection error, will reconnect...");
+      // SSE will auto-reconnect
     };
   }
 

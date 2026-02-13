@@ -4,6 +4,9 @@
  * Exposes the Routa ACP agent via JSON-RPC over HTTP.
  * Clients (browser, OpenCode, etc.) connect here via ACP protocol.
  *
+ * KEY DESIGN: Prompt responses are returned INLINE in the JSON-RPC result
+ * so they work even without SSE. SSE is supplementary for real-time streaming.
+ *
  * POST /api/acp - Send ACP JSON-RPC messages
  * GET  /api/acp - SSE stream for ACP session updates
  */
@@ -12,7 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { getRoutaSystem } from "@/core/routa-system";
 import { SkillRegistry } from "@/core/skills/skill-registry";
-import { AgentRole } from "@/core/models/agent";
+import { AgentRole, AgentStatus } from "@/core/models/agent";
 
 // ─── Session state ─────────────────────────────────────────────────────
 
@@ -25,7 +28,10 @@ interface AcpServerSession {
 }
 
 const sessions = new Map<string, AcpServerSession>();
-const sseClients = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+const sseClients = new Map<
+  string,
+  ReadableStreamDefaultController<Uint8Array>
+>();
 
 // Skill registry singleton
 let skillRegistry: SkillRegistry | undefined;
@@ -95,6 +101,11 @@ export async function POST(request: NextRequest) {
           agentCapabilities: {
             streaming: true,
             skills: true,
+            loadSession: true,
+          },
+          agentInfo: {
+            name: "routa-acp",
+            version: "0.1.0",
           },
         });
 
@@ -163,6 +174,11 @@ async function handleNewSession(
       ? (createResult.data as { agentId: string }).agentId
       : undefined;
 
+  // *** FIX: Activate the agent immediately ***
+  if (routaAgentId) {
+    await system.agentStore.updateStatus(routaAgentId, AgentStatus.ACTIVE);
+  }
+
   const session: AcpServerSession = {
     id: sessionId,
     cwd: params?.cwd ?? process.cwd(),
@@ -172,20 +188,19 @@ async function handleNewSession(
   };
   sessions.set(sessionId, session);
 
-  // Send available skills as commands
+  // Get available skills
   const registry = getSkillRegistry();
   const skills = registry.listSkillSummaries();
 
-  // Notify SSE clients
-  sendSessionUpdate(sessionId, {
-    sessionUpdate: "available_commands_update",
+  // Return session info with skills (SSE may not be connected yet)
+  return jsonrpcResponse(id, {
+    sessionId,
+    agentId: routaAgentId,
     availableCommands: skills.map((s) => ({
       name: s.name,
       description: s.description,
     })),
   });
-
-  return jsonrpcResponse(id, { sessionId });
 }
 
 async function handlePrompt(
@@ -210,67 +225,197 @@ async function handlePrompt(
       .map((p) => p.text)
       .join("\n") ?? "";
 
+  // Collect messages to return inline
+  const messages: Array<{
+    role: string;
+    content: string;
+    toolName?: string;
+    toolCallId?: string;
+    toolStatus?: string;
+    toolResult?: unknown;
+  }> = [];
+
   // Check for skill invocation
   if (promptText.startsWith("/")) {
     const registry = getSkillRegistry();
     const skillName = promptText.slice(1).split(" ")[0];
     const skill = registry.getSkill(skillName);
     if (skill) {
+      const content = `**Skill: ${skill.name}**\n\n${skill.content}`;
+      messages.push({ role: "assistant", content });
+
+      // Also send via SSE if connected
       sendSessionUpdate(params.sessionId, {
         sessionUpdate: "agent_message_chunk",
-        messageChunk: `[Skill: ${skill.name}]\n\n${skill.content}`,
+        content,
       });
-      return jsonrpcResponse(id, { stopReason: "end_turn" });
+
+      return jsonrpcResponse(id, {
+        stopReason: "end_turn",
+        messages,
+      });
     }
   }
 
   // Route through Routa coordination
   if (session.routaAgentId) {
-    // Stream thinking
+    // Thinking
+    messages.push({
+      role: "thinking",
+      content: "Analyzing request and coordinating agents...",
+    });
     sendSessionUpdate(params.sessionId, {
       sessionUpdate: "agent_thought_chunk",
-      thoughtChunk: "Analyzing request and coordinating agents...",
+      content: "Analyzing request and coordinating agents...",
     });
 
-    // Execute list_agents
-    const agentListResult = await system.tools.listAgents(session.workspaceId);
-
-    // Notify tool call
+    // Execute list_agents tool
+    const agentListResult = await system.tools.listAgents(
+      session.workspaceId
+    );
     const toolCallId = uuidv4();
+
+    messages.push({
+      role: "tool",
+      content: JSON.stringify(agentListResult.data, null, 2),
+      toolName: "list_agents",
+      toolCallId,
+      toolStatus: "completed",
+      toolResult: agentListResult.data,
+    });
+
     sendSessionUpdate(params.sessionId, {
       sessionUpdate: "tool_call",
-      toolCall: {
-        id: toolCallId,
-        name: "list_agents",
-        arguments: { workspaceId: session.workspaceId },
-        status: "running",
-      },
+      toolCallId,
+      toolName: "list_agents",
+      toolStatus: "completed",
+      toolResult: agentListResult.data,
     });
 
-    sendSessionUpdate(params.sessionId, {
-      sessionUpdate: "tool_call_update",
-      toolCall: {
-        id: toolCallId,
-        name: "list_agents",
-        status: "completed",
-        result: JSON.stringify(agentListResult.data),
-      },
-    });
+    // Generate response based on the prompt
+    const agents = (agentListResult.data as Array<{
+      id: string;
+      name: string;
+      role: string;
+      status: string;
+    }>) ?? [];
 
-    // Stream response
-    const response =
-      `Routa Coordinator active.\n\n` +
-      `Workspace: ${session.workspaceId}\n` +
-      `Agents: ${JSON.stringify(agentListResult.data, null, 2)}\n\n` +
-      `Prompt: ${promptText}`;
+    let responseText: string;
 
+    // Simple command processing
+    if (
+      promptText.toLowerCase().includes("create") &&
+      promptText.toLowerCase().includes("agent")
+    ) {
+      // Extract agent name from prompt
+      const nameMatch = promptText.match(
+        /(?:named?|called?)\s+["']?(\w[\w-]*)["']?/i
+      );
+      const agentName = nameMatch?.[1] ?? `crafter-${Date.now()}`;
+      const roleMatch = promptText.match(
+        /\b(ROUTA|CRAFTER|GATE|routa|crafter|gate)\b/i
+      );
+      const role = roleMatch?.[1]?.toUpperCase() ?? "CRAFTER";
+
+      const createResult = await system.tools.createAgent({
+        name: agentName,
+        role,
+        workspaceId: session.workspaceId,
+        parentId: session.routaAgentId,
+      });
+
+      if (createResult.success) {
+        const created = createResult.data as {
+          agentId: string;
+          name: string;
+          role: string;
+        };
+        // Activate the new agent FIRST, then build result
+        await system.agentStore.updateStatus(
+          created.agentId,
+          AgentStatus.ACTIVE
+        );
+
+        const createdWithStatus = { ...created, status: "ACTIVE" };
+        const createToolId = uuidv4();
+        messages.push({
+          role: "tool",
+          content: JSON.stringify(createdWithStatus, null, 2),
+          toolName: "create_agent",
+          toolCallId: createToolId,
+          toolStatus: "completed",
+          toolResult: createdWithStatus,
+        });
+
+        responseText =
+          `Created agent **${created.name}** (${created.role}).\n\n` +
+          `Agent ID: \`${created.agentId}\`\n` +
+          `Status: ACTIVE\n` +
+          `Parent: ${session.routaAgentId}`;
+      } else {
+        responseText = `Failed to create agent: ${createResult.error}`;
+      }
+    } else if (
+      promptText.toLowerCase().includes("list") &&
+      promptText.toLowerCase().includes("agent")
+    ) {
+      if (agents.length === 0) {
+        responseText = "No agents in the workspace yet.";
+      } else {
+        responseText =
+          `**${agents.length} agent(s) in workspace:**\n\n` +
+          agents
+            .map(
+              (a) =>
+                `- **${a.name}** (${a.role}) - ${a.status}\n  ID: \`${a.id}\``
+            )
+            .join("\n");
+      }
+    } else if (
+      promptText.toLowerCase().includes("status") ||
+      promptText.toLowerCase().includes("info")
+    ) {
+      responseText =
+        `**Routa Coordinator**\n\n` +
+        `Workspace: \`${session.workspaceId}\`\n` +
+        `Session: \`${session.id}\`\n` +
+        `Agent ID: \`${session.routaAgentId}\`\n` +
+        `Agents: ${agents.length}\n\n` +
+        `**Available tools:**\n` +
+        `- \`list_agents\` - List all agents\n` +
+        `- \`create_agent\` - Create a new agent (ROUTA/CRAFTER/GATE)\n` +
+        `- \`delegate_task\` - Assign task to agent\n` +
+        `- \`send_message_to_agent\` - Message between agents\n` +
+        `- \`report_to_parent\` - Submit completion report\n` +
+        `- \`get_agent_status\` - Check agent status\n` +
+        `- \`get_agent_summary\` - Get agent summary\n` +
+        `- \`subscribe_to_events\` - Subscribe to events`;
+    } else {
+      // General response
+      responseText =
+        `**Routa Coordinator** received your message.\n\n` +
+        `> ${promptText}\n\n` +
+        `Workspace has **${agents.length}** agent(s).\n\n` +
+        `You can:\n` +
+        `- "create agent named X" - create a new CRAFTER agent\n` +
+        `- "list agents" - show all agents\n` +
+        `- "status" - show coordinator info\n` +
+        `- "/skill-name" - invoke a skill`;
+    }
+
+    messages.push({ role: "assistant", content: responseText });
+
+    // Send via SSE too
     sendSessionUpdate(params.sessionId, {
       sessionUpdate: "agent_message_chunk",
-      messageChunk: response,
+      content: responseText,
     });
   }
 
-  return jsonrpcResponse(id, { stopReason: "end_turn" });
+  return jsonrpcResponse(id, {
+    stopReason: "end_turn",
+    messages,
+  });
 }
 
 async function handleLoadSession(
@@ -338,8 +483,6 @@ async function handleToolCall(
 ) {
   const system = getRoutaSystem();
   const tools = system.tools;
-
-  // Dispatch to the appropriate tool
   const toolName = params.name;
   const args = params.arguments ?? {};
 
@@ -347,10 +490,18 @@ async function handleToolCall(
     let result;
     switch (toolName) {
       case "list_agents":
-        result = await tools.listAgents((args.workspaceId as string) ?? "default");
+        result = await tools.listAgents(
+          (args.workspaceId as string) ?? "default"
+        );
         break;
       case "create_agent":
-        result = await tools.createAgent(args as never);
+        result = await tools.createAgent({
+          name: args.name as string,
+          role: args.role as string,
+          workspaceId: (args.workspaceId as string) ?? "default",
+          parentId: args.parentId as string | undefined,
+          modelTier: args.modelTier as string | undefined,
+        });
         break;
       case "get_agent_status":
         result = await tools.getAgentStatus(args.agentId as string);
@@ -359,10 +510,18 @@ async function handleToolCall(
         result = await tools.getAgentSummary(args.agentId as string);
         break;
       case "delegate_task":
-        result = await tools.delegate(args as never);
+        result = await tools.delegate({
+          agentId: args.agentId as string,
+          taskId: args.taskId as string,
+          callerAgentId: args.callerAgentId as string,
+        });
         break;
       case "send_message_to_agent":
-        result = await tools.messageAgent(args as never);
+        result = await tools.messageAgent({
+          fromAgentId: args.fromAgentId as string,
+          toAgentId: args.toAgentId as string,
+          message: args.message as string,
+        });
         break;
       default:
         return jsonrpcResponse(id, null, {
@@ -381,7 +540,10 @@ async function handleToolCall(
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
-function sendSessionUpdate(sessionId: string, update: Record<string, unknown>) {
+function sendSessionUpdate(
+  sessionId: string,
+  update: Record<string, unknown>
+) {
   const controller = sseClients.get(sessionId);
   if (controller) {
     const encoder = new TextEncoder();
@@ -404,15 +566,7 @@ function jsonrpcResponse(
   error?: { code: number; message: string }
 ) {
   if (error) {
-    return NextResponse.json({
-      jsonrpc: "2.0",
-      id,
-      error,
-    });
+    return NextResponse.json({ jsonrpc: "2.0", id, error });
   }
-  return NextResponse.json({
-    jsonrpc: "2.0",
-    id,
-    result,
-  });
+  return NextResponse.json({ jsonrpc: "2.0", id, result });
 }

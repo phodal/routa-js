@@ -10,11 +10,19 @@
  *   - Agent management (ROUTA/CRAFTER/GATE)
  */
 
+import { useState, useCallback } from "react";
 import { AgentPanel } from "@/client/components/agent-panel";
 import { SkillPanel } from "@/client/components/skill-panel";
 import { ChatPanel } from "@/client/components/chat-panel";
 
 export default function HomePage() {
+  // refreshKey increments whenever agents change, triggering AgentPanel refresh
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleSessionChange = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -41,13 +49,13 @@ export default function HomePage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)]">
           {/* Left column: Agents + Skills */}
           <div className="lg:col-span-1 space-y-6 overflow-y-auto">
-            <AgentPanel />
+            <AgentPanel refreshKey={refreshKey} />
             <SkillPanel />
           </div>
 
           {/* Right column: Chat */}
           <div className="lg:col-span-2">
-            <ChatPanel />
+            <ChatPanel onSessionChange={handleSessionChange} />
           </div>
         </div>
       </main>

@@ -15,6 +15,9 @@ import { getRoutaSystem } from "@/core/routa-system";
 
 const DEFAULT_WORKSPACE = "default";
 
+// Force dynamic - no caching for agent state
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const system = getRoutaSystem();
   const id = request.nextUrl.searchParams.get("id");
@@ -22,19 +25,23 @@ export async function GET(request: NextRequest) {
   const workspaceId =
     request.nextUrl.searchParams.get("workspaceId") ?? DEFAULT_WORKSPACE;
 
+  const headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+  };
+
   if (id) {
     const result = summary
       ? await system.tools.getAgentSummary(id)
       : await system.tools.getAgentStatus(id);
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 404 });
+      return NextResponse.json({ error: result.error }, { status: 404, headers });
     }
-    return NextResponse.json(result.data);
+    return NextResponse.json(result.data, { headers });
   }
 
   const result = await system.tools.listAgents(workspaceId);
-  return NextResponse.json(result.data);
+  return NextResponse.json(result.data, { headers });
 }
 
 export async function POST(request: NextRequest) {

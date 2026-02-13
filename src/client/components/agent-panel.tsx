@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * AgentPanel - displays and manages agents in the workspace
+ * AgentPanel - displays and manages agents in the workspace.
+ * Accepts a refreshKey prop to trigger external refresh (e.g., after session changes).
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -14,7 +15,11 @@ interface AgentInfo {
   parentId?: string;
 }
 
-export function AgentPanel() {
+interface AgentPanelProps {
+  refreshKey?: number;
+}
+
+export function AgentPanel({ refreshKey }: AgentPanelProps) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [newAgentName, setNewAgentName] = useState("");
@@ -23,7 +28,7 @@ export function AgentPanel() {
   const fetchAgents = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/agents");
+      const res = await fetch("/api/agents", { cache: "no-store" });
       const data = await res.json();
       setAgents(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -33,9 +38,10 @@ export function AgentPanel() {
     }
   }, []);
 
+  // Fetch on mount and when refreshKey changes
   useEffect(() => {
     fetchAgents();
-  }, [fetchAgents]);
+  }, [fetchAgents, refreshKey]);
 
   const createAgent = async () => {
     if (!newAgentName.trim()) return;
@@ -53,31 +59,44 @@ export function AgentPanel() {
   };
 
   const roleColor: Record<string, string> = {
-    ROUTA: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-    CRAFTER: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    ROUTA:
+      "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+    CRAFTER:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
     GATE: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   };
 
   const statusColor: Record<string, string> = {
-    PENDING: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-    ACTIVE: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    COMPLETED: "bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300",
+    PENDING:
+      "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+    ACTIVE:
+      "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+    COMPLETED:
+      "bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300",
     ERROR: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-    CANCELLED: "bg-gray-200 text-gray-500 dark:bg-gray-600 dark:text-gray-400",
+    CANCELLED:
+      "bg-gray-200 text-gray-500 dark:bg-gray-600 dark:text-gray-400",
   };
 
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
       <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Agents
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Agents
+          </h2>
+          {agents.length > 0 && (
+            <span className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full">
+              {agents.length}
+            </span>
+          )}
+        </div>
         <button
           onClick={fetchAgents}
           disabled={loading}
           className="text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
         >
-          {loading ? "Loading..." : "Refresh"}
+          {loading ? "..." : "Refresh"}
         </button>
       </div>
 
@@ -88,7 +107,7 @@ export function AgentPanel() {
           value={newAgentName}
           onChange={(e) => setNewAgentName(e.target.value)}
           placeholder="Agent name..."
-          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
           onKeyDown={(e) => e.key === "Enter" && createAgent()}
         />
         <select
@@ -109,10 +128,10 @@ export function AgentPanel() {
       </div>
 
       {/* Agent list */}
-      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+      <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-64 overflow-y-auto">
         {agents.length === 0 ? (
-          <div className="px-5 py-8 text-center text-gray-400 dark:text-gray-500 text-sm">
-            No agents yet. Create one to get started.
+          <div className="px-5 py-6 text-center text-gray-400 dark:text-gray-500 text-sm">
+            No agents yet. Connect chat or create one.
           </div>
         ) : (
           agents.map((agent) => (
@@ -137,7 +156,7 @@ export function AgentPanel() {
                   {agent.status}
                 </span>
               </div>
-              <div className="mt-1 text-xs text-gray-400 dark:text-gray-500 font-mono">
+              <div className="mt-1 text-xs text-gray-400 dark:text-gray-500 font-mono truncate">
                 {agent.id}
               </div>
             </div>
