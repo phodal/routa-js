@@ -1,22 +1,25 @@
 /**
  * ACP Server API Route - /api/acp
  *
- * Proxies ACP JSON-RPC to a spawned `opencode acp` process per session.
+ * Proxies ACP JSON-RPC to a spawned ACP agent process per session.
+ * Supports multiple ACP providers (opencode, gemini, codex-acp, auggie, copilot).
  *
  * - POST: JSON-RPC requests (initialize, session/new, session/prompt, etc.)
- *         → forwarded to opencode via stdin, responses returned to client
- * - GET : SSE stream for `session/update` notifications from opencode
+ *         → forwarded to the ACP agent via stdin, responses returned to client
+ * - GET : SSE stream for `session/update` notifications from the agent
  *
  * Flow:
  *   1. Client sends `initialize` → we return our capabilities (no process yet)
- *   2. Client sends `session/new` → we spawn opencode, initialize it, create session
- *   3. Client connects SSE with sessionId → we pipe opencode's session/update to SSE
- *   4. Client sends `session/prompt` → we forward to opencode, it streams via session/update
+ *   2. Client sends `session/new` → we spawn agent, initialize it, create session
+ *      - Optional `provider` param selects the agent (default: "opencode")
+ *   3. Client connects SSE with sessionId → we pipe agent's session/update to SSE
+ *   4. Client sends `session/prompt` → we forward to agent, it streams via session/update
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getOpenCodeProcessManager } from "@/core/acp/opencode-process";
+import { getAcpProcessManager } from "@/core/acp/opencode-process";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
+import { getStandardPresets } from "@/core/acp/acp-presets";
 import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
     };
 
     // ── initialize ─────────────────────────────────────────────────────
-    // No opencode process yet; return our own capabilities.
+    // No agent process yet; return our own capabilities.
     if (method === "initialize") {
       return jsonrpcResponse(id ?? null, {
         protocolVersion: (params as { protocolVersion?: number })?.protocolVersion ?? 1,
@@ -80,30 +83,32 @@ export async function POST(request: NextRequest) {
           loadSession: false,
         },
         agentInfo: {
-          name: "routa-acp-opencode",
+          name: "routa-acp",
           version: "0.1.0",
         },
       });
     }
 
     // ── session/new ────────────────────────────────────────────────────
-    // Spawn a new opencode process and create an ACP session.
+    // Spawn an ACP agent process and create a session.
+    // Optional `provider` param selects the agent (default: "opencode").
     if (method === "session/new") {
       const p = (params ?? {}) as Record<string, unknown>;
       const cwd = (p.cwd as string | undefined) ?? process.cwd();
+      const provider = (p.provider as string | undefined) ?? "opencode";
       const sessionId = uuidv4();
 
       const store = getHttpSessionStore();
-      const manager = getOpenCodeProcessManager();
+      const manager = getAcpProcessManager();
 
-      // Spawn opencode and wire up notification forwarding
+      // Spawn the selected ACP agent and wire up notification forwarding
       const acpSessionId = await manager.createSession(
         sessionId,
         cwd,
         (msg) => {
-          // Forward all notifications from opencode to SSE
+          // Forward all notifications from the agent to SSE
           if (msg.method === "session/update" && msg.params) {
-            // Rewrite the sessionId: opencode uses its own internal ID,
+            // Rewrite the sessionId: the agent uses its own internal ID,
             // but the browser knows our sessionId.
             const params = msg.params as Record<string, unknown>;
             store.pushNotification({
@@ -111,7 +116,8 @@ export async function POST(request: NextRequest) {
               sessionId, // Override with our sessionId (MUST come after spread)
             } as never);
           }
-        }
+        },
+        provider // Pass the selected provider preset ID
       );
 
       // Persist session for UI listing
@@ -124,14 +130,14 @@ export async function POST(request: NextRequest) {
       });
 
       console.log(
-        `[ACP Route] Session created: ${sessionId} (opencode session: ${acpSessionId})`
+        `[ACP Route] Session created: ${sessionId} (provider: ${provider}, agent session: ${acpSessionId})`
       );
 
-      return jsonrpcResponse(id ?? null, { sessionId });
+      return jsonrpcResponse(id ?? null, { sessionId, provider });
     }
 
     // ── session/prompt ─────────────────────────────────────────────────
-    // Forward prompt to the opencode process.
+    // Forward prompt to the ACP agent process.
     if (method === "session/prompt") {
       const p = (params ?? {}) as Record<string, unknown>;
       const sessionId = p.sessionId as string;
@@ -143,21 +149,22 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const manager = getOpenCodeProcessManager();
+      const manager = getAcpProcessManager();
       const proc = manager.getProcess(sessionId);
       const acpSessionId = manager.getAcpSessionId(sessionId);
 
       if (!proc || !acpSessionId) {
         return jsonrpcResponse(id ?? null, null, {
           code: -32000,
-          message: `No opencode process for session: ${sessionId}`,
+          message: `No ACP agent process for session: ${sessionId}`,
         });
       }
 
       if (!proc.alive) {
+        const presetId = manager.getPresetId(sessionId) ?? "unknown";
         return jsonrpcResponse(id ?? null, null, {
           code: -32000,
-          message: "opencode process is not running",
+          message: `ACP agent (${presetId}) process is not running`,
         });
       }
 
@@ -170,7 +177,7 @@ export async function POST(request: NextRequest) {
           .join("\n") ?? "";
 
       try {
-        // Forward to opencode (responses stream via session/update → SSE)
+        // Forward to agent (responses stream via session/update → SSE)
         const result = await proc.prompt(acpSessionId, promptText);
         return jsonrpcResponse(id ?? null, result);
       } catch (err) {
@@ -187,7 +194,7 @@ export async function POST(request: NextRequest) {
       const sessionId = p.sessionId as string;
 
       if (sessionId) {
-        const manager = getOpenCodeProcessManager();
+        const manager = getAcpProcessManager();
         const proc = manager.getProcess(sessionId);
         const acpSessionId = manager.getAcpSessionId(sessionId);
         if (proc && acpSessionId) {
@@ -208,11 +215,23 @@ export async function POST(request: NextRequest) {
 
     // ── session/set_mode ───────────────────────────────────────────────
     if (method === "session/set_mode") {
-      // TODO: forward to opencode when supported
+      // TODO: forward to the agent when supported
       return jsonrpcResponse(id ?? null, {});
     }
 
     // ── Extension methods ──────────────────────────────────────────────
+
+    // _providers/list - List available ACP agent presets
+    if (method === "_providers/list") {
+      const presets = getStandardPresets().map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        command: p.command,
+      }));
+      return jsonrpcResponse(id ?? null, { providers: presets });
+    }
+
     if (method.startsWith("_")) {
       return jsonrpcResponse(id ?? null, null, {
         code: -32601,

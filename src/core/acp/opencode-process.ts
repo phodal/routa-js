@@ -1,15 +1,25 @@
 /**
- * OpenCodeProcess - Manages an opencode ACP child process
+ * AcpProcess - Manages an ACP-compliant agent child process
  *
- * Spawns `opencode acp` with piped stdio and communicates via JSON-RPC (NDJSON).
+ * Spawns any ACP agent CLI (opencode, gemini, codex-acp, auggie, copilot, etc.)
+ * with piped stdio and communicates via JSON-RPC (NDJSON).
+ *
  * Handles:
- *   - Sending JSON-RPC requests to opencode (stdin)
- *   - Parsing JSON-RPC responses/notifications from opencode (stdout)
+ *   - Sending JSON-RPC requests to the agent (stdin)
+ *   - Parsing JSON-RPC responses/notifications from the agent (stdout)
  *   - Forwarding `session/update` notifications to the caller
  *   - Handling agent→client requests (fs, terminal, permissions) with auto-responses
+ *
+ * Provider selection is driven by AcpAgentPreset configurations.
+ * See acp-presets.ts for available presets.
  */
 
 import { spawn, type ChildProcess } from "child_process";
+import {
+  type AcpAgentPreset,
+  getPresetById,
+  resolveCommand,
+} from "./acp-presets";
 
 export type NotificationHandler = (msg: JsonRpcMessage) => void;
 
@@ -29,9 +39,83 @@ interface PendingRequest {
 }
 
 /**
- * Manages a single opencode ACP process and its JSON-RPC communication.
+ * Configuration for creating an AcpProcess.
+ * Can be created from a preset or custom command.
  */
-export class OpenCodeProcess {
+export interface AcpProcessConfig {
+  /** The preset being used (if any) */
+  preset?: AcpAgentPreset;
+  /** Resolved command to execute */
+  command: string;
+  /** Command-line arguments (preset args + any additional args like --cwd) */
+  args: string[];
+  /** Working directory */
+  cwd: string;
+  /** Additional environment variables */
+  env?: Record<string, string>;
+  /** Display name for logging */
+  displayName: string;
+}
+
+/**
+ * Build an AcpProcessConfig from a preset ID and working directory.
+ */
+export function buildConfigFromPreset(
+  presetId: string,
+  cwd: string,
+  extraArgs?: string[],
+  extraEnv?: Record<string, string>
+): AcpProcessConfig {
+  const preset = getPresetById(presetId);
+  if (!preset) {
+    throw new Error(
+      `Unknown ACP preset: "${presetId}". Use one of: opencode, gemini, codex, copilot, auggie, kimi`
+    );
+  }
+  if (preset.nonStandardApi) {
+    throw new Error(
+      `Preset "${presetId}" uses a non-standard API and is not supported by AcpProcess. ` +
+        `It requires a separate implementation.`
+    );
+  }
+
+  const command = resolveCommand(preset);
+  const args = [...preset.args];
+
+  // Append --cwd if the preset uses positional cwd (like opencode)
+  // For others, we rely on the process cwd
+  if (preset.id === "opencode") {
+    args.push("--cwd", cwd);
+  }
+
+  if (extraArgs) {
+    args.push(...extraArgs);
+  }
+
+  return {
+    preset,
+    command,
+    args,
+    cwd,
+    env: extraEnv,
+    displayName: preset.name,
+  };
+}
+
+/**
+ * Build a default config (opencode) for backward compatibility.
+ */
+export function buildDefaultConfig(cwd: string): AcpProcessConfig {
+  return buildConfigFromPreset("opencode", cwd);
+}
+
+/**
+ * Manages a single ACP agent process and its JSON-RPC communication.
+ *
+ * This is the core abstraction that handles the ACP protocol over stdio.
+ * It works with any ACP-compliant agent (opencode, gemini, codex-acp, etc.).
+ */
+export class AcpProcess {
   private process: ChildProcess | null = null;
   private buffer = "";
   private pendingRequests = new Map<number | string, PendingRequest>();
@@ -39,10 +123,10 @@ export class OpenCodeProcess {
   private onNotification: NotificationHandler;
   private _sessionId: string | null = null;
   private _alive = false;
-  private _cwd: string;
+  private _config: AcpProcessConfig;
 
-  constructor(cwd: string, onNotification: NotificationHandler) {
-    this._cwd = cwd;
+  constructor(config: AcpProcessConfig, onNotification: NotificationHandler) {
+    this._config = config;
     this.onNotification = onNotification;
   }
 
@@ -54,19 +138,30 @@ export class OpenCodeProcess {
     return this._alive && this.process !== null && this.process.exitCode === null;
   }
 
+  get config(): AcpProcessConfig {
+    return this._config;
+  }
+
+  get presetId(): string | undefined {
+    return this._config.preset?.id;
+  }
+
   /**
-   * Spawn the opencode acp process and wait for it to be ready.
+   * Spawn the ACP agent process and wait for it to be ready.
    */
   async start(): Promise<void> {
-    const opencodeBin = process.env.OPENCODE_BIN || "opencode";
+    const { command, args, cwd, env, displayName } = this._config;
 
-    console.log(`[OpenCodeProcess] Spawning: ${opencodeBin} acp --cwd ${this._cwd}`);
+    console.log(
+      `[AcpProcess:${displayName}] Spawning: ${command} ${args.join(" ")} (cwd: ${cwd})`
+    );
 
-    this.process = spawn(opencodeBin, ["acp", "--cwd", this._cwd], {
+    this.process = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],
-      cwd: this._cwd,
+      cwd,
       env: {
         ...process.env,
+        ...env,
         NODE_NO_READLINE: "1",
       },
       detached: false,
@@ -74,13 +169,13 @@ export class OpenCodeProcess {
 
     if (!this.process || !this.process.pid) {
       throw new Error(
-        `Failed to spawn opencode acp - is opencode installed?`
+        `Failed to spawn ${displayName} - is "${command}" installed and in PATH?`
       );
     }
 
     if (!this.process.stdin || !this.process.stdout) {
       throw new Error(
-        `opencode spawned without required stdio streams`
+        `${displayName} spawned without required stdio streams`
       );
     }
 
@@ -95,25 +190,25 @@ export class OpenCodeProcess {
     this.process.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf-8").trim();
       if (text) {
-        console.error(`[OpenCodeProcess stderr] ${text}`);
+        console.error(`[AcpProcess:${displayName} stderr] ${text}`);
       }
     });
 
     this.process.on("exit", (code, signal) => {
       console.log(
-        `[OpenCodeProcess] Process exited: code=${code}, signal=${signal}`
+        `[AcpProcess:${displayName}] Process exited: code=${code}, signal=${signal}`
       );
       this._alive = false;
       // Reject all pending requests
       for (const [id, pending] of this.pendingRequests) {
         clearTimeout(pending.timeout);
-        pending.reject(new Error(`opencode process exited (code=${code})`));
+        pending.reject(new Error(`${displayName} process exited (code=${code})`));
         this.pendingRequests.delete(id);
       }
     });
 
     this.process.on("error", (err) => {
-      console.error(`[OpenCodeProcess] Process error:`, err);
+      console.error(`[AcpProcess:${displayName}] Process error:`, err);
       this._alive = false;
     });
 
@@ -121,14 +216,16 @@ export class OpenCodeProcess {
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     if (!this.alive) {
-      throw new Error("opencode process died during startup");
+      throw new Error(`${displayName} process died during startup`);
     }
 
-    console.log(`[OpenCodeProcess] Process started, pid=${this.process.pid}`);
+    console.log(
+      `[AcpProcess:${displayName}] Process started, pid=${this.process.pid}`
+    );
   }
 
   /**
-   * Initialize the ACP protocol with opencode.
+   * Initialize the ACP protocol.
    */
   async initialize(): Promise<unknown> {
     const result = await this.sendRequest("initialize", {
@@ -138,7 +235,10 @@ export class OpenCodeProcess {
         version: "0.1.0",
       },
     });
-    console.log(`[OpenCodeProcess] Initialized:`, JSON.stringify(result));
+    console.log(
+      `[AcpProcess:${this._config.displayName}] Initialized:`,
+      JSON.stringify(result)
+    );
     return result;
   }
 
@@ -147,12 +247,14 @@ export class OpenCodeProcess {
    */
   async newSession(cwd?: string): Promise<string> {
     const result = (await this.sendRequest("session/new", {
-      cwd: cwd || this._cwd,
+      cwd: cwd || this._config.cwd,
       mcpServers: [],
     })) as { sessionId: string };
 
     this._sessionId = result.sessionId;
-    console.log(`[OpenCodeProcess] Session created: ${this._sessionId}`);
+    console.log(
+      `[AcpProcess:${this._config.displayName}] Session created: ${this._sessionId}`
+    );
     return this._sessionId;
   }
 
@@ -196,7 +298,7 @@ export class OpenCodeProcess {
     timeoutMs?: number
   ): Promise<unknown> {
     if (!this.alive) {
-      throw new Error("opencode process is not alive");
+      throw new Error(`${this._config.displayName} process is not alive`);
     }
 
     return new Promise((resolve, reject) => {
@@ -224,11 +326,13 @@ export class OpenCodeProcess {
   }
 
   /**
-   * Kill the opencode process.
+   * Kill the agent process.
    */
   kill(): void {
     if (this.process && this.process.exitCode === null) {
-      console.log(`[OpenCodeProcess] Killing process pid=${this.process.pid}`);
+      console.log(
+        `[AcpProcess:${this._config.displayName}] Killing process pid=${this.process.pid}`
+      );
       this.process.kill("SIGTERM");
 
       // Force kill after 5 seconds if still alive
@@ -320,13 +424,16 @@ export class OpenCodeProcess {
         ? (updateType as Record<string, unknown>)?.sessionUpdate
         : (msg.params as Record<string, unknown>)?.sessionUpdate;
       console.log(
-        `[OpenCodeProcess] Notification: ${msg.method} (${sessionUpdate ?? "unknown"})`
+        `[AcpProcess:${this._config.displayName}] Notification: ${msg.method} (${sessionUpdate ?? "unknown"})`
       );
       this.onNotification(msg);
       return;
     }
 
-    console.warn("[OpenCodeProcess] Unhandled message:", JSON.stringify(msg));
+    console.warn(
+      `[AcpProcess:${this._config.displayName}] Unhandled message:`,
+      JSON.stringify(msg)
+    );
   }
 
   /**
@@ -336,7 +443,9 @@ export class OpenCodeProcess {
   private handleAgentRequest(msg: JsonRpcMessage): void {
     const { method, id, params } = msg;
 
-    console.log(`[OpenCodeProcess] Agent request: ${method} (id=${id})`);
+    console.log(
+      `[AcpProcess:${this._config.displayName}] Agent request: ${method} (id=${id})`
+    );
 
     switch (method) {
       case "session/request_permission": {
@@ -422,7 +531,7 @@ export class OpenCodeProcess {
 
       default: {
         console.warn(
-          `[OpenCodeProcess] Unknown agent request: ${method}`
+          `[AcpProcess:${this._config.displayName}] Unknown agent request: ${method}`
         );
         this.writeMessage({
           jsonrpc: "2.0",
@@ -438,7 +547,9 @@ export class OpenCodeProcess {
 
   private writeMessage(msg: Record<string, unknown>): void {
     if (!this.process?.stdin?.writable) {
-      console.error("[OpenCodeProcess] Cannot write - stdin not writable");
+      console.error(
+        `[AcpProcess:${this._config.displayName}] Cannot write - stdin not writable`
+      );
       return;
     }
 
@@ -447,31 +558,51 @@ export class OpenCodeProcess {
   }
 }
 
-// ─── Process Manager (manages multiple OpenCode processes) ──────────────
+// ─── Backward-compatible alias ─────────────────────────────────────────
+
+/**
+ * @deprecated Use `AcpProcess` instead. This alias exists for backward compatibility.
+ */
+export const OpenCodeProcess = AcpProcess;
+
+// ─── Process Manager (manages multiple ACP agent processes) ────────────
 
 interface ManagedProcess {
-  process: OpenCodeProcess;
-  acpSessionId: string; // Session ID from opencode
+  process: AcpProcess;
+  acpSessionId: string; // Session ID from the agent
+  presetId: string; // Which preset was used
   createdAt: Date;
 }
 
 /**
- * Singleton manager for OpenCode processes.
- * Maps our session IDs to OpenCode process instances.
+ * Singleton manager for ACP agent processes.
+ * Maps our session IDs to ACP process instances.
+ * Supports spawning different agent types via presets.
  */
-class OpenCodeProcessManager {
+class AcpProcessManager {
   private processes = new Map<string, ManagedProcess>();
 
   /**
-   * Spawn a new opencode process, initialize ACP, and create a session.
-   * Returns the opencode session ID.
+   * Spawn a new ACP agent process, initialize the protocol, and create a session.
+   *
+   * @param sessionId - Our internal session ID
+   * @param cwd - Working directory for the agent
+   * @param onNotification - Handler for session/update notifications
+   * @param presetId - Which ACP agent to use (default: "opencode")
+   * @param extraArgs - Additional command-line arguments
+   * @param extraEnv - Additional environment variables
+   * @returns The agent's ACP session ID
    */
   async createSession(
     sessionId: string,
     cwd: string,
-    onNotification: NotificationHandler
+    onNotification: NotificationHandler,
+    presetId: string = "opencode",
+    extraArgs?: string[],
+    extraEnv?: Record<string, string>
   ): Promise<string> {
-    const proc = new OpenCodeProcess(cwd, onNotification);
+    const config = buildConfigFromPreset(presetId, cwd, extraArgs, extraEnv);
+    const proc = new AcpProcess(config, onNotification);
 
     await proc.start();
     await proc.initialize();
@@ -480,6 +611,7 @@ class OpenCodeProcessManager {
     this.processes.set(sessionId, {
       process: proc,
       acpSessionId,
+      presetId,
       createdAt: new Date(),
     });
 
@@ -487,17 +619,24 @@ class OpenCodeProcessManager {
   }
 
   /**
-   * Get the OpenCode process for a session.
+   * Get the ACP process for a session.
    */
-  getProcess(sessionId: string): OpenCodeProcess | undefined {
+  getProcess(sessionId: string): AcpProcess | undefined {
     return this.processes.get(sessionId)?.process;
   }
 
   /**
-   * Get the opencode ACP session ID for our session.
+   * Get the agent's ACP session ID for our session.
    */
   getAcpSessionId(sessionId: string): string | undefined {
     return this.processes.get(sessionId)?.acpSessionId;
+  }
+
+  /**
+   * Get the preset ID used for a session.
+   */
+  getPresetId(sessionId: string): string | undefined {
+    return this.processes.get(sessionId)?.presetId;
   }
 
   /**
@@ -506,19 +645,21 @@ class OpenCodeProcessManager {
   listSessions(): Array<{
     sessionId: string;
     acpSessionId: string;
+    presetId: string;
     alive: boolean;
     createdAt: Date;
   }> {
     return Array.from(this.processes.entries()).map(([sessionId, managed]) => ({
       sessionId,
       acpSessionId: managed.acpSessionId,
+      presetId: managed.presetId,
       alive: managed.process.alive,
       createdAt: managed.createdAt,
     }));
   }
 
   /**
-   * Kill a session's opencode process.
+   * Kill a session's agent process.
    */
   killSession(sessionId: string): void {
     const managed = this.processes.get(sessionId);
@@ -532,19 +673,34 @@ class OpenCodeProcessManager {
    * Kill all processes.
    */
   killAll(): void {
-    for (const [sessionId, managed] of this.processes) {
+    for (const [, managed] of this.processes) {
       managed.process.kill();
     }
     this.processes.clear();
   }
 }
 
-// Singleton
-let singleton: OpenCodeProcessManager | undefined;
+// ─── Backward-compatible alias ─────────────────────────────────────────
 
-export function getOpenCodeProcessManager(): OpenCodeProcessManager {
+/**
+ * @deprecated Use `AcpProcessManager` (via `getAcpProcessManager()`) instead.
+ */
+const OpenCodeProcessManager = AcpProcessManager;
+
+// Singleton
+let singleton: AcpProcessManager | undefined;
+
+/**
+ * Get the singleton AcpProcessManager instance.
+ */
+export function getAcpProcessManager(): AcpProcessManager {
   if (!singleton) {
-    singleton = new OpenCodeProcessManager();
+    singleton = new AcpProcessManager();
   }
   return singleton;
 }
+
+/**
+ * @deprecated Use `getAcpProcessManager()` instead. This alias exists for backward compatibility.
+ */
+export const getOpenCodeProcessManager = getAcpProcessManager;
