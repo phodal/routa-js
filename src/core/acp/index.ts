@@ -5,8 +5,7 @@ export {
   type AcpSessionInfo,
 } from "./acp-session-manager";
 export {
-  AcpProcess,
-  OpenCodeProcess, // backward-compatible alias
+  Processer, // backward-compatible alias
   getAcpProcessManager,
   getOpenCodeProcessManager, // backward-compatible alias
   buildConfigFromPreset,
@@ -14,7 +13,7 @@ export {
   type AcpProcessConfig,
   type JsonRpcMessage,
   type NotificationHandler,
-} from "./opencode-process";
+} from "./processer";
 export {
   type AcpAgentPreset,
   ACP_AGENT_PRESETS,
@@ -25,3 +24,4 @@ export {
   detectInstalledPresets,
 } from "./acp-presets";
 export { which } from "./utils";
+export {AcpProcess} from "@/core/acp/acp-process";

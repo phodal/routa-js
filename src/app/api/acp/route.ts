@@ -17,7 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAcpProcessManager } from "@/core/acp/opencode-process";
+import { getAcpProcessManager } from "@/core/acp/processer";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
 import { getStandardPresets } from "@/core/acp/acp-presets";
 import { v4 as uuidv4 } from "uuid";
