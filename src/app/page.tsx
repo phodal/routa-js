@@ -199,58 +199,11 @@ export default function HomePage() {
             </div>
 
             {/* Provider list */}
-            <div className="max-h-44 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] divide-y divide-gray-50 dark:divide-gray-800">
-              {acp.providers.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-gray-400 text-center">
-                  Connecting...
-                </div>
-              ) : (
-                acp.providers.map((p) => {
-                  const isAvailable = p.status === "available";
-                  const isSelected = p.id === acp.selectedProvider;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => acp.setProvider(p.id)}
-                      className={`w-full text-left px-2.5 py-2 flex items-center gap-2 transition-colors ${
-                        isSelected
-                          ? "bg-blue-50 dark:bg-blue-900/20"
-                          : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                      } ${!isAvailable ? "opacity-50" : ""}`}
-                    >
-                      {/* Status dot */}
-                      <span
-                        className={`shrink-0 w-1.5 h-1.5 rounded-full ${
-                          isAvailable ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
-                        }`}
-                      />
-                      {/* Name + description */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-xs font-medium truncate ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-gray-900 dark:text-gray-100"}`}>
-                            {p.name}
-                          </span>
-                          <span className="text-[9px] text-gray-400 dark:text-gray-500 font-mono truncate">
-                            {p.command}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Status badge */}
-                      <span
-                        className={`shrink-0 px-1.5 py-0.5 text-[9px] font-medium rounded ${
-                          isAvailable
-                            ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
-                        }`}
-                      >
-                        {isAvailable ? "Ready" : "Not found"}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+            <ProviderList
+              providers={acp.providers}
+              selectedProvider={acp.selectedProvider}
+              onSelect={acp.setProvider}
+            />
 
             {/* Serverless limitation warning */}
             {acp.providers.length > 0 && acp.providers.filter((p) => p.status === "available").length === 0 && (
@@ -289,7 +242,9 @@ export default function HomePage() {
             <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800" />
 
             {/* Skills */}
-            <SkillPanel />
+            <SkillPanel
+              skillsHook={skillsHook}
+            />
           </div>
         </aside>
 
@@ -314,6 +269,108 @@ export default function HomePage() {
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium shadow-lg animate-fade-in">
           Only CRAFTER is supported. Other agents coming soon.
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Provider List Component ──────────────────────────────────────────
+
+function ProviderList({
+  providers,
+  selectedProvider,
+  onSelect,
+}: {
+  providers: Array<{ id: string; name: string; command?: string; status?: string }>;
+  selectedProvider: string;
+  onSelect: (id: string) => void;
+}) {
+  const [showUnavailable, setShowUnavailable] = useState(false);
+
+  if (providers.length === 0) {
+    return (
+      <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] px-3 py-3 text-xs text-gray-400 text-center">
+        Connecting...
+      </div>
+    );
+  }
+
+  const available = providers.filter((p) => p.status === "available");
+  const unavailable = providers.filter((p) => p.status !== "available");
+
+  const renderProvider = (p: (typeof providers)[0]) => {
+    const isAvailable = p.status === "available";
+    const isSelected = p.id === selectedProvider;
+    return (
+      <button
+        key={p.id}
+        type="button"
+        onClick={() => onSelect(p.id)}
+        className={`w-full text-left px-2.5 py-1.5 flex items-center gap-2 transition-colors ${
+          isSelected
+            ? "bg-blue-50 dark:bg-blue-900/20"
+            : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+        } ${!isAvailable ? "opacity-50" : ""}`}
+      >
+        {/* Status dot */}
+        <span
+          className={`shrink-0 w-1.5 h-1.5 rounded-full ${
+            isAvailable ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
+          }`}
+        />
+        {/* Name + command */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-medium truncate ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-gray-900 dark:text-gray-100"}`}>
+              {p.name}
+            </span>
+            <span className="text-[9px] text-gray-400 dark:text-gray-500 font-mono truncate">
+              {p.command}
+            </span>
+          </div>
+        </div>
+        {/* Status badge */}
+        <span
+          className={`shrink-0 px-1.5 py-0.5 text-[9px] font-medium rounded ${
+            isAvailable
+              ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+              : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
+          }`}
+        >
+          {isAvailable ? "Ready" : "Not found"}
+        </span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] divide-y divide-gray-50 dark:divide-gray-800">
+      {/* Available providers - always visible */}
+      {available.map(renderProvider)}
+
+      {/* Unavailable providers - collapsible */}
+      {unavailable.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowUnavailable((v) => !v)}
+            className="w-full px-2.5 py-1.5 flex items-center justify-between text-[10px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+          >
+            <span>
+              {unavailable.length} unavailable
+            </span>
+            <svg
+              className={`w-3 h-3 transition-transform duration-150 ${showUnavailable ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showUnavailable && unavailable.map(renderProvider)}
+        </>
       )}
     </div>
   );

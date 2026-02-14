@@ -10,9 +10,16 @@
  */
 
 import { useState, useRef, useCallback } from "react";
-import { useSkills } from "../hooks/use-skills";
+import { useSkills, type UseSkillsState, type UseSkillsActions } from "../hooks/use-skills";
 
-export function SkillPanel() {
+interface SkillPanelProps {
+  /** Pass a shared useSkills() instance to keep sidebar and chat in sync */
+  skillsHook?: UseSkillsState & UseSkillsActions;
+}
+
+export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
+  const internalHook = useSkills();
+  const hook = externalHook ?? internalHook;
   const {
     skills,
     repoSkills,
@@ -23,7 +30,7 @@ export function SkillPanel() {
     loadSkill,
     reloadFromDisk,
     cloneFromGithub,
-  } = useSkills();
+  } = hook;
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
