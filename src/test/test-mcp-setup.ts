@@ -9,7 +9,7 @@ export function testMcpSetup() {
   console.log("Testing MCP Configuration\n");
   console.log("=".repeat(60));
 
-  const providers = ["auggie", "opencode", "claude", "codex", "gemini"];
+  const providers = ["auggie", "opencode", "claude", "codex", "gemini", "kimi"];
 
   for (const providerId of providers) {
     console.log(`\nProvider: ${providerId}`);

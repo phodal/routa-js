@@ -15,9 +15,16 @@
  *   │  claude    │  Inline JSON via --mcp-config <json>                 │
  *   │  codex     │  Merge into ~/.codex/config.toml (TOML format)      │
  *   │            │  [mcp_servers.routa-coordination]                    │
+ *   │  gemini    │  Merge into ~/.gemini/settings.json (JSON)           │
+ *   │            │  mcpServers.routa-coordination { httpUrl }           │
+ *   │  kimi      │  Merge into ~/.kimi/config.toml (TOML format)       │
+ *   │            │  [mcp.servers.routa-coordination]                    │
  *   └────────────┴────────────────────────────────────────────────────────┘
  *
- * Codex docs: https://developers.openai.com/codex/mcp/
+ * Docs:
+ *   - Codex:  https://developers.openai.com/codex/mcp/
+ *   - Gemini: https://geminicli.com/docs/tools/mcp-server/
+ *   - Kimi:   https://moonshotai.github.io/kimi-cli/en/configuration/config-files.html#mcp
  */
 
 import * as fs from "fs";
@@ -31,7 +38,7 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
-export type McpSupportedProvider = "claude" | "auggie" | "opencode" | "codex";
+export type McpSupportedProvider = "claude" | "auggie" | "opencode" | "codex" | "gemini" | "kimi";
 
 /**
  * Result of a file-based MCP setup (OpenCode / Auggie).
@@ -48,7 +55,7 @@ export interface McpSetupResult {
 // ─── Public API ────────────────────────────────────────────────────────
 
 export function providerSupportsMcp(providerId: string): boolean {
-  const supported: McpSupportedProvider[] = ["claude", "auggie", "opencode", "codex"];
+  const supported: McpSupportedProvider[] = ["claude", "auggie", "opencode", "codex", "gemini", "kimi"];
   return supported.includes(providerId as McpSupportedProvider);
 }
 
@@ -78,6 +85,10 @@ export function ensureMcpForProvider(
       return ensureMcpForClaude(mcpEndpoint, cfg.workspaceId);
     case "codex":
       return ensureMcpForCodex(mcpEndpoint);
+    case "gemini":
+      return ensureMcpForGemini(mcpEndpoint);
+    case "kimi":
+      return ensureMcpForKimi(mcpEndpoint);
     default:
       return { mcpConfigs: [], summary: `${providerId}: unknown` };
   }
@@ -280,6 +291,132 @@ function ensureMcpForCodex(mcpEndpoint: string): McpSetupResult {
   }
 }
 
+// ─── Gemini CLI ─────────────────────────────────────────────────────────
+//
+// Gemini stores MCP config in JSON format at ~/.gemini/settings.json
+// https://geminicli.com/docs/tools/mcp-server/
+//
+// Streamable HTTP servers use "httpUrl" (NOT "url" which is for SSE):
+//   { "mcpServers": { "<name>": { "httpUrl": "...", "timeout": 30000 } } }
+//
+// We merge a "routa-coordination" entry preserving all existing settings.
+
+const GEMINI_CONFIG_DIR = path.join(os.homedir(), ".gemini");
+const GEMINI_CONFIG_FILE = path.join(GEMINI_CONFIG_DIR, "settings.json");
+
+function ensureMcpForGemini(mcpEndpoint: string): McpSetupResult {
+  try {
+    // Read existing settings (or start fresh)
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(GEMINI_CONFIG_FILE)) {
+      const raw = fs.readFileSync(GEMINI_CONFIG_FILE, "utf-8");
+      existing = JSON.parse(raw);
+    }
+
+    // Ensure "mcpServers" key exists
+    const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
+
+    // Gemini uses "httpUrl" for Streamable HTTP transport (not "url" which is SSE)
+    mcpServers["routa-coordination"] = {
+      httpUrl: mcpEndpoint,
+      timeout: 30000,
+    };
+
+    existing.mcpServers = mcpServers;
+
+    // Write back
+    fs.mkdirSync(GEMINI_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(
+      GEMINI_CONFIG_FILE,
+      JSON.stringify(existing, null, 2) + "\n",
+      "utf-8",
+    );
+
+    console.log(
+      `[MCP:Gemini] Wrote routa-coordination to ${GEMINI_CONFIG_FILE}`,
+    );
+
+    // Gemini reads settings.json itself – nothing to pass on the CLI
+    return {
+      mcpConfigs: [],
+      summary: `gemini: wrote ${GEMINI_CONFIG_FILE}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[MCP:Gemini] Failed to write config: ${msg}`);
+    return {
+      mcpConfigs: [],
+      summary: `gemini: config write failed – ${msg}`,
+    };
+  }
+}
+
+// ─── Kimi CLI ───────────────────────────────────────────────────────────
+//
+// Kimi stores config in TOML format at ~/.kimi/config.toml
+// https://moonshotai.github.io/kimi-cli/en/configuration/config-files.html#mcp
+//
+// Existing [mcp] section has [mcp.client] for client behavior.
+// MCP server definitions go under [mcp.servers.<name>]:
+//
+//   [mcp.servers.routa-coordination]
+//   type = "http"
+//   url  = "http://..."
+//
+// We merge into the existing config preserving all user settings.
+
+const KIMI_CONFIG_DIR = path.join(os.homedir(), ".kimi");
+const KIMI_CONFIG_FILE = path.join(KIMI_CONFIG_DIR, "config.toml");
+
+function ensureMcpForKimi(mcpEndpoint: string): McpSetupResult {
+  try {
+    // Read existing config (or start fresh)
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(KIMI_CONFIG_FILE)) {
+      const raw = fs.readFileSync(KIMI_CONFIG_FILE, "utf-8");
+      existing = TOML.parse(raw) as Record<string, unknown>;
+    }
+
+    // Ensure nested "mcp" → "servers" path exists
+    const mcp = (existing.mcp ?? {}) as Record<string, unknown>;
+    const servers = (mcp.servers ?? {}) as Record<string, unknown>;
+
+    // Add / update the routa-coordination server entry
+    servers["routa-coordination"] = {
+      type: "http",
+      url: mcpEndpoint,
+    };
+
+    mcp.servers = servers;
+    existing.mcp = mcp;
+
+    // Write back
+    fs.mkdirSync(KIMI_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(
+      KIMI_CONFIG_FILE,
+      TOML.stringify(existing as Record<string, unknown>) + "\n",
+      "utf-8",
+    );
+
+    console.log(
+      `[MCP:Kimi] Wrote routa-coordination to ${KIMI_CONFIG_FILE}`,
+    );
+
+    // Kimi reads config.toml itself – nothing to pass on the CLI
+    return {
+      mcpConfigs: [],
+      summary: `kimi: wrote ${KIMI_CONFIG_FILE}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[MCP:Kimi] Failed to write config: ${msg}`);
+    return {
+      mcpConfigs: [],
+      summary: `kimi: config write failed – ${msg}`,
+    };
+  }
+}
+
 // ─── Legacy convenience wrappers ───────────────────────────────────────
 
 /** @deprecated Use ensureMcpForProvider("claude", config) */
@@ -300,6 +437,14 @@ export function setupMcpForAuggie(config?: RoutaMcpConfig): string[] {
 
 export function setupMcpForCodex(config?: RoutaMcpConfig): string[] {
   return ensureMcpForProvider("codex", config).mcpConfigs;
+}
+
+export function setupMcpForGemini(config?: RoutaMcpConfig): string[] {
+  return ensureMcpForProvider("gemini", config).mcpConfigs;
+}
+
+export function setupMcpForKimi(config?: RoutaMcpConfig): string[] {
+  return ensureMcpForProvider("kimi", config).mcpConfigs;
 }
 
 // ─── Helpers (unchanged) ───────────────────────────────────────────────

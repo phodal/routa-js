@@ -48,6 +48,8 @@ export {
   setupMcpForClaudeCode,
   setupMcpForAuggie,
   setupMcpForCodex,
+  setupMcpForGemini,
+  setupMcpForKimi,
   providerSupportsMcp,
   isMcpConfigured,
   getMcpStatus,

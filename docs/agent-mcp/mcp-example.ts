@@ -7,6 +7,8 @@
  *   - Auggie:   file at ~/.augment/mcp-config.json, passed via --mcp-config <path>
  *   - Claude:   inline JSON via --mcp-config <json>
  *   - Codex:    TOML config at ~/.codex/config.toml [mcp_servers.routa-coordination]
+ *   - Gemini:   JSON config at ~/.gemini/settings.json { mcpServers: { httpUrl } }
+ *   - Kimi:     TOML config at ~/.kimi/config.toml [mcp.servers.routa-coordination]
  */
 
 import { AcpProcess } from "@/core/acp/acp-process";
@@ -83,6 +85,34 @@ export async function startCodexWithMcp(workspacePath: string) {
   console.log("Codex MCP:", mcp.summary);
 
   const config = buildConfigFromPreset("codex", workspacePath);
+  const process = new AcpProcess(config, (n) => console.log("notification:", n));
+  await process.start();
+  return process;
+}
+
+// ─── Example 5: Gemini with MCP (JSON settings file) ────────────────────
+
+export async function startGeminiWithMcp(workspacePath: string) {
+  // Merges routa-coordination entry into ~/.gemini/settings.json
+  // using httpUrl for Streamable HTTP transport (not url which is SSE)
+  const mcp = ensureMcpForProvider("gemini");
+  console.log("Gemini MCP:", mcp.summary);
+
+  const config = buildConfigFromPreset("gemini", workspacePath);
+  const process = new AcpProcess(config, (n) => console.log("notification:", n));
+  await process.start();
+  return process;
+}
+
+// ─── Example 6: Kimi with MCP (TOML config file) ────────────────────────
+
+export async function startKimiWithMcp(workspacePath: string) {
+  // Merges routa-coordination entry into ~/.kimi/config.toml
+  // under [mcp.servers.routa-coordination]
+  const mcp = ensureMcpForProvider("kimi");
+  console.log("Kimi MCP:", mcp.summary);
+
+  const config = buildConfigFromPreset("kimi", workspacePath);
   const process = new AcpProcess(config, (n) => console.log("notification:", n));
   await process.start();
   return process;
