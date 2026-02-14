@@ -1,156 +1,244 @@
 /**
  * MCP Setup for ACP Providers
  *
- * Provides helper functions to configure MCP (Model Context Protocol) for
- * different ACP providers (Claude Code, Codex, OpenCode) to connect to
- * the Routa MCP server.
+ * Configures MCP (Model Context Protocol) so that each provider can reach
+ * the Routa MCP coordination server at /api/mcp.
  *
- * Usage:
- *   import { setupMcpForProvider } from './mcp-setup';
- *   
- *   const mcpConfigs = setupMcpForProvider('codex', {
- *     routaServerUrl: 'http://localhost:3000',
- *     workspaceId: 'my-workspace'
- *   });
- *   
- *   const config = buildConfigFromPreset('codex', '/path/to/workspace', [], {}, mcpConfigs);
+ * Each provider uses a different mechanism:
+ *
+ *   ┌────────────┬────────────────────────────────────────────────────────┐
+ *   │  Provider  │  How MCP is injected                                  │
+ *   ├────────────┼────────────────────────────────────────────────────────┤
+ *   │  opencode  │  Merge into ~/.config/opencode/opencode.json (mcp)   │
+ *   │  auggie    │  Write ~/.augment/mcp-config.json, pass file path    │
+ *   │            │  via  --mcp-config <path>                            │
+ *   │  claude    │  Inline JSON via --mcp-config <json>                 │
+ *   └────────────┴────────────────────────────────────────────────────────┘
  */
 
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import {
-  generateRoutaMcpConfigJson,
   getDefaultRoutaMcpConfig,
   type RoutaMcpConfig,
 } from "./mcp-config-generator";
 
-/**
- * Provider IDs that support MCP configuration via --mcp-config flag
- * 
- * Verified support:
- * - auggie: ✓ Supports --mcp-config with {mcpServers: {...}} format
- * - claude: ✓ Supports --mcp-config with {mcpServers: {...}} format
- * 
- * Not supported (will cause process exit):
- * - opencode: Uses separate `opencode mcp` command for configuration
- * - codex: No MCP support in codex-acp wrapper
- * - gemini: Uses different MCP configuration mechanism
- */
-export type McpSupportedProvider = "claude" | "auggie";
+// ─── Types ─────────────────────────────────────────────────────────────
+
+export type McpSupportedProvider = "claude" | "auggie" | "opencode";
 
 /**
- * Check if a provider supports MCP configuration via --mcp-config flag.
- *
- * @param providerId - Provider ID to check
- * @returns True if the provider supports --mcp-config
+ * Result of a file-based MCP setup (OpenCode / Auggie).
+ * `mcpConfigs` is the array of strings that should end up in
+ * AcpProcessConfig.mcpConfigs (empty for OpenCode because it reads a file).
  */
+export interface McpSetupResult {
+  /** Strings to pass as --mcp-config <value> */
+  mcpConfigs: string[];
+  /** Human-readable summary for logs */
+  summary: string;
+}
+
+// ─── Public API ────────────────────────────────────────────────────────
+
 export function providerSupportsMcp(providerId: string): boolean {
-  const supportedProviders: McpSupportedProvider[] = [
-    "claude",
-    "auggie",
-  ];
-  return supportedProviders.includes(providerId as McpSupportedProvider);
+  const supported: McpSupportedProvider[] = ["claude", "auggie", "opencode"];
+  return supported.includes(providerId as McpSupportedProvider);
 }
 
 /**
- * Setup MCP configuration for a specific provider.
+ * Ensure MCP is configured for `providerId` and return the values that
+ * should be forwarded to the process (if any).
  *
- * This generates the MCP configuration JSON strings that can be passed
- * to the provider via --mcp-config flags.
- *
- * Currently supported providers:
- * - Auggie: Uses {mcpServers: {name: {url, type, env}}} format
- * - Claude: Uses {mcpServers: {name: {url, type, env}}} format
- *
- * Not supported (will be ignored):
- * - OpenCode: Requires separate `opencode mcp add` configuration
- * - Codex: No MCP support in current wrapper
- * - Gemini: Uses different configuration mechanism
- *
- * @param providerId - Provider ID (claude, auggie)
- * @param config - Routa MCP configuration (optional, uses defaults if not provided)
- * @returns Array of MCP config JSON strings
+ * Call this **before** spawning the process.
  */
-export function setupMcpForProvider(
-  providerId: McpSupportedProvider,
-  config?: RoutaMcpConfig
-): string[] {
+export function ensureMcpForProvider(
+  providerId: string,
+  config?: RoutaMcpConfig,
+): McpSetupResult {
   if (!providerSupportsMcp(providerId)) {
-    console.warn(`Provider "${providerId}" does not support --mcp-config flag`);
-    return [];
+    return { mcpConfigs: [], summary: `${providerId}: MCP not supported` };
   }
 
-  const mcpConfig = config || getDefaultRoutaMcpConfig();
-  
-  // Auggie and Claude both use {mcpServers: {name: {url, type, env}}} format
-  const mcpEndpoint = `${mcpConfig.routaServerUrl}/api/mcp`;
-  const mcpConfigJson = JSON.stringify({
+  const cfg = config || getDefaultRoutaMcpConfig();
+  const mcpEndpoint = `${cfg.routaServerUrl}/api/mcp`;
+
+  switch (providerId) {
+    case "opencode":
+      return ensureMcpForOpenCode(mcpEndpoint, cfg.workspaceId);
+    case "auggie":
+      return ensureMcpForAuggie(mcpEndpoint, cfg.workspaceId);
+    case "claude":
+      return ensureMcpForClaude(mcpEndpoint, cfg.workspaceId);
+    default:
+      return { mcpConfigs: [], summary: `${providerId}: unknown` };
+  }
+}
+
+// ─── OpenCode ──────────────────────────────────────────────────────────
+//
+// Config lives at ~/.config/opencode/opencode.json
+// We merge a "routa-coordination" entry into the top-level "mcp" object,
+// preserving any existing entries the user already has.
+
+const OPENCODE_CONFIG_DIR = path.join(os.homedir(), ".config", "opencode");
+const OPENCODE_CONFIG_FILE = path.join(OPENCODE_CONFIG_DIR, "opencode.json");
+
+function ensureMcpForOpenCode(
+  mcpEndpoint: string,
+  _workspaceId?: string,
+): McpSetupResult {
+  try {
+    // Read existing config (or start fresh)
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(OPENCODE_CONFIG_FILE)) {
+      const raw = fs.readFileSync(OPENCODE_CONFIG_FILE, "utf-8");
+      existing = JSON.parse(raw);
+    }
+
+    // Ensure "mcp" key exists
+    const mcp = (existing.mcp ?? {}) as Record<string, unknown>;
+
+    // OpenCode schema: type must be "remote" (not "http"),
+    // only allows: type, url, enabled, headers, oauth, timeout
+    mcp["routa-coordination"] = {
+      type: "remote",
+      url: mcpEndpoint,
+      enabled: true,
+    };
+
+    existing.mcp = mcp;
+
+    // Write back
+    fs.mkdirSync(OPENCODE_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(
+      OPENCODE_CONFIG_FILE,
+      JSON.stringify(existing, null, 2) + "\n",
+      "utf-8",
+    );
+
+    console.log(
+      `[MCP:OpenCode] Wrote routa-coordination to ${OPENCODE_CONFIG_FILE}`,
+    );
+
+    // OpenCode reads the file itself – nothing to pass on the CLI
+    return {
+      mcpConfigs: [],
+      summary: `opencode: wrote ${OPENCODE_CONFIG_FILE}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[MCP:OpenCode] Failed to write config: ${msg}`);
+    return { mcpConfigs: [], summary: `opencode: config write failed – ${msg}` };
+  }
+}
+
+// ─── Auggie ────────────────────────────────────────────────────────────
+//
+// Auggie accepts  --mcp-config <file-path>
+// The file must be a JSON object: { mcpServers: { name: { url, type, … } } }
+
+const AUGGIE_CONFIG_DIR = path.join(os.homedir(), ".augment");
+const AUGGIE_MCP_CONFIG_FILE = path.join(AUGGIE_CONFIG_DIR, "mcp-config.json");
+
+function ensureMcpForAuggie(
+  mcpEndpoint: string,
+  workspaceId?: string,
+): McpSetupResult {
+  try {
+    const mcpConfigObj = {
+      mcpServers: {
+        "routa-coordination": {
+          url: mcpEndpoint,
+          type: "http",
+          env: {
+            ROUTA_WORKSPACE_ID: workspaceId || "default",
+          },
+        },
+      },
+    };
+
+    fs.mkdirSync(AUGGIE_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(
+      AUGGIE_MCP_CONFIG_FILE,
+      JSON.stringify(mcpConfigObj, null, 2) + "\n",
+      "utf-8",
+    );
+
+    console.log(
+      `[MCP:Auggie] Wrote routa-coordination to ${AUGGIE_MCP_CONFIG_FILE}`,
+    );
+
+    // Pass the *file path* on the CLI
+    return {
+      mcpConfigs: [AUGGIE_MCP_CONFIG_FILE],
+      summary: `auggie: --mcp-config ${AUGGIE_MCP_CONFIG_FILE}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[MCP:Auggie] Failed to write config: ${msg}`);
+    return { mcpConfigs: [], summary: `auggie: config write failed – ${msg}` };
+  }
+}
+
+// ─── Claude Code ───────────────────────────────────────────────────────
+//
+// Claude Code accepts inline JSON via --mcp-config <json>
+
+function ensureMcpForClaude(
+  mcpEndpoint: string,
+  workspaceId?: string,
+): McpSetupResult {
+  const json = JSON.stringify({
     mcpServers: {
       "routa-coordination": {
         url: mcpEndpoint,
         type: "http",
         env: {
-          ROUTA_WORKSPACE_ID: mcpConfig.workspaceId || "default",
+          ROUTA_WORKSPACE_ID: workspaceId || "default",
         },
       },
     },
   });
-  return [mcpConfigJson];
+
+  return {
+    mcpConfigs: [json],
+    summary: `claude: inline JSON (${json.length} bytes)`,
+  };
 }
 
-/**
- * Setup MCP for Claude Code.
- *
- * Claude Code uses the --mcp-config flag to specify MCP server configurations.
- *
- * @param config - Routa MCP configuration
- * @returns Array of MCP config JSON strings for Claude Code
- */
+// ─── Legacy convenience wrappers ───────────────────────────────────────
+
+/** @deprecated Use ensureMcpForProvider("claude", config) */
+export function setupMcpForProvider(
+  providerId: McpSupportedProvider,
+  config?: RoutaMcpConfig,
+): string[] {
+  return ensureMcpForProvider(providerId, config).mcpConfigs;
+}
+
 export function setupMcpForClaudeCode(config?: RoutaMcpConfig): string[] {
-  return setupMcpForProvider("claude", config);
+  return ensureMcpForProvider("claude", config).mcpConfigs;
 }
 
-/**
- * Setup MCP for Auggie.
- *
- * Auggie supports --mcp-config flag natively.
- *
- * @param config - Routa MCP configuration
- * @returns Array of MCP config JSON strings for Auggie
- */
 export function setupMcpForAuggie(config?: RoutaMcpConfig): string[] {
-  return setupMcpForProvider("auggie", config);
+  return ensureMcpForProvider("auggie", config).mcpConfigs;
 }
 
-/**
- * Check if MCP is configured for a provider.
- *
- * This checks if the provider has MCP configs set up.
- *
- * @param mcpConfigs - MCP config array to check
- * @returns True if MCP is configured
- */
+// ─── Helpers (unchanged) ───────────────────────────────────────────────
+
 export function isMcpConfigured(mcpConfigs?: string[]): boolean {
   return !!mcpConfigs && mcpConfigs.length > 0;
 }
 
-/**
- * Get MCP status for a provider.
- *
- * @param providerId - Provider ID
- * @param mcpConfigs - Current MCP configs
- * @returns MCP status object
- */
 export function getMcpStatus(
   providerId: string,
-  mcpConfigs?: string[]
-): {
-  supported: boolean;
-  configured: boolean;
-  configCount: number;
-} {
+  mcpConfigs?: string[],
+): { supported: boolean; configured: boolean; configCount: number } {
   return {
     supported: providerSupportsMcp(providerId),
     configured: isMcpConfigured(mcpConfigs),
     configCount: mcpConfigs?.length || 0,
   };
 }
-

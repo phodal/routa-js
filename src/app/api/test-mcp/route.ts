@@ -1,42 +1,32 @@
 /**
  * MCP Configuration Test API
- * 
+ *
  * GET /api/test-mcp - Test MCP configuration for all providers
  */
 
 import { NextResponse } from "next/server";
-import { setupMcpForProvider, providerSupportsMcp, type McpSupportedProvider } from "@/core/acp/mcp-setup";
+import { ensureMcpForProvider, providerSupportsMcp } from "@/core/acp/mcp-setup";
 import { getDefaultRoutaMcpConfig } from "@/core/acp/mcp-config-generator";
 
 export async function GET() {
-  const results: Record<string, any> = {};
-  const providers = ["auggie", "codex", "opencode", "gemini", "claude"];
+  const results: Record<string, unknown> = {};
+  const providers = ["auggie", "opencode", "claude", "codex", "gemini"];
 
   for (const providerId of providers) {
-    const supportsMcp = providerSupportsMcp(providerId);
-    
-    if (supportsMcp) {
-      const mcpConfigs = setupMcpForProvider(providerId as McpSupportedProvider);
-      
-      try {
-        const parsed = mcpConfigs.length > 0 ? JSON.parse(mcpConfigs[0]) : null;
-        results[providerId] = {
-          supportsMcp: true,
-          configCount: mcpConfigs.length,
-          config: parsed,
-          rawJson: mcpConfigs[0],
-        };
-      } catch (e) {
-        results[providerId] = {
-          supportsMcp: true,
-          configCount: mcpConfigs.length,
-          error: e instanceof Error ? e.message : String(e),
-        };
-      }
+    const supported = providerSupportsMcp(providerId);
+
+    if (supported) {
+      const result = ensureMcpForProvider(providerId);
+      results[providerId] = {
+        supportsMcp: true,
+        summary: result.summary,
+        cliArgsCount: result.mcpConfigs.length,
+        cliArgs: result.mcpConfigs,
+      };
     } else {
       results[providerId] = {
         supportsMcp: false,
-        reason: "Provider does not support --mcp-config flag in ACP mode",
+        reason: "Provider does not support MCP via Routa",
       };
     }
   }

@@ -1,7 +1,7 @@
 import {AcpProcess} from "@/core/acp/acp-process";
 import {buildConfigFromPreset, ManagedProcess, NotificationHandler} from "@/core/acp/processer";
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
-import {setupMcpForProvider, providerSupportsMcp, type McpSupportedProvider} from "@/core/acp/mcp-setup";
+import {ensureMcpForProvider, providerSupportsMcp} from "@/core/acp/mcp-setup";
 import {OpencodeSdkAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl} from "@/core/acp/opencode-sdk-adapter";
 
 /**
@@ -61,15 +61,12 @@ export class AcpProcessManager {
             return this.createOpencodeAdapterSession(sessionId, onNotification);
         }
 
-        // Setup MCP configs if the provider supports it
+        // Setup MCP: writes config files and/or returns CLI args
         let mcpConfigs: string[] | undefined;
         if (providerSupportsMcp(presetId)) {
-            mcpConfigs = setupMcpForProvider(presetId as McpSupportedProvider);
-            console.log(`[AcpProcessManager] MCP enabled for provider: ${presetId}`);
-            console.log(`[AcpProcessManager] MCP configs count: ${mcpConfigs.length}`);
-            if (mcpConfigs.length > 0) {
-                console.log(`[AcpProcessManager] MCP config: ${mcpConfigs[0].slice(0, 200)}...`);
-            }
+            const mcpResult = ensureMcpForProvider(presetId);
+            mcpConfigs = mcpResult.mcpConfigs.length > 0 ? mcpResult.mcpConfigs : undefined;
+            console.log(`[AcpProcessManager] MCP setup for ${presetId}: ${mcpResult.summary}`);
         }
 
         const config = buildConfigFromPreset(presetId, cwd, extraArgs, extraEnv, mcpConfigs);

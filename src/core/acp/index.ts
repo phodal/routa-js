@@ -43,6 +43,7 @@ export {
 } from "./mcp-config-generator";
 
 export {
+  ensureMcpForProvider,
   setupMcpForProvider,
   setupMcpForClaudeCode,
   setupMcpForAuggie,
@@ -50,4 +51,5 @@ export {
   isMcpConfigured,
   getMcpStatus,
   type McpSupportedProvider,
+  type McpSetupResult,
 } from "./mcp-setup";
