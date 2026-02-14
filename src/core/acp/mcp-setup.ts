@@ -50,6 +50,10 @@ export function providerSupportsMcp(providerId: string): boolean {
  * This generates the MCP configuration JSON strings that can be passed
  * to the provider via --mcp-config flags.
  *
+ * Different providers expect different MCP config formats:
+ * - Auggie/Claude: {mcpServers: {name: {url, type}}}
+ * - OpenCode/Codex: {name, url, type, env}
+ *
  * @param providerId - Provider ID (claude, codex, opencode, etc.)
  * @param config - Routa MCP configuration (optional, uses defaults if not provided)
  * @returns Array of MCP config JSON strings
@@ -64,8 +68,26 @@ export function setupMcpForProvider(
   }
 
   const mcpConfig = config || getDefaultRoutaMcpConfig();
+  
+  // Auggie and Claude use a different format: {mcpServers: {name: {url, type}}}
+  if (providerId === "auggie" || providerId === "claude") {
+    const mcpEndpoint = `${mcpConfig.routaServerUrl}/api/mcp`;
+    const mcpConfigJson = JSON.stringify({
+      mcpServers: {
+        "routa-coordination": {
+          url: mcpEndpoint,
+          type: "http",
+          env: {
+            ROUTA_WORKSPACE_ID: mcpConfig.workspaceId || "default",
+          },
+        },
+      },
+    });
+    return [mcpConfigJson];
+  }
+  
+  // OpenCode, Codex, Gemini use the standard format
   const mcpConfigJson = generateRoutaMcpConfigJson(mcpConfig);
-
   return [mcpConfigJson];
 }
 

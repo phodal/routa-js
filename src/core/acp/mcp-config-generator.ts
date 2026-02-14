@@ -92,14 +92,24 @@ export function generateMultipleRoutaMcpConfigs(
 /**
  * Get the default Routa MCP configuration for local development.
  *
- * Assumes routa-js is running on localhost:3000 (Next.js default port).
+ * Dynamically detects the server URL based on the current process.
  *
  * @param workspaceId - Optional workspace ID (defaults to "default")
  * @returns Default MCP configuration
  */
 export function getDefaultRoutaMcpConfig(workspaceId?: string): RoutaMcpConfig {
+  // Try to determine the server URL
+  let routaServerUrl = process.env.ROUTA_SERVER_URL;
+  
+  if (!routaServerUrl) {
+    // If running in Next.js, try to detect the port
+    const port = process.env.PORT || "3000";
+    const host = process.env.HOST || "localhost";
+    routaServerUrl = `http://${host}:${port}`;
+  }
+  
   return {
-    routaServerUrl: process.env.ROUTA_SERVER_URL || "http://localhost:3000",
+    routaServerUrl,
     workspaceId: workspaceId || process.env.ROUTA_WORKSPACE_ID || "default",
   };
 }

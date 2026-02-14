@@ -63,7 +63,8 @@ export function buildConfigFromPreset(
   presetId: string,
   cwd: string,
   extraArgs?: string[],
-  extraEnv?: Record<string, string>
+  extraEnv?: Record<string, string>,
+  mcpConfigs?: string[]
 ): AcpProcessConfig {
   const preset = getPresetById(presetId);
   if (!preset) {
@@ -98,6 +99,7 @@ export function buildConfigFromPreset(
     cwd,
     env: extraEnv,
     displayName: preset.name,
+    mcpConfigs,
   };
 }
 

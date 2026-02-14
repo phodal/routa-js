@@ -1,6 +1,7 @@
 import {AcpProcess} from "@/core/acp/acp-process";
 import {buildConfigFromPreset, ManagedProcess, NotificationHandler} from "@/core/acp/processer";
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
+import {setupMcpForProvider, providerSupportsMcp, type McpSupportedProvider} from "@/core/acp/mcp-setup";
 
 /**
  * A managed Claude Code process (separate from standard ACP).
@@ -41,7 +42,18 @@ export class AcpProcessManager {
         extraArgs?: string[],
         extraEnv?: Record<string, string>
     ): Promise<string> {
-        const config = buildConfigFromPreset(presetId, cwd, extraArgs, extraEnv);
+        // Setup MCP configs if the provider supports it
+        let mcpConfigs: string[] | undefined;
+        if (providerSupportsMcp(presetId)) {
+            mcpConfigs = setupMcpForProvider(presetId as McpSupportedProvider);
+            console.log(`[AcpProcessManager] MCP enabled for provider: ${presetId}`);
+            console.log(`[AcpProcessManager] MCP configs count: ${mcpConfigs.length}`);
+            if (mcpConfigs.length > 0) {
+                console.log(`[AcpProcessManager] MCP config: ${mcpConfigs[0].slice(0, 200)}...`);
+            }
+        }
+
+        const config = buildConfigFromPreset(presetId, cwd, extraArgs, extraEnv, mcpConfigs);
         const proc = new AcpProcess(config, onNotification);
 
         await proc.start();
