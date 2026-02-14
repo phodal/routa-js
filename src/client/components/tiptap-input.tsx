@@ -94,7 +94,12 @@ function createSuggestionDropdown() {
         color: ${isSelected ? "#fff" : "inherit"};
         opacity: ${item.disabled ? "0.5" : "1"};
       `;
+      // Status dot for provider items
+      const statusDot = item.type === "provider"
+        ? `<span style="width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: ${item.disabled ? '#9ca3af' : '#22c55e'};"></span>`
+        : "";
       btn.innerHTML = `
+        ${statusDot}
         <span style="font-weight: 500;">${item.label}</span>
         ${item.description ? `<span style="opacity: 0.5; font-size: 11px; margin-left: auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.description}</span>` : ""}
       `;
@@ -189,58 +194,41 @@ function createSuggestionDropdown() {
   };
 }
 
-// ─── Agent Mention Extension (@ trigger) ───────────────────────────────
+// ─── Provider Mention Extension (@ trigger) ────────────────────────────
 
-const AGENT_ITEMS: SuggestionItem[] = [
-  {
-    id: "CRAFTER",
-    label: "CRAFTER",
-    description: "Code generation agent",
-    type: "agent",
-  },
-  {
-    id: "ROUTA",
-    label: "ROUTA",
-    description: "Coming soon",
-    type: "agent",
-    disabled: true,
-  },
-  {
-    id: "GATE",
-    label: "GATE",
-    description: "Coming soon",
-    type: "agent",
-    disabled: true,
-  },
-];
-
-const AgentMention = Mention.extend({ name: "agentMention" }).configure({
-  HTMLAttributes: {
-    class: "agent-mention",
-    "data-type": "agent",
-  },
-  renderHTML({ node }) {
-    return [
-      "span",
-      {
-        class: "agent-mention",
-        "data-type": "agent",
-        "data-id": node.attrs.id,
-      },
-      `@${node.attrs.label ?? node.attrs.id}`,
-    ];
-  },
-  suggestion: {
-    char: "@",
-    pluginKey: new PluginKey("agentMention"),
-    items: ({ query }: { query: string }) => {
-      return AGENT_ITEMS.filter((item) =>
-        item.label.toLowerCase().includes(query.toLowerCase())
-      );
+function createProviderMention(
+  getProviders: () => SuggestionItem[]
+) {
+  return Mention.extend({ name: "providerMention" }).configure({
+    HTMLAttributes: {
+      class: "agent-mention",
+      "data-type": "provider",
     },
-    render: createSuggestionDropdown,
-  },
-});
+    renderHTML({ node }) {
+      return [
+        "span",
+        {
+          class: "agent-mention",
+          "data-type": "provider",
+          "data-id": node.attrs.id,
+        },
+        `@${node.attrs.label ?? node.attrs.id}`,
+      ];
+    },
+    suggestion: {
+      char: "@",
+      pluginKey: new PluginKey("providerMention"),
+      items: ({ query }: { query: string }) => {
+        const providers = getProviders();
+        if (!query) return providers;
+        return providers.filter((p) =>
+          p.label.toLowerCase().includes(query.toLowerCase())
+        );
+      },
+      render: createSuggestionDropdown,
+    },
+  });
+}
 
 // ─── Skill Command Extension (/ trigger) ───────────────────────────────
 
@@ -281,12 +269,20 @@ function createSkillMention(
 // ─── Main Component ────────────────────────────────────────────────────
 
 export interface InputContext {
-  /** Agent selected via @ mention (e.g. "CRAFTER") */
-  agent?: string;
+  /** Provider selected via @ mention (e.g. "opencode") */
+  provider?: string;
   /** Skill selected via / command (e.g. "find-skills") */
   skill?: string;
   /** Working directory (e.g. cloned repo path) */
   cwd?: string;
+}
+
+interface ProviderItem {
+  id: string;
+  name: string;
+  description: string;
+  command: string;
+  status?: "available" | "unavailable";
 }
 
 interface TiptapInputProps {
@@ -295,6 +291,7 @@ interface TiptapInputProps {
   disabled?: boolean;
   loading?: boolean;
   skills?: SkillSummary[];
+  providers?: ProviderItem[];
   clonedCwd?: string | null;
   onClone?: (url: string) => Promise<void>;
 }
@@ -305,6 +302,7 @@ export function TiptapInput({
   disabled = false,
   loading = false,
   skills = [],
+  providers = [],
   clonedCwd = null,
   onClone,
 }: TiptapInputProps) {
@@ -322,18 +320,28 @@ export function TiptapInput({
     type: "skill",
   }));
 
+  // Ref for providers so the Mention extension always has latest
+  const providersRef = useRef<SuggestionItem[]>([]);
+  providersRef.current = providers.map((p) => ({
+    id: p.id,
+    label: p.name,
+    description: `${p.command}${p.status === "available" ? " ✓" : ""}`,
+    type: "provider",
+    disabled: p.status === "unavailable",
+  }));
+
   const handleSend = useCallback(() => {
     if (!editor || disabled || loading) return;
 
     // Extract mentions from the editor content
     const json = editor.getJSON();
-    let agent: string | undefined;
+    let provider: string | undefined;
     let skill: string | undefined;
 
     // Walk the document to find mentions
     const walk = (node: any) => {
-      if (node.type === "agentMention" && node.attrs?.id) {
-        agent = node.attrs.id;
+      if (node.type === "providerMention" && node.attrs?.id) {
+        provider = node.attrs.id;
       }
       if (node.type === "skillMention" && node.attrs?.id) {
         skill = node.attrs.id;
@@ -347,17 +355,19 @@ export function TiptapInput({
     const text = editor.getText().trim();
     if (!text) return;
 
-    // Remove the @agent and /skill tokens from the text for the prompt
+    // Remove the @provider and /skill tokens from the text for the prompt
     let cleanText = text;
-    if (agent) {
-      cleanText = cleanText.replace(new RegExp(`@${agent}\\s*`, "g"), "").trim();
+    // Remove @ProviderName mentions (match by provider label from providers list)
+    if (provider) {
+      const providerLabel = providers.find((p) => p.id === provider)?.name ?? provider;
+      cleanText = cleanText.replace(new RegExp(`@${providerLabel}\\s*`, "gi"), "").trim();
     }
     if (skill) {
       cleanText = cleanText.replace(new RegExp(`/${skill}\\s*`, "g"), "").trim();
     }
 
     onSend(cleanText || text, {
-      agent,
+      provider,
       skill,
       cwd: clonedCwd ?? undefined,
     });
@@ -417,7 +427,7 @@ export function TiptapInput({
         nested: true,
         HTMLAttributes: { class: "flex items-start gap-2" },
       }),
-      AgentMention,
+      createProviderMention(() => providersRef.current),
       createSkillMention(() => skillsRef.current),
       EnterToSend.configure({
         onSend: () => handleSendRef.current(),
@@ -581,7 +591,7 @@ export function TiptapInput({
 
           {/* Hints */}
           <span className="text-[10px] text-gray-300 dark:text-gray-600 ml-auto">
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">@</kbd> agent
+            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">@</kbd> provider
             <span className="mx-1.5">&middot;</span>
             <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">/</kbd> skill
           </span>

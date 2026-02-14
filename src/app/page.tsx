@@ -66,10 +66,10 @@ export default function HomePage() {
     [acp, ensureConnected, bumpRefresh]
   );
 
-  const ensureSessionForChat = useCallback(async (cwd?: string): Promise<string | null> => {
+  const ensureSessionForChat = useCallback(async (cwd?: string, provider?: string): Promise<string | null> => {
     await ensureConnected();
     if (activeSessionId) return activeSessionId;
-    const result = await acp.createSession(cwd, acp.selectedProvider);
+    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider);
     if (result?.sessionId) {
       setActiveSessionId(result.sessionId);
       bumpRefresh();
@@ -167,25 +167,71 @@ export default function HomePage() {
         <aside className="w-[300px] shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#13151d] flex flex-col overflow-hidden">
           {/* Provider + New Session */}
           <div className="p-3 border-b border-gray-100 dark:border-gray-800">
-            <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-              Provider
-            </label>
-            <select
-              value={acp.selectedProvider}
-              onChange={(e) => acp.setProvider(e.target.value)}
-              disabled={acp.providers.length === 0}
-              className="w-full px-3 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 disabled:opacity-40 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {acp.providers.length === 0 ? (
-                <option value="">Connect to load providers...</option>
-              ) : (
-                acp.providers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Provider
+              </label>
+              {acp.providers.length > 0 && (
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                  {acp.providers.filter((p) => p.status === "available").length}/{acp.providers.length} installed
+                </span>
               )}
-            </select>
+            </div>
+
+            {/* Provider list */}
+            <div className="max-h-44 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] divide-y divide-gray-50 dark:divide-gray-800">
+              {acp.providers.length === 0 ? (
+                <div className="px-3 py-3 text-xs text-gray-400 text-center">
+                  Connecting...
+                </div>
+              ) : (
+                acp.providers.map((p) => {
+                  const isAvailable = p.status === "available";
+                  const isSelected = p.id === acp.selectedProvider;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => acp.setProvider(p.id)}
+                      className={`w-full text-left px-2.5 py-2 flex items-center gap-2 transition-colors ${
+                        isSelected
+                          ? "bg-blue-50 dark:bg-blue-900/20"
+                          : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                      } ${!isAvailable ? "opacity-50" : ""}`}
+                    >
+                      {/* Status dot */}
+                      <span
+                        className={`shrink-0 w-1.5 h-1.5 rounded-full ${
+                          isAvailable ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
+                        }`}
+                      />
+                      {/* Name + description */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-medium truncate ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-gray-900 dark:text-gray-100"}`}>
+                            {p.name}
+                          </span>
+                          <span className="text-[9px] text-gray-400 dark:text-gray-500 font-mono truncate">
+                            {p.command}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Status badge */}
+                      <span
+                        className={`shrink-0 px-1.5 py-0.5 text-[9px] font-medium rounded ${
+                          isAvailable
+                            ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
+                        }`}
+                      >
+                        {isAvailable ? "Ready" : "Not found"}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
             <button
               onClick={() => handleCreateSession(acp.selectedProvider)}
               disabled={acp.providers.length === 0 || !acp.selectedProvider}

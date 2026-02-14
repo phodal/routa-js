@@ -20,7 +20,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAcpProcessManager } from "@/core/acp/processer";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
-import { getStandardPresets, getPresetById } from "@/core/acp/acp-presets";
+import { getStandardPresets, getPresetById, resolveCommand } from "@/core/acp/acp-presets";
+import { which } from "@/core/acp/utils";
 import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
@@ -288,27 +289,34 @@ export async function POST(request: NextRequest) {
 
     // ── Extension methods ──────────────────────────────────────────────
 
-    // _providers/list - List available ACP agent presets (including Claude Code)
+    // _providers/list - List available ACP agent presets with install status
     if (method === "_providers/list") {
-      const standardProviders = getStandardPresets().map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        command: p.command,
-      }));
-
-      // Also include Claude Code as a provider
+      const allPresets = [...getStandardPresets()];
       const claudePreset = getPresetById("claude");
-      if (claudePreset) {
-        standardProviders.push({
-          id: claudePreset.id,
-          name: claudePreset.name,
-          description: claudePreset.description,
-          command: claudePreset.command,
-        });
-      }
+      if (claudePreset) allPresets.push(claudePreset);
 
-      return jsonrpcResponse(id ?? null, { providers: standardProviders });
+      // Check which commands are installed in parallel
+      const providers = await Promise.all(
+        allPresets.map(async (p) => {
+          const cmd = resolveCommand(p);
+          const resolved = await which(cmd);
+          return {
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            command: p.command,
+            status: resolved ? ("available" as const) : ("unavailable" as const),
+          };
+        })
+      );
+
+      // Sort: available first, then alphabetical
+      providers.sort((a, b) => {
+        if (a.status === b.status) return a.name.localeCompare(b.name);
+        return a.status === "available" ? -1 : 1;
+      });
+
+      return jsonrpcResponse(id ?? null, { providers });
     }
 
     if (method.startsWith("_")) {

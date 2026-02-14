@@ -48,7 +48,7 @@ interface PlanEntry {
 interface ChatPanelProps {
   acp: UseAcpState & UseAcpActions;
   activeSessionId: string | null;
-  onEnsureSession: (cwd?: string) => Promise<string | null>;
+  onEnsureSession: (cwd?: string, provider?: string) => Promise<string | null>;
   skills?: SkillSummary[];
   onLoadSkill?: (name: string) => Promise<string | null>;
 }
@@ -309,8 +309,13 @@ export function ChatPanel({
     // Use cwd from clone if set
     const cwd = context.cwd || clonedCwd || undefined;
 
-    // Ensure we have a session — pass cwd so the session is created in the right directory
-    const sid = activeSessionId ?? (await onEnsureSession(cwd));
+    // If user selected a provider via @mention, switch to it
+    if (context.provider) {
+      acp.setProvider(context.provider);
+    }
+
+    // Ensure we have a session — pass cwd and provider
+    const sid = activeSessionId ?? (await onEnsureSession(cwd, context.provider));
     if (!sid) return;
 
     streamingMsgIdRef.current[sid] = null;
@@ -318,7 +323,6 @@ export function ChatPanel({
 
     // Build the final prompt:
     // - If a skill is selected, prepend its content
-    // - The user's text is the main prompt
     let finalPrompt = text;
     if (context.skill && onLoadSkill) {
       const skillContent = await onLoadSkill(context.skill);
@@ -327,12 +331,12 @@ export function ChatPanel({
       }
     }
 
-    // Show the user message (just the user's text, not the skill prefix)
+    // Show the user message
     setMessagesBySession((prev) => {
       const next = { ...prev };
       const arr = next[sid] ? [...next[sid]] : [];
       const displayParts: string[] = [];
-      if (context.agent) displayParts.push(`@${context.agent}`);
+      if (context.provider) displayParts.push(`@${context.provider}`);
       if (context.skill) displayParts.push(`/${context.skill}`);
       const prefix = displayParts.length ? displayParts.join(" ") + " " : "";
       arr.push({ id: crypto.randomUUID(), role: "user", content: prefix + text, timestamp: new Date() });
@@ -344,7 +348,7 @@ export function ChatPanel({
 
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
-  }, [activeSessionId, onEnsureSession, prompt, clonedCwd, onLoadSkill]);
+  }, [activeSessionId, onEnsureSession, prompt, clonedCwd, onLoadSkill, acp]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
@@ -401,13 +405,14 @@ export function ChatPanel({
               placeholder={
                 connected
                   ? activeSessionId
-                    ? "Type a message... @ agent, / skill, Enter to send"
+                    ? "Type a message... @ provider, / skill, Enter to send"
                     : "Type a message to auto-create a session..."
                   : "Connect first..."
               }
               disabled={!connected}
               loading={loading}
               skills={skills}
+              providers={acp.providers}
               clonedCwd={clonedCwd}
               onClone={handleClone}
             />
