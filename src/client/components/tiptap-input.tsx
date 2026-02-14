@@ -327,52 +327,8 @@ export function TiptapInput({
     disabled: p.status === "unavailable",
   }));
 
-  const handleSend = useCallback(() => {
-    if (!editor || disabled || loading) return;
-
-    // Extract mentions from the editor content
-    const json = editor.getJSON();
-    let provider: string | undefined;
-    let skill: string | undefined;
-
-    // Walk the document to find mentions
-    const walk = (node: any) => {
-      if (node.type === "providerMention" && node.attrs?.id) {
-        provider = node.attrs.id;
-      }
-      if (node.type === "skillMention" && node.attrs?.id) {
-        skill = node.attrs.id;
-      }
-      if (node.content) {
-        node.content.forEach(walk);
-      }
-    };
-    walk(json);
-
-    const text = editor.getText().trim();
-    if (!text) return;
-
-    // Remove the @provider and /skill tokens from the text for the prompt
-    let cleanText = text;
-    // Remove @ProviderName mentions (match by provider label from providers list)
-    if (provider) {
-      const providerLabel = providers.find((p) => p.id === provider)?.name ?? provider;
-      cleanText = cleanText.replace(new RegExp(`@${providerLabel}\\s*`, "gi"), "").trim();
-    }
-    if (skill) {
-      cleanText = cleanText.replace(new RegExp(`/${skill}\\s*`, "g"), "").trim();
-    }
-
-    onSend(cleanText || text, {
-      provider,
-      skill,
-      cwd: repoSelection?.path ?? undefined,
-    });
-    editor.commands.clearContent();
-  }, [onSend, disabled, loading, repoSelection]);
-
-  const handleSendRef = useRef(handleSend);
-  handleSendRef.current = handleSend;
+  // Use a ref for the send handler so extensions always call the latest version
+  const handleSendRef = useRef<() => void>(() => {});
 
   const editor = useEditor({
     extensions: [
@@ -466,6 +422,53 @@ export function TiptapInput({
     },
     immediatelyRender: false,
   });
+
+  // Define handleSend AFTER editor is available, using the editor ref pattern
+  const handleSend = useCallback(() => {
+    if (!editor || disabled || loading) return;
+
+    // Extract mentions from the editor content
+    const json = editor.getJSON();
+    let provider: string | undefined;
+    let skill: string | undefined;
+
+    // Walk the document to find mentions
+    const walk = (node: any) => {
+      if (node.type === "providerMention" && node.attrs?.id) {
+        provider = node.attrs.id;
+      }
+      if (node.type === "skillMention" && node.attrs?.id) {
+        skill = node.attrs.id;
+      }
+      if (node.content) {
+        node.content.forEach(walk);
+      }
+    };
+    walk(json);
+
+    const text = editor.getText().trim();
+    if (!text) return;
+
+    // Remove the @provider and /skill tokens from the text for the prompt
+    let cleanText = text;
+    if (provider) {
+      const providerLabel = providers.find((p) => p.id === provider)?.name ?? provider;
+      cleanText = cleanText.replace(new RegExp(`@${providerLabel}\\s*`, "gi"), "").trim();
+    }
+    if (skill) {
+      cleanText = cleanText.replace(new RegExp(`/${skill}\\s*`, "g"), "").trim();
+    }
+
+    onSend(cleanText || text, {
+      provider,
+      skill,
+      cwd: repoSelection?.path ?? undefined,
+    });
+    editor.commands.clearContent();
+  }, [editor, onSend, disabled, loading, repoSelection, providers]);
+
+  // Keep ref updated so EnterToSend and external send button always call latest
+  handleSendRef.current = handleSend;
 
   useEffect(() => {
     if (editor) editor.setEditable(!disabled);

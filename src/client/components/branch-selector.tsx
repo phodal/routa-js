@@ -190,9 +190,9 @@ export function BranchSelector({
         <ChevronIcon />
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown - opens upward since input is at the bottom */}
       {showDropdown && (
-        <div className="absolute top-full left-0 mt-1 w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-50 overflow-hidden">
+        <div className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-50 overflow-hidden">
           {/* Header */}
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-1.5">

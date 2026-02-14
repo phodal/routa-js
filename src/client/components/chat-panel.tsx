@@ -18,7 +18,7 @@ import type { AcpSessionNotification } from "../acp-client";
 import type { UseAcpActions, UseAcpState } from "../hooks/use-acp";
 import { TiptapInput, type InputContext } from "./tiptap-input";
 import type { SkillSummary } from "../skill-client";
-import type { RepoSelection } from "./repo-picker";
+import { RepoPicker, type RepoSelection } from "./repo-picker";
 
 // ─── Message Types ─────────────────────────────────────────────────────
 
@@ -52,6 +52,8 @@ interface ChatPanelProps {
   onEnsureSession: (cwd?: string, provider?: string) => Promise<string | null>;
   skills?: SkillSummary[];
   onLoadSkill?: (name: string) => Promise<string | null>;
+  repoSelection: RepoSelection | null;
+  onRepoChange: (selection: RepoSelection | null) => void;
 }
 
 // ─── Main Component ────────────────────────────────────────────────────
@@ -62,10 +64,10 @@ export function ChatPanel({
   onEnsureSession,
   skills = [],
   onLoadSkill,
+  repoSelection,
+  onRepoChange,
 }: ChatPanelProps) {
   const { connected, loading, error, updates, prompt } = acp;
-
-  const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
   >({});
@@ -293,9 +295,7 @@ export function ChatPanel({
 
   // ── Actions ──────────────────────────────────────────────────────────
 
-  const handleRepoChange = useCallback((selection: RepoSelection | null) => {
-    setRepoSelection(selection);
-  }, []);
+  const handleRepoChange = onRepoChange;
 
   const handleSend = useCallback(async (text: string, context: InputContext) => {
     if (!text.trim()) return;
@@ -374,13 +374,23 @@ export function ChatPanel({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
-              <div className="text-sm text-gray-400 dark:text-gray-500">
+              <div className="text-sm text-gray-400 dark:text-gray-500 mb-6">
                 {connected
                   ? activeSessionId
                     ? "Send a message to start."
                     : "Select or create a session from the sidebar."
                   : "Connect via the top bar to get started."}
               </div>
+
+              {/* ── Repo Picker in center when no messages ── */}
+              {connected && (
+                <div className="inline-block text-left">
+                  <RepoPicker
+                    value={repoSelection}
+                    onChange={handleRepoChange}
+                  />
+                </div>
+              )}
             </div>
           )}
           {visibleMessages.map((msg) => (

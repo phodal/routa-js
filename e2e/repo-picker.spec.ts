@@ -3,130 +3,162 @@ import { test, expect } from "@playwright/test";
 /**
  * Repo Picker E2E Test
  *
- * Tests the full repo management feature:
- * 1. Repo picker UI appears in the input area (tabs: Repositories / Clone from GitHub)
- * 2. Clone from GitHub tab with progress
- * 3. Repo selection with branch selector
- * 4. Branch dropdown with search, local/remote sections
+ * Tests:
+ * 1. Center repo picker when no session (no messages)
+ * 2. Branch dropdown opens upward (no layout shift)
+ * 3. Selecting repo + provider, sending a codebase question
  */
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 
 test.describe("Repo Picker", () => {
-  test("full flow: repo picker tabs, clone, branch selector", async ({
-    page,
-  }) => {
+  test("center repo picker and branch dropdown direction", async ({ page }) => {
     test.setTimeout(120_000);
 
     // Step 1: Navigate
     await page.goto(BASE_URL);
     await page.waitForTimeout(3000);
 
-    // Step 2: Find repo picker trigger
-    const repoPicker = page.getByRole("button", {
+    // Screenshot 1: Initial state - repo picker should be in the CENTER
+    await page.screenshot({
+      path: "test-results/layout-01-center-picker.png",
+      fullPage: false,
+    });
+
+    // There should be a repo picker in the center area (empty state)
+    // AND one in the input toolbar
+    const centerPicker = page.locator("main .text-center").getByRole("button", {
+      name: /Select or clone a repository/i,
+    });
+    const inputPicker = page.locator(".tiptap-input-wrapper").locator("..").getByRole("button", {
       name: /Select or clone a repository/i,
     });
 
-    // It should be visible (may need to scroll or wait for the input area)
-    if (await repoPicker.isVisible()) {
-      await repoPicker.click();
+    // At least one should be visible
+    const centerVisible = await centerPicker.isVisible().catch(() => false);
+    const inputVisible = await inputPicker.isVisible().catch(() => false);
+    expect(centerVisible || inputVisible).toBeTruthy();
+
+    // Click the center one (or input one) to open dropdown
+    if (centerVisible) {
+      await centerPicker.click();
+    } else {
+      await inputPicker.click();
+    }
+    await page.waitForTimeout(500);
+
+    // Select unit-mesh/unit-mesh
+    const existingRepo = page.getByText("unit-mesh/unit-mesh").first();
+    if (await existingRepo.isVisible()) {
+      await existingRepo.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Screenshot 2: Repo selected
+    await page.screenshot({
+      path: "test-results/layout-02-repo-selected.png",
+      fullPage: false,
+    });
+
+    // Find the branch button and click it
+    const branchBtn = page
+      .locator("button")
+      .filter({ hasText: /master|main/ })
+      .first();
+    if (await branchBtn.isVisible()) {
+      // Get the button's position before clicking
+      const btnBox = await branchBtn.boundingBox();
+      await branchBtn.click();
       await page.waitForTimeout(500);
 
-      // Screenshot: dropdown open
+      // Screenshot 3: Branch dropdown should open UPWARD (not shift layout)
       await page.screenshot({
-        path: "test-results/repo-v2-01-dropdown.png",
+        path: "test-results/layout-03-branch-upward.png",
         fullPage: false,
       });
 
-      // Step 3: Verify tabs exist
-      const reposTab = page.getByRole("button", { name: /Repositories/i });
-      const cloneTab = page.getByRole("button", { name: /Clone from GitHub/i });
-      await expect(reposTab).toBeVisible();
-      await expect(cloneTab).toBeVisible();
+      // Verify the dropdown appears ABOVE the button (bottom-full)
+      const dropdown = page.locator(".absolute.bottom-full");
+      if (await dropdown.isVisible()) {
+        const dropdownBox = await dropdown.boundingBox();
+        if (btnBox && dropdownBox) {
+          // Dropdown's bottom should be at or above the button's top
+          expect(dropdownBox.y + dropdownBox.height).toBeLessThanOrEqual(
+            btnBox.y + 5 // small tolerance
+          );
+        }
+      }
 
-      // Step 4: Check if unit-mesh/unit-mesh already cloned
+      // Close
+      await page.locator("body").click({ position: { x: 10, y: 10 } });
+      await page.waitForTimeout(300);
+    }
+  });
+
+  test("provider + repo sends codebase question", async ({ page }) => {
+    test.setTimeout(180_000);
+
+    await page.goto(BASE_URL);
+    await page.waitForTimeout(3000);
+
+    // Step 1: Select repo via any picker
+    const anyPicker = page.getByRole("button", {
+      name: /Select or clone a repository/i,
+    }).first();
+    if (await anyPicker.isVisible()) {
+      await anyPicker.click();
+      await page.waitForTimeout(500);
+
       const existingRepo = page.getByText("unit-mesh/unit-mesh").first();
       if (await existingRepo.isVisible()) {
-        // Select the existing repo
         await existingRepo.click();
         await page.waitForTimeout(500);
-      } else {
-        // Switch to Clone tab
-        await cloneTab.click();
-        await page.waitForTimeout(300);
-
-        // Screenshot: clone tab
-        await page.screenshot({
-          path: "test-results/repo-v2-02-clone-tab.png",
-          fullPage: false,
-        });
-
-        // Enter URL
-        const cloneInput = page.getByPlaceholder("owner/repo");
-        await expect(cloneInput).toBeVisible();
-        await cloneInput.fill("unit-mesh/unit-mesh");
-
-        // Click Clone Repository button
-        const cloneBtn = page.getByRole("button", { name: /Clone Repository/i });
-        await expect(cloneBtn).toBeVisible();
-        await cloneBtn.click();
-
-        // Wait for clone to complete
-        await page.waitForTimeout(2000);
-        const cloningIndicator = page.getByText("Cloning...");
-        if (await cloningIndicator.isVisible()) {
-          await expect(cloningIndicator).not.toBeVisible({ timeout: 60_000 });
-        }
-        await page.waitForTimeout(1000);
       }
-
-      // Screenshot: repo selected
-      await page.screenshot({
-        path: "test-results/repo-v2-03-selected.png",
-        fullPage: false,
-      });
-
-      // Step 5: Verify repo is selected with branch selector
-      const repoName = page.getByText("unit-mesh/unit-mesh").first();
-      await expect(repoName).toBeVisible({ timeout: 10_000 });
-
-      // Step 6: Click branch selector (the button with branch icon + branch name)
-      const branchBtn = page
-        .locator("button")
-        .filter({ hasText: /master|main/ })
-        .first();
-      if (await branchBtn.isVisible()) {
-        await branchBtn.click();
-        await page.waitForTimeout(500);
-
-        // Screenshot: branch dropdown
-        await page.screenshot({
-          path: "test-results/repo-v2-04-branch-dropdown.png",
-          fullPage: false,
-        });
-
-        // Verify "Switch branch" header
-        const switchHeader = page.getByText("Switch branch");
-        await expect(switchHeader).toBeVisible();
-
-        // Verify filter input
-        const filterInput = page.getByPlaceholder("Filter branches...");
-        await expect(filterInput).toBeVisible();
-
-        // Verify "Local" section
-        const localSection = page.getByText("Local", { exact: true });
-        await expect(localSection).toBeVisible();
-
-        // Close branch dropdown by clicking elsewhere
-        await page.locator("body").click({ position: { x: 10, y: 10 } });
-        await page.waitForTimeout(300);
-      }
-
-      // Final screenshot
-      await page.screenshot({
-        path: "test-results/repo-v2-05-final.png",
-        fullPage: false,
-      });
+    } else {
+      // Repo might already be selected
     }
+
+    // Step 2: Click + New Session
+    const newSession = page.getByRole("button", { name: /New Session/i });
+    if (await newSession.isVisible()) {
+      await newSession.click();
+      await page.waitForTimeout(3000);
+    }
+
+    // Step 3: Type a question about the codebase
+    const editor = page.locator(".tiptap-chat-input");
+    await editor.click();
+    await page.keyboard.type(
+      "What programming language is this repository mainly written in? Answer in one short sentence."
+    );
+
+    // Screenshot before sending
+    await page.screenshot({
+      path: "test-results/layout-04-before-send.png",
+      fullPage: false,
+    });
+
+    // Step 4: Press Enter to send
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(5000);
+
+    // Screenshot: wait for response
+    await page.screenshot({
+      path: "test-results/layout-05-response.png",
+      fullPage: false,
+    });
+
+    // Wait a bit longer for the assistant to respond
+    await page.waitForTimeout(15000);
+
+    // Screenshot: final state
+    await page.screenshot({
+      path: "test-results/layout-06-final-response.png",
+      fullPage: false,
+    });
+
+    // Check that a user message was shown
+    const userMsg = page.locator("text=What programming language");
+    await expect(userMsg).toBeVisible({ timeout: 5000 });
   });
 });

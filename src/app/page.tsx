@@ -15,6 +15,7 @@ import { ChatPanel } from "@/client/components/chat-panel";
 import { SessionPanel } from "@/client/components/session-panel";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useSkills } from "@/client/hooks/use-skills";
+import type { RepoSelection } from "@/client/components/repo-picker";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE";
 
@@ -23,6 +24,7 @@ export default function HomePage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentRole>("CRAFTER");
   const [showAgentToast, setShowAgentToast] = useState(false);
+  const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const acp = useAcp();
   const skillsHook = useSkills();
 
@@ -47,13 +49,14 @@ export default function HomePage() {
   const handleCreateSession = useCallback(
     async (provider: string) => {
       await ensureConnected();
-      const result = await acp.createSession(undefined, provider);
+      const cwd = repoSelection?.path ?? undefined;
+      const result = await acp.createSession(cwd, provider);
       if (result?.sessionId) {
         setActiveSessionId(result.sessionId);
         bumpRefresh();
       }
     },
-    [acp, ensureConnected, bumpRefresh]
+    [acp, ensureConnected, bumpRefresh, repoSelection]
   );
 
   const handleSelectSession = useCallback(
@@ -265,6 +268,8 @@ export default function HomePage() {
             onEnsureSession={ensureSessionForChat}
             skills={skillsHook.skills}
             onLoadSkill={handleLoadSkill}
+            repoSelection={repoSelection}
+            onRepoChange={setRepoSelection}
           />
         </main>
       </div>
