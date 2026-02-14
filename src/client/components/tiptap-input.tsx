@@ -305,6 +305,8 @@ interface TiptapInputProps {
   disabled?: boolean;
   loading?: boolean;
   skills?: SkillSummary[];
+  /** Skills discovered from the selected repo (shown with "repo" badge) */
+  repoSkills?: SkillSummary[];
   providers?: ProviderItem[];
   selectedProvider: string;
   sessions?: SessionItem[];
@@ -319,6 +321,7 @@ export function TiptapInput({
   disabled = false,
   loading = false,
   skills = [],
+  repoSkills = [],
   providers = [],
   selectedProvider,
   sessions = [],
@@ -340,13 +343,34 @@ export function TiptapInput({
   }, [activeSessionMode, selectedProvider]);
 
   // Ref for skills so the Mention extension always has latest
+  // Merge local skills and repo-discovered skills, deduplicating by name
   const skillsRef = useRef<SuggestionItem[]>([]);
-  skillsRef.current = skills.map((s) => ({
-    id: s.name,
-    label: s.name,
-    description: s.description,
-    type: "skill",
-  }));
+  const mergedSkillItems: SuggestionItem[] = [];
+  const seenSkillNames = new Set<string>();
+
+  for (const s of skills) {
+    if (!seenSkillNames.has(s.name)) {
+      seenSkillNames.add(s.name);
+      mergedSkillItems.push({
+        id: s.name,
+        label: s.name,
+        description: s.description,
+        type: "skill",
+      });
+    }
+  }
+  for (const s of repoSkills) {
+    if (!seenSkillNames.has(s.name)) {
+      seenSkillNames.add(s.name);
+      mergedSkillItems.push({
+        id: s.name,
+        label: s.name,
+        description: `[repo] ${s.description}`,
+        type: "skill",
+      });
+    }
+  }
+  skillsRef.current = mergedSkillItems;
 
   // Ref for @ suggestions (providers + sessions)
   const atItemsRef = useRef<SuggestionItem[]>([]);

@@ -23,6 +23,8 @@ import { getHttpSessionStore } from "@/core/acp/http-session-store";
 import { getStandardPresets, getPresetById, resolveCommand } from "@/core/acp/acp-presets";
 import { which } from "@/core/acp/utils";
 import { v4 as uuidv4 } from "uuid";
+import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
+import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
 
 export const dynamic = "force-dynamic";
 
@@ -342,6 +344,20 @@ export async function POST(request: NextRequest) {
           };
         })
       );
+
+      // In serverless environments, add OpenCode SDK as a provider option
+      if (isServerlessEnvironment()) {
+        const sdkConfigured = isOpencodeServerConfigured();
+        providers.unshift({
+          id: "opencode-sdk",
+          name: "OpenCode SDK",
+          description: sdkConfigured
+            ? "Connect to remote OpenCode server (configured)"
+            : "Connect to remote OpenCode server (set OPENCODE_SERVER_URL)",
+          command: "sdk",
+          status: sdkConfigured ? ("available" as const) : ("unavailable" as const),
+        });
+      }
 
       // Sort: available first, then alphabetical
       providers.sort((a, b) => {

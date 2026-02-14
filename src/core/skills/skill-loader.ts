@@ -83,6 +83,35 @@ export function discoverSkills(projectDir?: string): SkillDefinition[] {
 }
 
 /**
+ * Discover skills from an arbitrary directory path.
+ * Scans: <dir>/skills/, <dir>/.agents/skills/, <dir>/.opencode/skills/, <dir>/.claude/skills/
+ * Used for discovering skills from cloned repos or user-selected repos.
+ */
+export function discoverSkillsFromPath(repoDir: string): SkillDefinition[] {
+  const skills: SkillDefinition[] = [];
+  const seen = new Set<string>();
+
+  // Scan multiple possible skill locations in the repo
+  const searchDirs = [
+    "skills",           // e.g. vercel-labs/agent-skills uses skills/
+    ...SKILL_SEARCH_DIRS, // .opencode/skills, .claude/skills, .agents/skills
+  ];
+
+  for (const searchDir of searchDirs) {
+    const dir = path.join(repoDir, searchDir);
+    const found = loadSkillsFromDir(dir);
+    for (const skill of found) {
+      if (!seen.has(skill.name)) {
+        seen.add(skill.name);
+        skills.push(skill);
+      }
+    }
+  }
+
+  return skills;
+}
+
+/**
  * Load all SKILL.md files from a skills directory
  */
 function loadSkillsFromDir(dir: string): SkillDefinition[] {
@@ -98,15 +127,46 @@ function loadSkillsFromDir(dir: string): SkillDefinition[] {
       if (!entry.isDirectory()) continue;
 
       const skillPath = path.join(dir, entry.name, "SKILL.md");
-      if (!fs.existsSync(skillPath)) continue;
-
-      try {
-        const skill = loadSkillFile(skillPath, entry.name);
-        if (skill) {
-          skills.push(skill);
+      if (fs.existsSync(skillPath)) {
+        // Direct skill directory: skills/<name>/SKILL.md
+        try {
+          const skill = loadSkillFile(skillPath, entry.name);
+          if (skill) {
+            skills.push(skill);
+          }
+        } catch (err) {
+          console.warn(`[SkillLoader] Failed to load ${skillPath}:`, err);
         }
-      } catch (err) {
-        console.warn(`[SkillLoader] Failed to load ${skillPath}:`, err);
+      } else {
+        // Check for nested skill directories (e.g. skills/claude.ai/<name>/SKILL.md)
+        try {
+          const subEntries = fs.readdirSync(path.join(dir, entry.name), {
+            withFileTypes: true,
+          });
+          for (const subEntry of subEntries) {
+            if (!subEntry.isDirectory()) continue;
+            const nestedPath = path.join(
+              dir,
+              entry.name,
+              subEntry.name,
+              "SKILL.md"
+            );
+            if (!fs.existsSync(nestedPath)) continue;
+            try {
+              const skill = loadSkillFile(nestedPath, subEntry.name);
+              if (skill) {
+                skills.push(skill);
+              }
+            } catch (err) {
+              console.warn(
+                `[SkillLoader] Failed to load ${nestedPath}:`,
+                err
+              );
+            }
+          }
+        } catch {
+          // Sub-directory not readable
+        }
       }
     }
   } catch {

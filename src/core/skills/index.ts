@@ -1,6 +1,7 @@
 export {
   type SkillDefinition,
   discoverSkills,
+  discoverSkillsFromPath,
   loadSkillFile,
 } from "./skill-loader";
 export {

@@ -36,6 +36,16 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Load repo skills when repo selection changes
+  useEffect(() => {
+    if (repoSelection?.path) {
+      skillsHook.loadRepoSkills(repoSelection.path);
+    } else {
+      skillsHook.clearRepoSkills();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repoSelection?.path]);
+
   const bumpRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
@@ -290,6 +300,7 @@ export default function HomePage() {
             onEnsureSession={ensureSessionForChat}
             onSelectSession={handleSelectSession}
             skills={skillsHook.skills}
+            repoSkills={skillsHook.repoSkills}
             onLoadSkill={handleLoadSkill}
             repoSelection={repoSelection}
             onRepoChange={setRepoSelection}

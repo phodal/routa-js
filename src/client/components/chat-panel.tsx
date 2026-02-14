@@ -59,6 +59,8 @@ interface ChatPanelProps {
   onEnsureSession: (cwd?: string, provider?: string, modeId?: string) => Promise<string | null>;
   onSelectSession: (sessionId: string) => Promise<void>;
   skills?: SkillSummary[];
+  /** Skills discovered from the selected repo */
+  repoSkills?: SkillSummary[];
   onLoadSkill?: (name: string) => Promise<string | null>;
   repoSelection: RepoSelection | null;
   onRepoChange: (selection: RepoSelection | null) => void;
@@ -72,6 +74,7 @@ export function ChatPanel({
   onEnsureSession,
   onSelectSession,
   skills = [],
+  repoSkills = [],
   onLoadSkill,
   repoSelection,
   onRepoChange,
@@ -542,6 +545,7 @@ export function ChatPanel({
               disabled={!connected}
               loading={loading}
               skills={skills}
+              repoSkills={repoSkills}
               providers={acp.providers}
               selectedProvider={acp.selectedProvider}
               sessions={sessions}
