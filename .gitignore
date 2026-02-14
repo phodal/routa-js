@@ -79,3 +79,4 @@ logs
 # yarn.lock
 # pnpm-lock.yaml
 test-results
+.routa
