@@ -19,10 +19,11 @@ import type { UseAcpActions, UseAcpState } from "../hooks/use-acp";
 import { TiptapInput, type InputContext } from "./tiptap-input";
 import type { SkillSummary } from "../skill-client";
 import { RepoPicker, type RepoSelection } from "./repo-picker";
+import { TerminalBubble } from "./terminal-bubble";
 
 // ─── Message Types ─────────────────────────────────────────────────────
 
-type MessageRole = "user" | "assistant" | "thought" | "tool" | "plan" | "info";
+type MessageRole = "user" | "assistant" | "thought" | "tool" | "plan" | "info" | "terminal";
 
 interface ChatMessage {
   id: string;
@@ -38,6 +39,12 @@ interface ChatMessage {
   usageSize?: number;
   costAmount?: number;
   costCurrency?: string;
+  // Terminal fields
+  terminalId?: string;
+  terminalCommand?: string;
+  terminalArgs?: string[];
+  terminalExited?: boolean;
+  terminalExitCode?: number | null;
 }
 
 interface PlanEntry {
@@ -316,6 +323,72 @@ export function ChatPanel({
             break;
           }
 
+          case "terminal_created": {
+            const terminalId = update.terminalId as string | undefined;
+            const termCommand = update.command as string | undefined;
+            const termArgs = update.args as string[] | undefined;
+            if (terminalId) {
+              arr.push({
+                id: terminalId,
+                role: "terminal",
+                content: "",
+                timestamp: new Date(),
+                terminalId,
+                terminalCommand: termCommand,
+                terminalArgs: termArgs,
+                terminalExited: false,
+                terminalExitCode: null,
+              });
+            }
+            break;
+          }
+
+          case "terminal_output": {
+            const terminalId = update.terminalId as string | undefined;
+            const termData = update.data as string | undefined;
+            if (terminalId && termData) {
+              const idx = arr.findIndex(
+                (m) => m.role === "terminal" && m.terminalId === terminalId
+              );
+              if (idx >= 0) {
+                arr[idx] = {
+                  ...arr[idx],
+                  content: arr[idx].content + termData,
+                };
+              } else {
+                // Terminal output before terminal_created (edge case)
+                arr.push({
+                  id: terminalId,
+                  role: "terminal",
+                  content: termData,
+                  timestamp: new Date(),
+                  terminalId,
+                  terminalExited: false,
+                  terminalExitCode: null,
+                });
+              }
+            }
+            break;
+          }
+
+          case "terminal_exited": {
+            const terminalId = update.terminalId as string | undefined;
+            const termExitCode = update.exitCode as number | undefined;
+            if (terminalId) {
+              const idx = arr.findIndex(
+                (m) => m.role === "terminal" && m.terminalId === terminalId
+              );
+              if (idx >= 0) {
+                arr[idx] = {
+                  ...arr[idx],
+                  terminalExited: true,
+                  terminalExitCode: termExitCode ?? 0,
+                };
+              }
+            }
+            break;
+          }
+
           case "available_commands_update":
           case "config_option_update":
           case "session_info_update":
@@ -501,6 +574,17 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           toolName={message.toolName}
           toolStatus={message.toolStatus}
           toolKind={message.toolKind}
+        />
+      );
+    case "terminal":
+      return (
+        <TerminalBubble
+          terminalId={message.terminalId ?? message.id}
+          command={message.terminalCommand}
+          args={message.terminalArgs}
+          data={message.content}
+          exited={message.terminalExited}
+          exitCode={message.terminalExitCode}
         />
       );
     case "plan":

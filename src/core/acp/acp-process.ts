@@ -1,5 +1,6 @@
 import {ChildProcess, spawn} from "child_process";
 import {AcpProcessConfig, JsonRpcMessage, NotificationHandler, PendingRequest} from "@/core/acp/processer";
+import {getTerminalManager} from "@/core/acp/terminal-manager";
 
 /**
  * Manages a single ACP agent process and its JSON-RPC communication.
@@ -423,12 +424,80 @@ export class AcpProcess {
                 break;
             }
 
-            case "terminal/create":
-            case "terminal/output":
-            case "terminal/release":
-            case "terminal/wait_for_exit":
+            case "terminal/create": {
+                const terminalManager = getTerminalManager();
+                const termParams = (params ?? {}) as Record<string, unknown>;
+                const result = terminalManager.create(
+                    termParams,
+                    this._sessionId ?? "unknown",
+                    (notification) => {
+                        // Forward terminal notifications through the ACP notification channel
+                        this.onNotification(notification as unknown as JsonRpcMessage);
+                    }
+                );
+                this.writeMessage({
+                    jsonrpc: "2.0",
+                    id,
+                    result,
+                });
+                break;
+            }
+
+            case "terminal/output": {
+                const terminalManager = getTerminalManager();
+                const termId = (params as { terminalId?: string })?.terminalId;
+                const output = termId
+                    ? terminalManager.getOutput(termId)
+                    : { output: "" };
+                this.writeMessage({
+                    jsonrpc: "2.0",
+                    id,
+                    result: output,
+                });
+                break;
+            }
+
+            case "terminal/wait_for_exit": {
+                const terminalManager = getTerminalManager();
+                const termId = (params as { terminalId?: string })?.terminalId;
+                if (termId) {
+                    terminalManager.waitForExit(termId).then((result) => {
+                        this.writeMessage({
+                            jsonrpc: "2.0",
+                            id,
+                            result,
+                        });
+                    });
+                } else {
+                    this.writeMessage({
+                        jsonrpc: "2.0",
+                        id,
+                        result: { exitCode: -1 },
+                    });
+                }
+                break;
+            }
+
             case "terminal/kill": {
-                // Stub terminal operations - return empty success
+                const terminalManager = getTerminalManager();
+                const termId = (params as { terminalId?: string })?.terminalId;
+                if (termId) {
+                    terminalManager.kill(termId);
+                }
+                this.writeMessage({
+                    jsonrpc: "2.0",
+                    id,
+                    result: {},
+                });
+                break;
+            }
+
+            case "terminal/release": {
+                const terminalManager = getTerminalManager();
+                const termId = (params as { terminalId?: string })?.terminalId;
+                if (termId) {
+                    terminalManager.release(termId);
+                }
                 this.writeMessage({
                     jsonrpc: "2.0",
                     id,

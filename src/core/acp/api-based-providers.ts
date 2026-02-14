@@ -1,6 +1,6 @@
 /**
  * API-based ACP providers for serverless environments (Vercel)
- * 
+ *
  * These providers use HTTP APIs instead of spawning CLI processes,
  * making them compatible with serverless platforms.
  */
@@ -12,6 +12,8 @@ export interface ApiBasedProvider {
   apiEndpoint?: string;
   requiresApiKey: boolean;
   envKeyName?: string;
+  /** For providers that need a server URL instead of API key */
+  envServerUrlName?: string;
   status: 'available' | 'unavailable' | 'requires_config';
 }
 
@@ -31,6 +33,14 @@ export function isServerlessEnvironment(): boolean {
  * API-based providers that can work in serverless environments
  */
 export const API_BASED_PROVIDERS: ApiBasedProvider[] = [
+  {
+    id: 'opencode-sdk',
+    name: 'OpenCode SDK',
+    description: 'Connect to a remote OpenCode server via SDK (recommended for serverless)',
+    requiresApiKey: false,
+    envServerUrlName: 'OPENCODE_SERVER_URL',
+    status: 'requires_config',
+  },
   {
     id: 'openai-api',
     name: 'OpenAI API',
@@ -75,9 +85,11 @@ export const API_BASED_PROVIDERS: ApiBasedProvider[] = [
 export function detectConfiguredApiProviders(): ApiBasedProvider[] {
   return API_BASED_PROVIDERS.map(provider => {
     const hasApiKey = provider.envKeyName && !!process.env[provider.envKeyName];
+    const hasServerUrl = provider.envServerUrlName && !!process.env[provider.envServerUrlName];
+    const isConfigured = hasApiKey || hasServerUrl;
     return {
       ...provider,
-      status: hasApiKey ? 'available' : 'requires_config',
+      status: isConfigured ? 'available' : 'requires_config',
     };
   });
 }
@@ -96,22 +108,23 @@ This is because:
 
 **Alternative Solutions:**
 
-1. **Use API-based providers** (recommended for Vercel):
+1. **Use OpenCode SDK** (recommended for Vercel):
+   - Run \`opencode serve\` on a VPS or local machine
+   - Set OPENCODE_SERVER_URL=http://your-server:4096
+   - The SDK connects to your remote OpenCode server
+
+2. **Use API-based providers**:
    - Configure API keys in environment variables
    - Use OpenAI API, Anthropic API, Google Gemini API, etc.
    - These work natively in serverless environments
 
-2. **Deploy with a persistent server**:
+3. **Deploy with a persistent server**:
    - Use a VPS, Docker container, or traditional hosting
    - Install CLI tools in the server environment
    - Run the full routa-js application with CLI support
 
-3. **Hybrid approach**:
-   - Keep the web UI on Vercel
-   - Run a separate backend server for CLI-based agents
-   - Connect via WebSocket or HTTP API
-
-To configure API-based providers, add environment variables:
+To configure providers, add environment variables:
+- OPENCODE_SERVER_URL=http://your-server:4096 (for OpenCode SDK)
 - OPENAI_API_KEY=sk-...
 - ANTHROPIC_API_KEY=sk-ant-...
 - GOOGLE_API_KEY=...
@@ -125,11 +138,15 @@ To configure API-based providers, add environment variables:
 export function isProviderAvailable(providerId: string): boolean {
   const provider = API_BASED_PROVIDERS.find(p => p.id === providerId);
   if (!provider) return false;
-  
+
   if (provider.envKeyName) {
     return !!process.env[provider.envKeyName];
   }
-  
+
+  if (provider.envServerUrlName) {
+    return !!process.env[provider.envServerUrlName];
+  }
+
   return false;
 }
 
@@ -138,8 +155,18 @@ export function isProviderAvailable(providerId: string): boolean {
  */
 export function getProviderConfigInstructions(providerId: string): string | null {
   const provider = API_BASED_PROVIDERS.find(p => p.id === providerId);
-  if (!provider || !provider.envKeyName) return null;
-  
-  return `To use ${provider.name}, set the environment variable:\n${provider.envKeyName}=your-api-key-here`;
+  if (!provider) return null;
+
+  if (provider.envServerUrlName) {
+    return `To use ${provider.name}:
+1. Run \`opencode serve\` on a VPS or local machine
+2. Set the environment variable: ${provider.envServerUrlName}=http://your-server:4096`;
+  }
+
+  if (provider.envKeyName) {
+    return `To use ${provider.name}, set the environment variable:\n${provider.envKeyName}=your-api-key-here`;
+  }
+
+  return null;
 }
 

@@ -2,6 +2,7 @@ import {AcpProcess} from "@/core/acp/acp-process";
 import {buildConfigFromPreset, ManagedProcess, NotificationHandler} from "@/core/acp/processer";
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
 import {setupMcpForProvider, providerSupportsMcp, type McpSupportedProvider} from "@/core/acp/mcp-setup";
+import {OpencodeSdkAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl} from "@/core/acp/opencode-sdk-adapter";
 
 /**
  * A managed Claude Code process (separate from standard ACP).
@@ -14,16 +15,29 @@ export interface ManagedClaudeProcess {
 }
 
 /**
+ * A managed OpenCode SDK adapter (for serverless environments).
+ */
+export interface ManagedOpencodeAdapter {
+    adapter: OpencodeSdkAdapter;
+    acpSessionId: string;
+    presetId: string;
+    createdAt: Date;
+}
+
+/**
  * Singleton manager for ACP agent processes.
  * Maps our session IDs to ACP process instances.
  * Supports spawning different agent types via presets, including Claude Code.
+ * In serverless environments, uses OpenCode SDK adapter when configured.
  */
 export class AcpProcessManager {
     private processes = new Map<string, ManagedProcess>();
     private claudeProcesses = new Map<string, ManagedClaudeProcess>();
+    private opencodeAdapters = new Map<string, ManagedOpencodeAdapter>();
 
     /**
      * Spawn a new ACP agent process, initialize the protocol, and create a session.
+     * In serverless environments with OPENCODE_SERVER_URL configured, uses SDK adapter instead.
      *
      * @param sessionId - Our internal session ID
      * @param cwd - Working directory for the agent
@@ -42,6 +56,11 @@ export class AcpProcessManager {
         extraArgs?: string[],
         extraEnv?: Record<string, string>
     ): Promise<string> {
+        // Check if we should use OpenCode SDK adapter (serverless + configured)
+        if (presetId === "opencode" && shouldUseOpencodeAdapter()) {
+            return this.createOpencodeAdapterSession(sessionId, onNotification);
+        }
+
         // Setup MCP configs if the provider supports it
         let mcpConfigs: string[] | undefined;
         if (providerSupportsMcp(presetId)) {
@@ -77,6 +96,36 @@ export class AcpProcessManager {
             createdAt: new Date(),
         });
 
+        return acpSessionId;
+    }
+
+    /**
+     * Create a session using OpenCode SDK adapter (for serverless environments).
+     */
+    private async createOpencodeAdapterSession(
+        sessionId: string,
+        onNotification: NotificationHandler
+    ): Promise<string> {
+        const serverUrl = getOpencodeServerUrl();
+        if (!serverUrl) {
+            throw new Error("OPENCODE_SERVER_URL not configured");
+        }
+
+        console.log(`[AcpProcessManager] Using OpenCode SDK adapter for serverless environment`);
+        console.log(`[AcpProcessManager] Connecting to: ${serverUrl}`);
+
+        const adapter = new OpencodeSdkAdapter(serverUrl, onNotification);
+        await adapter.connect();
+        const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
+
+        this.opencodeAdapters.set(sessionId, {
+            adapter,
+            acpSessionId,
+            presetId: "opencode-sdk",
+            createdAt: new Date(),
+        });
+
+        console.log(`[AcpProcessManager] OpenCode SDK session created: ${acpSessionId}`);
         return acpSessionId;
     }
 
@@ -155,10 +204,24 @@ export class AcpProcessManager {
     }
 
     /**
+     * Get the OpenCode SDK adapter for a session.
+     */
+    getOpencodeAdapter(sessionId: string): OpencodeSdkAdapter | undefined {
+        return this.opencodeAdapters.get(sessionId)?.adapter;
+    }
+
+    /**
      * Check if a session is a Claude Code session.
      */
     isClaudeSession(sessionId: string): boolean {
         return this.claudeProcesses.has(sessionId);
+    }
+
+    /**
+     * Check if a session is using OpenCode SDK adapter.
+     */
+    isOpencodeAdapterSession(sessionId: string): boolean {
+        return this.opencodeAdapters.has(sessionId);
     }
 
     /**
@@ -167,7 +230,8 @@ export class AcpProcessManager {
     getAcpSessionId(sessionId: string): string | undefined {
         return (
             this.processes.get(sessionId)?.acpSessionId ??
-            this.claudeProcesses.get(sessionId)?.acpSessionId
+            this.claudeProcesses.get(sessionId)?.acpSessionId ??
+            this.opencodeAdapters.get(sessionId)?.acpSessionId
         );
     }
 
@@ -177,12 +241,13 @@ export class AcpProcessManager {
     getPresetId(sessionId: string): string | undefined {
         return (
             this.processes.get(sessionId)?.presetId ??
-            this.claudeProcesses.get(sessionId)?.presetId
+            this.claudeProcesses.get(sessionId)?.presetId ??
+            this.opencodeAdapters.get(sessionId)?.presetId
         );
     }
 
     /**
-     * List all active sessions (both ACP and Claude Code).
+     * List all active sessions (ACP, Claude Code, and OpenCode SDK).
      */
     listSessions(): Array<{
         sessionId: string;
@@ -207,11 +272,19 @@ export class AcpProcessManager {
             createdAt: managed.createdAt,
         }));
 
-        return [...acpSessions, ...claudeSessions];
+        const adapterSessions = Array.from(this.opencodeAdapters.entries()).map(([sessionId, managed]) => ({
+            sessionId,
+            acpSessionId: managed.acpSessionId,
+            presetId: managed.presetId,
+            alive: managed.adapter.alive,
+            createdAt: managed.createdAt,
+        }));
+
+        return [...acpSessions, ...claudeSessions, ...adapterSessions];
     }
 
     /**
-     * Kill a session's agent process.
+     * Kill a session's agent process or adapter.
      */
     killSession(sessionId: string): void {
         const managed = this.processes.get(sessionId);
@@ -225,11 +298,18 @@ export class AcpProcessManager {
         if (claudeManaged) {
             claudeManaged.process.kill();
             this.claudeProcesses.delete(sessionId);
+            return;
+        }
+
+        const adapterManaged = this.opencodeAdapters.get(sessionId);
+        if (adapterManaged) {
+            adapterManaged.adapter.kill();
+            this.opencodeAdapters.delete(sessionId);
         }
     }
 
     /**
-     * Kill all processes.
+     * Kill all processes and adapters.
      */
     killAll(): void {
         for (const [, managed] of this.processes) {
@@ -241,5 +321,10 @@ export class AcpProcessManager {
             managed.process.kill();
         }
         this.claudeProcesses.clear();
+
+        for (const [, managed] of this.opencodeAdapters) {
+            managed.adapter.kill();
+        }
+        this.opencodeAdapters.clear();
     }
 }
