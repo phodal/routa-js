@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface McpToolDefinition {
   name: string;
@@ -18,31 +18,57 @@ export default function McpToolsPage() {
   const [argsJson, setArgsJson] = useState<string>("{}");
   const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string>("");
 
   const selectedTool = useMemo(
     () => tools.find((tool) => tool.name === selectedToolName) ?? null,
     [tools, selectedToolName]
   );
 
-  const loadTools = async () => {
+  const loadTools = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/mcp/tools", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Failed to load tools: ${response.status}`);
+      }
       const data = await response.json();
       const nextTools = Array.isArray(data?.tools) ? data.tools : [];
       setTools(nextTools);
-      if (!selectedToolName && nextTools.length > 0) {
-        setSelectedToolName(nextTools[0].name);
-      }
+      setLoadError("");
+      setSelectedToolName((current) => current || nextTools[0]?.name || "");
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Failed to load tools");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadTools();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadTools]);
+
+  const handleExecuteTool = async () => {
+    if (!selectedTool) return;
+    try {
+      const args = JSON.parse(argsJson);
+      const response = await fetch("/api/mcp/tools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: selectedTool.name, args }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setResult(JSON.stringify({ error: data?.error ?? "Tool execution failed" }, null, 2));
+        return;
+      }
+      setResult(JSON.stringify(data, null, 2));
+    } catch (error) {
+      setResult(
+        JSON.stringify({ error: error instanceof Error ? error.message : "Invalid JSON" }, null, 2)
+      );
+    }
+  };
 
   return (
     <div className="h-screen flex bg-gray-50 dark:bg-[#0f1117]">
@@ -59,6 +85,11 @@ export default function McpToolsPage() {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
+          {loadError && (
+            <div className="mb-2 rounded-md px-2 py-1 text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20">
+              {loadError}
+            </div>
+          )}
           {tools.map((tool) => {
             const active = tool.name === selectedToolName;
             return (
@@ -107,26 +138,7 @@ export default function McpToolsPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    const args = JSON.parse(argsJson);
-                    const response = await fetch("/api/mcp/tools", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ name: selectedTool.name, args }),
-                    });
-                    const data = await response.json();
-                    setResult(JSON.stringify(data, null, 2));
-                  } catch (error) {
-                    setResult(
-                      JSON.stringify(
-                        { error: error instanceof Error ? error.message : "Invalid JSON" },
-                        null,
-                        2
-                      )
-                    );
-                  }
-                }}
+                onClick={handleExecuteTool}
                 className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
               >
                 Run Tool
