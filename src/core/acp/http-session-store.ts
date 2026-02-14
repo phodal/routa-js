@@ -14,6 +14,7 @@ export interface RoutaSessionRecord {
   workspaceId: string;
   routaAgentId?: string;
   provider?: string;
+  modeId?: string;
   createdAt: string;
 }
 
@@ -43,6 +44,15 @@ class HttpSessionStore {
 
   getSession(sessionId: string): RoutaSessionRecord | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  updateSessionMode(sessionId: string, modeId: string) {
+    const existing = this.sessions.get(sessionId);
+    if (!existing) return;
+    this.sessions.set(sessionId, {
+      ...existing,
+      modeId,
+    });
   }
 
   attachSse(sessionId: string, controller: Controller) {

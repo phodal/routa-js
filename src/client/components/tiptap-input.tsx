@@ -195,22 +195,23 @@ function createSuggestionDropdown() {
   };
 }
 
-// ─── Provider Mention Extension (@ trigger) ────────────────────────────
+// ─── @ Mention Extension (providers + sessions) ────────────────────────
 
-function createProviderMention(
-  getProviders: () => SuggestionItem[]
+function createAtMention(
+  getAtItems: () => SuggestionItem[]
 ) {
-  return Mention.extend({ name: "providerMention" }).configure({
+  return Mention.extend({ name: "atMention" }).configure({
     HTMLAttributes: {
       class: "agent-mention",
-      "data-type": "provider",
+      "data-type": "at",
     },
     renderHTML({ node }) {
+      const mentionType = node.attrs.type ?? "provider";
       return [
         "span",
         {
           class: "agent-mention",
-          "data-type": "provider",
+          "data-type": mentionType,
           "data-id": node.attrs.id,
         },
         `@${node.attrs.label ?? node.attrs.id}`,
@@ -218,12 +219,14 @@ function createProviderMention(
     },
     suggestion: {
       char: "@",
-      pluginKey: new PluginKey("providerMention"),
+      pluginKey: new PluginKey("atMention"),
       items: ({ query }: { query: string }) => {
-        const providers = getProviders();
-        if (!query) return providers;
-        return providers.filter((p) =>
-          p.label.toLowerCase().includes(query.toLowerCase())
+        const allItems = getAtItems();
+        if (!query) return allItems;
+        return allItems.filter((p) =>
+          p.label.toLowerCase().includes(query.toLowerCase()) ||
+          p.id.toLowerCase().includes(query.toLowerCase()) ||
+          (p.description ?? "").toLowerCase().includes(query.toLowerCase())
         );
       },
       render: createSuggestionDropdown,
@@ -272,6 +275,8 @@ function createSkillMention(
 export interface InputContext {
   /** Provider selected via @ mention (e.g. "opencode") */
   provider?: string;
+  /** Session selected via @ mention */
+  sessionId?: string;
   /** Skill selected via / command (e.g. "find-skills") */
   skill?: string;
   /** Working directory (e.g. cloned repo path) */
@@ -288,6 +293,12 @@ interface ProviderItem {
   status?: "available" | "unavailable";
 }
 
+interface SessionItem {
+  sessionId: string;
+  provider?: string;
+  modeId?: string;
+}
+
 interface TiptapInputProps {
   onSend: (text: string, context: InputContext) => void;
   placeholder?: string;
@@ -296,6 +307,8 @@ interface TiptapInputProps {
   skills?: SkillSummary[];
   providers?: ProviderItem[];
   selectedProvider: string;
+  sessions?: SessionItem[];
+  activeSessionMode?: string;
   repoSelection: RepoSelection | null;
   onRepoChange: (selection: RepoSelection | null) => void;
 }
@@ -308,11 +321,23 @@ export function TiptapInput({
   skills = [],
   providers = [],
   selectedProvider,
+  sessions = [],
+  activeSessionMode,
   repoSelection,
   onRepoChange,
 }: TiptapInputProps) {
   const [claudeMode, setClaudeMode] = useState<"acceptEdits" | "plan">("acceptEdits");
   const [opencodeMode, setOpencodeMode] = useState<"build" | "plan">("build");
+
+  // Keep mode chips aligned with the current session mode when switching sessions.
+  useEffect(() => {
+    if (!activeSessionMode) return;
+    if (selectedProvider === "claude") {
+      setClaudeMode(activeSessionMode === "plan" ? "plan" : "acceptEdits");
+    } else if (selectedProvider === "opencode") {
+      setOpencodeMode(activeSessionMode === "plan" ? "plan" : "build");
+    }
+  }, [activeSessionMode, selectedProvider]);
 
   // Ref for skills so the Mention extension always has latest
   const skillsRef = useRef<SuggestionItem[]>([]);
@@ -323,15 +348,23 @@ export function TiptapInput({
     type: "skill",
   }));
 
-  // Ref for providers so the Mention extension always has latest
-  const providersRef = useRef<SuggestionItem[]>([]);
-  providersRef.current = providers.map((p) => ({
+  // Ref for @ suggestions (providers + sessions)
+  const atItemsRef = useRef<SuggestionItem[]>([]);
+  const providerItems = providers.map((p) => ({
     id: p.id,
     label: p.name,
     description: `${p.command}${p.status === "available" ? " ✓" : ""}`,
     type: "provider",
     disabled: p.status === "unavailable",
   }));
+  const sessionItems = sessions.map((s) => ({
+    id: s.sessionId,
+    label: `session-${s.sessionId.slice(0, 8)}`,
+    description: `${s.provider ?? "unknown"}${s.modeId ? ` · ${s.modeId}` : ""}`,
+    type: "session",
+    disabled: false,
+  }));
+  atItemsRef.current = [...providerItems, ...sessionItems];
 
   // Use a ref for the send handler so extensions always call the latest version
   const handleSendRef = useRef<() => void>(() => {});
@@ -386,7 +419,7 @@ export function TiptapInput({
         nested: true,
         HTMLAttributes: { class: "flex items-start gap-2" },
       }),
-      createProviderMention(() => providersRef.current),
+      createAtMention(() => atItemsRef.current),
       createSkillMention(() => skillsRef.current),
       EnterToSend.configure({
         onSend: () => handleSendRef.current(),
@@ -436,12 +469,17 @@ export function TiptapInput({
     // Extract mentions from the editor content
     const json = editor.getJSON();
     let provider: string | undefined;
+    let sessionId: string | undefined;
     let skill: string | undefined;
 
     // Walk the document to find mentions
     const walk = (node: any) => {
-      if (node.type === "providerMention" && node.attrs?.id) {
-        provider = node.attrs.id;
+      if (node.type === "atMention" && node.attrs?.id) {
+        if (node.attrs?.type === "session") {
+          sessionId = node.attrs.id;
+        } else {
+          provider = node.attrs.id;
+        }
       }
       if (node.type === "skillMention" && node.attrs?.id) {
         skill = node.attrs.id;
@@ -465,6 +503,21 @@ export function TiptapInput({
       cleanText = cleanText.replace(new RegExp(`/${skill}\\s*`, "g"), "").trim();
     }
 
+    // Fallback for plain-text session mentions like @session-46b5807d
+    if (!sessionId) {
+      const sessionTokenMatch = cleanText.match(/@session-([a-f0-9]{6,})/i);
+      if (sessionTokenMatch) {
+        const prefix = sessionTokenMatch[1].toLowerCase();
+        const matched = sessions.find((s) =>
+          s.sessionId.toLowerCase().startsWith(prefix)
+        );
+        if (matched) {
+          sessionId = matched.sessionId;
+          cleanText = cleanText.replace(sessionTokenMatch[0], "").trim();
+        }
+      }
+    }
+
     const effectiveProvider = provider ?? selectedProvider;
     const mode =
       effectiveProvider === "claude"
@@ -475,12 +528,13 @@ export function TiptapInput({
 
     onSend(cleanText || text, {
       provider,
+      sessionId,
       skill,
       cwd: repoSelection?.path ?? undefined,
       mode,
     });
     editor.commands.clearContent();
-  }, [editor, onSend, disabled, loading, repoSelection, providers, selectedProvider, claudeMode, opencodeMode]);
+  }, [editor, onSend, disabled, loading, repoSelection, providers, selectedProvider, claudeMode, opencodeMode, sessions]);
 
   // Keep ref updated so EnterToSend and external send button always call latest
   handleSendRef.current = handleSend;
@@ -539,7 +593,7 @@ export function TiptapInput({
 
           {/* Hints + send */}
           <span className="text-[10px] text-gray-300 dark:text-gray-600 ml-auto mr-1">
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">@</kbd> provider
+            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">@</kbd> provider/session
             <span className="mx-1.5">&middot;</span>
             <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">/</kbd> skill
           </span>

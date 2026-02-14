@@ -42,13 +42,29 @@ export class AcpProcess {
      * Spawn the ACP agent process and wait for it to be ready.
      */
     async start(): Promise<void> {
-        const {command, args, cwd, env, displayName} = this._config;
+        const {command, args, cwd, env, displayName, mcpConfigs} = this._config;
+
+        // Build final args with MCP configs if provided
+        const finalArgs = [...args];
+
+        // Add MCP server configs if provided
+        // Note: Different providers may use different flags for MCP config
+        // - Auggie: --mcp-config
+        // - OpenCode: --mcp-config (if supported)
+        // - Codex: --mcp-config (if supported)
+        if (mcpConfigs && mcpConfigs.length > 0) {
+            for (const mcpConfig of mcpConfigs) {
+                if (mcpConfig) {
+                    finalArgs.push("--mcp-config", mcpConfig);
+                }
+            }
+        }
 
         console.log(
-            `[AcpProcess:${displayName}] Spawning: ${command} ${args.join(" ")} (cwd: ${cwd})`
+            `[AcpProcess:${displayName}] Spawning: ${command} ${finalArgs.join(" ")} (cwd: ${cwd})`
         );
 
-        this.process = spawn(command, args, {
+        this.process = spawn(command, finalArgs, {
             stdio: ["pipe", "pipe", "pipe"],
             cwd,
             env: {

@@ -30,3 +30,26 @@ export {
   buildClaudeCodeConfig,
   type ClaudeCodeProcessConfig,
 } from "@/core/acp/claude-code-process";
+
+// MCP Configuration exports
+export {
+  generateRoutaMcpConfig,
+  generateRoutaMcpConfigJson,
+  generateMultipleRoutaMcpConfigs,
+  getDefaultRoutaMcpConfig,
+  validateRoutaMcpConfig,
+  type RoutaMcpConfig,
+  type McpServerConfig,
+} from "./mcp-config-generator";
+
+export {
+  setupMcpForProvider,
+  setupMcpForClaudeCode,
+  setupMcpForCodex,
+  setupMcpForOpenCode,
+  setupMcpForAuggie,
+  providerSupportsMcp,
+  isMcpConfigured,
+  getMcpStatus,
+  type McpSupportedProvider,
+} from "./mcp-setup";

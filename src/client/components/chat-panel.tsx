@@ -50,6 +50,7 @@ interface ChatPanelProps {
   acp: UseAcpState & UseAcpActions;
   activeSessionId: string | null;
   onEnsureSession: (cwd?: string, provider?: string, modeId?: string) => Promise<string | null>;
+  onSelectSession: (sessionId: string) => Promise<void>;
   skills?: SkillSummary[];
   onLoadSkill?: (name: string) => Promise<string | null>;
   repoSelection: RepoSelection | null;
@@ -62,12 +63,19 @@ export function ChatPanel({
   acp,
   activeSessionId,
   onEnsureSession,
+  onSelectSession,
   skills = [],
   onLoadSkill,
   repoSelection,
   onRepoChange,
 }: ChatPanelProps) {
   const { connected, loading, error, updates, prompt } = acp;
+  const [sessions, setSessions] = useState<Array<{
+    sessionId: string;
+    provider?: string;
+    modeId?: string;
+  }>>([]);
+  const [sessionModeById, setSessionModeById] = useState<Record<string, string>>({});
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
   >({});
@@ -90,6 +98,28 @@ export function ChatPanel({
     }
     setVisibleMessages(messagesBySession[activeSessionId] ?? []);
   }, [activeSessionId, messagesBySession]);
+
+  const fetchSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sessions", { cache: "no-store" });
+      const data = await res.json();
+      const list = Array.isArray(data?.sessions) ? data.sessions : [];
+      setSessions(list);
+      const modeMap: Record<string, string> = {};
+      for (const s of list) {
+        if (s?.sessionId && s?.modeId) {
+          modeMap[s.sessionId] = s.modeId;
+        }
+      }
+      setSessionModeById((prev) => ({ ...prev, ...modeMap }));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions, activeSessionId]);
 
   // ── Process ACP SSE updates ──────────────────────────────────────────
 
@@ -273,6 +303,7 @@ export function ChatPanel({
       case "current_mode_update": {
         const modeId = update.currentModeId as string | undefined;
         if (modeId) {
+          setSessionModeById((prev) => ({ ...prev, [sid]: modeId }));
           updateMessages((arr) => {
             arr.push({ id: crypto.randomUUID(), role: "info", content: `Mode changed to: ${modeId}`, timestamp: new Date() });
             return arr;
@@ -308,8 +339,12 @@ export function ChatPanel({
       acp.setProvider(context.provider);
     }
 
+    if (context.sessionId && context.sessionId !== activeSessionId) {
+      await onSelectSession(context.sessionId);
+    }
+
     // Ensure we have a session — pass cwd and provider
-    const sid = activeSessionId ?? (await onEnsureSession(cwd, context.provider, context.mode));
+    const sid = context.sessionId ?? activeSessionId ?? (await onEnsureSession(cwd, context.provider, context.mode));
     if (!sid) return;
     if (context.mode) {
       await acp.setMode(context.mode);
@@ -334,6 +369,7 @@ export function ChatPanel({
       const next = { ...prev };
       const arr = next[sid] ? [...next[sid]] : [];
       const displayParts: string[] = [];
+      if (context.sessionId) displayParts.push(`@session-${context.sessionId.slice(0, 8)}`);
       if (context.provider) displayParts.push(`@${context.provider}`);
       if (context.mode) displayParts.push(`#${context.mode}`);
       if (context.skill) displayParts.push(`/${context.skill}`);
@@ -347,7 +383,7 @@ export function ChatPanel({
 
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
-  }, [activeSessionId, onEnsureSession, prompt, repoSelection, onLoadSkill, acp]);
+  }, [activeSessionId, onEnsureSession, onSelectSession, prompt, repoSelection, onLoadSkill, acp]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
@@ -414,7 +450,7 @@ export function ChatPanel({
               placeholder={
                 connected
                   ? activeSessionId
-                    ? "Type a message... @ provider, / skill, Enter to send"
+                    ? "Type a message... @ provider/session, / skill, Enter to send"
                     : "Type a message to auto-create a session..."
                   : "Connect first..."
               }
@@ -423,6 +459,8 @@ export function ChatPanel({
               skills={skills}
               providers={acp.providers}
               selectedProvider={acp.selectedProvider}
+              sessions={sessions}
+              activeSessionMode={activeSessionId ? sessionModeById[activeSessionId] : undefined}
               repoSelection={repoSelection}
               onRepoChange={handleRepoChange}
             />

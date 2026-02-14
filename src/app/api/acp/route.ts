@@ -158,6 +158,7 @@ export async function POST(request: NextRequest) {
         workspaceId: "default",
         routaAgentId: acpSessionId,
         provider,
+        modeId,
         createdAt: new Date().toISOString(),
       });
 
@@ -299,6 +300,7 @@ export async function POST(request: NextRequest) {
       const store = getHttpSessionStore();
       try {
         await manager.setSessionMode(sessionId, modeId);
+        store.updateSessionMode(sessionId, modeId);
         // Push a mode update so UI can immediately reflect the change.
         store.pushNotification({
           sessionId,

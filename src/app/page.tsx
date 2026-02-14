@@ -288,6 +288,7 @@ export default function HomePage() {
             acp={acp}
             activeSessionId={activeSessionId}
             onEnsureSession={ensureSessionForChat}
+            onSelectSession={handleSelectSession}
             skills={skillsHook.skills}
             onLoadSkill={handleLoadSkill}
             repoSelection={repoSelection}

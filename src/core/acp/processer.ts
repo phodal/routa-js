@@ -52,6 +52,8 @@ export interface AcpProcessConfig {
   env?: Record<string, string>;
   /** Display name for logging */
   displayName: string;
+  /** MCP config JSON strings (passed via --mcp-config for providers that support it) */
+  mcpConfigs?: string[];
 }
 
 /**
