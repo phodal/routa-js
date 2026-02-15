@@ -56,6 +56,8 @@ export interface OrchestratorConfig {
   defaultGateProvider: string;
   /** Default working directory */
   defaultCwd: string;
+  /** Server port for MCP URL */
+  serverPort?: string;
 }
 
 /**
@@ -343,13 +345,14 @@ export class RoutaOrchestrator {
       }
     };
 
+    // Detect the actual server port dynamically
+    const port = this.detectServerPort();
+    const host = process.env.HOST ?? "localhost";
+    const mcpUrl = `http://${host}:${port}/api/mcp`;
+
     let acpSessionId: string;
 
     if (isClaudeCode) {
-      // Build MCP config for Claude Code
-      const port = process.env.PORT ?? "3000";
-      const host = process.env.HOST ?? "localhost";
-      const mcpUrl = `http://${host}:${port}/api/mcp`;
       const mcpConfigJson = JSON.stringify({
         mcpServers: {
           routa: { url: mcpUrl, type: "sse" },
@@ -363,17 +366,26 @@ export class RoutaOrchestrator {
         [mcpConfigJson]
       );
 
-      // Send the initial prompt
+      // Send the initial prompt and handle completion
       const claudeProc = this.processManager.getClaudeProcess(sessionId);
       if (claudeProc) {
-        // Don't await - let it run asynchronously
-        claudeProc.prompt(acpSessionId, initialPrompt).catch((err) => {
-          console.error(
-            `[Orchestrator] Child agent ${agentId} prompt failed:`,
-            err
-          );
-          this.handleChildError(agentId, err);
-        });
+        // Await the prompt so we can detect when the child finishes
+        claudeProc.prompt(acpSessionId, initialPrompt)
+          .then((result) => {
+            console.log(
+              `[Orchestrator] Child agent ${agentId} prompt completed:`,
+              JSON.stringify(result).slice(0, 200)
+            );
+            // Auto-report if the agent hasn't called report_to_parent
+            this.autoReportIfNeeded(agentId);
+          })
+          .catch((err) => {
+            console.error(
+              `[Orchestrator] Child agent ${agentId} prompt failed:`,
+              err
+            );
+            this.handleChildError(agentId, err);
+          });
       }
     } else {
       acpSessionId = await this.processManager.createSession(
@@ -383,23 +395,80 @@ export class RoutaOrchestrator {
         provider
       );
 
-      // Send the initial prompt
+      // Send the initial prompt and handle completion
       const proc = this.processManager.getProcess(sessionId);
       if (proc) {
-        // Don't await - let it run asynchronously
-        proc.prompt(acpSessionId, initialPrompt).catch((err) => {
-          console.error(
-            `[Orchestrator] Child agent ${agentId} prompt failed:`,
-            err
-          );
-          this.handleChildError(agentId, err);
-        });
+        proc.prompt(acpSessionId, initialPrompt)
+          .then((result) => {
+            console.log(
+              `[Orchestrator] Child agent ${agentId} prompt completed:`,
+              JSON.stringify(result).slice(0, 200)
+            );
+            this.autoReportIfNeeded(agentId);
+          })
+          .catch((err) => {
+            console.error(
+              `[Orchestrator] Child agent ${agentId} prompt failed:`,
+              err
+            );
+            this.handleChildError(agentId, err);
+          });
       }
     }
 
     console.log(
-      `[Orchestrator] Spawned ${provider} process for agent ${agentId} (session: ${sessionId})`
+      `[Orchestrator] Spawned ${provider} process for agent ${agentId} (session: ${sessionId}, mcpUrl: ${mcpUrl})`
     );
+  }
+
+  /**
+   * Auto-report to parent if the child agent finished without calling report_to_parent.
+   * This is a fallback mechanism for agents that complete their work but forget to report.
+   */
+  private async autoReportIfNeeded(childAgentId: string): Promise<void> {
+    // Wait a short time to allow report_to_parent to be processed first
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    const agent = await this.system.agentStore.get(childAgentId);
+    if (!agent) return;
+
+    // If the agent is already completed (report_to_parent was called), skip
+    if (agent.status === AgentStatus.COMPLETED) {
+      console.log(
+        `[Orchestrator] Agent ${childAgentId} already completed, skipping auto-report`
+      );
+      return;
+    }
+
+    const record = this.childAgents.get(childAgentId);
+    if (!record) return;
+
+    console.log(
+      `[Orchestrator] Agent ${childAgentId} finished without calling report_to_parent, auto-reporting`
+    );
+
+    // Auto-report success (the prompt completed without error)
+    await this.system.tools.reportToParent({
+      agentId: childAgentId,
+      report: {
+        agentId: childAgentId,
+        taskId: record.taskId,
+        summary: "Agent completed its work (auto-reported by orchestrator).",
+        success: true,
+      },
+    });
+
+    // Trigger completion handling
+    await this.handleChildCompletion(childAgentId, record);
+  }
+
+  /**
+   * Detect the actual server port.
+   */
+  private detectServerPort(): string {
+    if (this.config.serverPort) return this.config.serverPort;
+    if (process.env.PORT) return process.env.PORT;
+    return "3000";
   }
 
   /**

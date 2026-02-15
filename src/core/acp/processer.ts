@@ -137,17 +137,18 @@ export interface ManagedProcess {
  */
 const OpenCodeProcessManager = AcpProcessManager;
 
-// Singleton
-let singleton: AcpProcessManager | undefined;
+// Singleton — use globalThis to survive HMR in Next.js dev mode
+const GLOBAL_KEY = "__acp_process_manager__";
 
 /**
  * Get the singleton AcpProcessManager instance.
  */
 export function getAcpProcessManager(): AcpProcessManager {
-  if (!singleton) {
-    singleton = new AcpProcessManager();
+  const g = globalThis as Record<string, unknown>;
+  if (!g[GLOBAL_KEY]) {
+    g[GLOBAL_KEY] = new AcpProcessManager();
   }
-  return singleton;
+  return g[GLOBAL_KEY] as AcpProcessManager;
 }
 
 /**

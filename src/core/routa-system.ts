@@ -39,12 +39,15 @@ export function createInMemorySystem(): RoutaSystem {
 }
 
 // ─── Singleton for Next.js server ──────────────────────────────────────
+// Use globalThis to survive HMR in Next.js dev mode.
+// Module-level variables are lost when routes are recompiled independently.
 
-let _instance: RoutaSystem | undefined;
+const GLOBAL_KEY = "__routa_system__";
 
 export function getRoutaSystem(): RoutaSystem {
-  if (!_instance) {
-    _instance = createInMemorySystem();
+  const g = globalThis as Record<string, unknown>;
+  if (!g[GLOBAL_KEY]) {
+    g[GLOBAL_KEY] = createInMemorySystem();
   }
-  return _instance;
+  return g[GLOBAL_KEY] as RoutaSystem;
 }

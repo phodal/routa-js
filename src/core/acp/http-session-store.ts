@@ -145,9 +145,13 @@ class HttpSessionStore {
   }
 }
 
-let singleton: HttpSessionStore | undefined;
+// Use globalThis to survive HMR in Next.js dev mode
+const GLOBAL_KEY = "__http_session_store__";
 
 export function getHttpSessionStore(): HttpSessionStore {
-  if (!singleton) singleton = new HttpSessionStore();
-  return singleton;
+  const g = globalThis as Record<string, unknown>;
+  if (!g[GLOBAL_KEY]) {
+    g[GLOBAL_KEY] = new HttpSessionStore();
+  }
+  return g[GLOBAL_KEY] as HttpSessionStore;
 }

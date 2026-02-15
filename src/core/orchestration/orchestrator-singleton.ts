@@ -9,13 +9,14 @@ import { RoutaOrchestrator, OrchestratorConfig } from "./orchestrator";
 import { getRoutaSystem } from "../routa-system";
 import { getAcpProcessManager } from "../acp/processer";
 
-let _orchestrator: RoutaOrchestrator | undefined;
+// Use globalThis to survive HMR in Next.js dev mode
+const GLOBAL_KEY = "__routa_orchestrator__";
 
 /**
  * Get or create the global RoutaOrchestrator instance.
  */
 export function getRoutaOrchestrator(): RoutaOrchestrator | undefined {
-  return _orchestrator;
+  return (globalThis as Record<string, unknown>)[GLOBAL_KEY] as RoutaOrchestrator | undefined;
 }
 
 /**
@@ -25,8 +26,9 @@ export function getRoutaOrchestrator(): RoutaOrchestrator | undefined {
 export function initRoutaOrchestrator(
   config?: Partial<OrchestratorConfig>
 ): RoutaOrchestrator {
-  if (_orchestrator) {
-    return _orchestrator;
+  const existing = getRoutaOrchestrator();
+  if (existing) {
+    return existing;
   }
 
   const system = getRoutaSystem();
@@ -36,20 +38,22 @@ export function initRoutaOrchestrator(
     defaultCrafterProvider: config?.defaultCrafterProvider ?? "claude",
     defaultGateProvider: config?.defaultGateProvider ?? "claude",
     defaultCwd: config?.defaultCwd ?? process.cwd(),
+    serverPort: config?.serverPort ?? process.env.PORT,
   };
 
-  _orchestrator = new RoutaOrchestrator(system, processManager, fullConfig);
+  const orchestrator = new RoutaOrchestrator(system, processManager, fullConfig);
+  (globalThis as Record<string, unknown>)[GLOBAL_KEY] = orchestrator;
 
   console.log(
     `[Orchestrator] Initialized with defaultCrafterProvider=${fullConfig.defaultCrafterProvider}, defaultGateProvider=${fullConfig.defaultGateProvider}`
   );
 
-  return _orchestrator;
+  return orchestrator;
 }
 
 /**
  * Reset the orchestrator (for testing).
  */
 export function resetRoutaOrchestrator(): void {
-  _orchestrator = undefined;
+  delete (globalThis as Record<string, unknown>)[GLOBAL_KEY];
 }

@@ -166,10 +166,13 @@ export async function POST(request: NextRequest) {
 
       if (role === "ROUTA") {
         // Initialize orchestrator
+        // Detect actual server port for MCP URL generation
+        const serverPort = process.env.PORT ?? "3000";
         const orchestrator = initRoutaOrchestrator({
           defaultCrafterProvider: crafterProvider,
           defaultGateProvider: gateProvider,
           defaultCwd: cwd,
+          serverPort,
         });
 
         // Create a ROUTA agent record
