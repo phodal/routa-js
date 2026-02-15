@@ -8,6 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RoutaMcpToolManager } from "./routa-mcp-tool-manager";
 import { RoutaSystem, getRoutaSystem } from "../routa-system";
+import { getRoutaOrchestrator } from "../orchestration/orchestrator-singleton";
 
 export interface RoutaMcpServerResult {
   server: McpServer;
@@ -16,6 +17,7 @@ export interface RoutaMcpServerResult {
 
 /**
  * Create a configured MCP server with all Routa coordination tools.
+ * If an orchestrator is available, it will be wired in for process-spawning delegation.
  */
 export function createRoutaMcpServer(
   workspaceId: string,
@@ -29,6 +31,13 @@ export function createRoutaMcpServer(
   });
 
   const toolManager = new RoutaMcpToolManager(routaSystem.tools, workspaceId);
+
+  // Wire in orchestrator if available
+  const orchestrator = getRoutaOrchestrator();
+  if (orchestrator) {
+    toolManager.setOrchestrator(orchestrator);
+  }
+
   toolManager.registerTools(server);
 
   return { server, system: routaSystem };

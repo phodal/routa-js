@@ -9,21 +9,34 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AgentTools } from "../tools/agent-tools";
 import { ToolResult } from "../tools/tool-result";
+import type { RoutaOrchestrator } from "../orchestration/orchestrator";
 
 export class RoutaMcpToolManager {
+  private orchestrator?: RoutaOrchestrator;
+
   constructor(
     private tools: AgentTools,
     private workspaceId: string
   ) {}
 
   /**
-   * Register all 12 coordination tools with the MCP server.
+   * Set the orchestrator for process-spawning delegation.
+   */
+  setOrchestrator(orchestrator: RoutaOrchestrator): void {
+    this.orchestrator = orchestrator;
+  }
+
+  /**
+   * Register all coordination tools with the MCP server.
    */
   registerTools(server: McpServer): void {
+    this.registerCreateTask(server);
+    this.registerListTasks(server);
     this.registerListAgents(server);
     this.registerReadAgentConversation(server);
     this.registerCreateAgent(server);
     this.registerDelegateTask(server);
+    this.registerDelegateTaskToNewAgent(server);
     this.registerSendMessageToAgent(server);
     this.registerReportToParent(server);
     this.registerWakeOrCreateTaskAgent(server);
@@ -33,6 +46,98 @@ export class RoutaMcpToolManager {
     this.registerSubscribeToEvents(server);
     this.registerUnsubscribeFromEvents(server);
   }
+
+  // ─── Task Tools ────────────────────────────────────────────────────
+
+  private registerCreateTask(server: McpServer) {
+    server.tool(
+      "create_task",
+      "Create a new task in the task store. Returns the taskId for later delegation.",
+      {
+        title: z.string().describe("Task title"),
+        objective: z.string().describe("What this task should achieve"),
+        workspaceId: z.string().optional().describe("Workspace ID (uses default if omitted)"),
+        scope: z.string().optional().describe("What files/areas are in scope"),
+        acceptanceCriteria: z.array(z.string()).optional().describe("List of acceptance criteria / definition of done"),
+        verificationCommands: z.array(z.string()).optional().describe("Commands to run for verification"),
+        dependencies: z.array(z.string()).optional().describe("Task IDs that must complete first"),
+        parallelGroup: z.string().optional().describe("Group ID for parallel execution"),
+      },
+      async (params) => {
+        const result = await this.tools.createTask({
+          ...params,
+          workspaceId: params.workspaceId ?? this.workspaceId,
+        });
+        return this.toMcpResult(result);
+      }
+    );
+  }
+
+  private registerListTasks(server: McpServer) {
+    server.tool(
+      "list_tasks",
+      "List all tasks in the workspace with their status, assignee, and verification verdict.",
+      {
+        workspaceId: z.string().optional().describe("Workspace ID (uses default if omitted)"),
+      },
+      async (params) => {
+        const result = await this.tools.listTasks(params.workspaceId ?? this.workspaceId);
+        return this.toMcpResult(result);
+      }
+    );
+  }
+
+  /**
+   * Enhanced delegate_task that spawns a real agent process.
+   * This is the primary delegation tool for coordinators.
+   */
+  private registerDelegateTaskToNewAgent(server: McpServer) {
+    server.tool(
+      "delegate_task_to_agent",
+      `Delegate a task to a new agent by spawning a real agent process. This is the primary way to delegate work.
+Use specialist="CRAFTER" for implementation tasks and specialist="GATE" for verification tasks.
+The agent will start working immediately and you'll be notified when it completes.`,
+      {
+        taskId: z.string().describe("ID of the task to delegate (from create_task)"),
+        callerAgentId: z.string().describe("Your agent ID (the coordinator's agent ID)"),
+        callerSessionId: z.string().optional().describe("Your session ID (if known)"),
+        specialist: z.enum(["CRAFTER", "GATE", "crafter", "gate"]).describe("Specialist type: CRAFTER for implementation, GATE for verification"),
+        provider: z.string().optional().describe("ACP provider to use (e.g., 'claude', 'copilot', 'opencode'). Uses default if omitted."),
+        cwd: z.string().optional().describe("Working directory for the agent"),
+        additionalInstructions: z.string().optional().describe("Extra instructions beyond the task content"),
+        waitMode: z.enum(["immediate", "after_all"]).optional().describe("When to notify: 'immediate' (per agent) or 'after_all' (when all in group complete)"),
+      },
+      async (params) => {
+        if (!this.orchestrator) {
+          return this.toMcpResult({
+            success: false,
+            error: "Orchestrator not available. Multi-agent delegation requires orchestrator setup.",
+          });
+        }
+
+        // Try to find the caller's session from the orchestrator
+        const callerSessionId =
+          params.callerSessionId ??
+          this.orchestrator.getSessionForAgent(params.callerAgentId) ??
+          "unknown";
+
+        const result = await this.orchestrator.delegateTaskWithSpawn({
+          taskId: params.taskId,
+          callerAgentId: params.callerAgentId,
+          callerSessionId,
+          workspaceId: this.workspaceId,
+          specialist: params.specialist,
+          provider: params.provider,
+          cwd: params.cwd,
+          additionalInstructions: params.additionalInstructions,
+          waitMode: params.waitMode as "immediate" | "after_all" | undefined,
+        });
+        return this.toMcpResult(result);
+      }
+    );
+  }
+
+  // ─── Agent Tools ──────────────────────────────────────────────────
 
   private registerListAgents(server: McpServer) {
     server.tool(

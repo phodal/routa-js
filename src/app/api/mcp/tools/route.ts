@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRoutaMcpServer } from "@/core/mcp/routa-mcp-server";
-import { executeMcpTool, getMcpToolDefinitions } from "../route";
+import { executeMcpTool, getMcpToolDefinitions } from "@/core/mcp/mcp-tool-executor";
 
 const DEFAULT_WORKSPACE_ID = "default";
 

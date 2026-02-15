@@ -16,6 +16,8 @@ export interface RoutaSessionRecord {
   provider?: string;
   modeId?: string;
   createdAt: string;
+  /** Whether the first prompt has been sent (for coordinator prompt injection) */
+  firstPromptSent?: boolean;
 }
 
 type Controller = ReadableStreamDefaultController<Uint8Array>;
@@ -44,6 +46,15 @@ class HttpSessionStore {
 
   getSession(sessionId: string): RoutaSessionRecord | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  markFirstPromptSent(sessionId: string) {
+    const existing = this.sessions.get(sessionId);
+    if (!existing) return;
+    this.sessions.set(sessionId, {
+      ...existing,
+      firstPromptSent: true,
+    });
   }
 
   updateSessionMode(sessionId: string, modeId: string) {

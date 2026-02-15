@@ -30,7 +30,7 @@ import {
   ModelTier,
   createAgent as createAgentModel,
 } from "../models/agent";
-import { TaskStatus } from "../models/task";
+import { Task, TaskStatus, createTask as createTaskModel } from "../models/task";
 import { MessageRole, createMessage, CompletionReport } from "../models/message";
 import { AgentStore } from "../store/agent-store";
 import { ConversationStore } from "../store/conversation-store";
@@ -45,6 +45,64 @@ export class AgentTools {
     private taskStore: TaskStore,
     private eventBus: EventBus
   ) {}
+
+  // ─── Tool 0: Create Task ────────────────────────────────────────────
+
+  async createTask(params: {
+    title: string;
+    objective: string;
+    workspaceId: string;
+    scope?: string;
+    acceptanceCriteria?: string[];
+    verificationCommands?: string[];
+    dependencies?: string[];
+    parallelGroup?: string;
+  }): Promise<ToolResult> {
+    const task = createTaskModel({
+      id: uuidv4(),
+      title: params.title,
+      objective: params.objective,
+      workspaceId: params.workspaceId,
+      scope: params.scope,
+      acceptanceCriteria: params.acceptanceCriteria,
+      verificationCommands: params.verificationCommands,
+      dependencies: params.dependencies,
+      parallelGroup: params.parallelGroup,
+    });
+
+    await this.taskStore.save(task);
+
+    return successResult({
+      taskId: task.id,
+      title: task.title,
+      status: task.status,
+    });
+  }
+
+  // ─── Get Task ─────────────────────────────────────────────────────────
+
+  async getTask(taskId: string): Promise<ToolResult> {
+    const task = await this.taskStore.get(taskId);
+    if (!task) {
+      return errorResult(`Task not found: ${taskId}`);
+    }
+    return successResult(task);
+  }
+
+  // ─── List Tasks ───────────────────────────────────────────────────────
+
+  async listTasks(workspaceId: string): Promise<ToolResult> {
+    const tasks = await this.taskStore.listByWorkspace(workspaceId);
+    return successResult(
+      tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        assignedTo: t.assignedTo,
+        verificationVerdict: t.verificationVerdict,
+      }))
+    );
+  }
 
   // ─── Tool 1: List Agents ─────────────────────────────────────────────
 

@@ -25,6 +25,10 @@ import { which } from "@/core/acp/utils";
 import { v4 as uuidv4 } from "uuid";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
+import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
+import { getRoutaSystem } from "@/core/routa-system";
+import { AgentRole } from "@/core/models/agent";
+import { buildCoordinatorPrompt, getSpecialistByRole } from "@/core/orchestration/specialist-prompts";
 
 export const dynamic = "force-dynamic";
 
@@ -102,9 +106,14 @@ export async function POST(request: NextRequest) {
       const cwd = (p.cwd as string | undefined) ?? process.cwd();
       const provider = (p.provider as string | undefined) ?? "opencode";
       const modeId = (p.modeId as string | undefined) ?? (p.mode as string | undefined);
+      const role = (p.role as string | undefined)?.toUpperCase();
       const sessionId = uuidv4();
 
-      console.log(`[ACP Route] Creating session: provider=${provider}, cwd=${cwd}, modeId=${modeId}`);
+      // Default provider for CRAFTER/GATE delegation (can be overridden per-task)
+      const crafterProvider = (p.crafterProvider as string | undefined) ?? provider;
+      const gateProvider = (p.gateProvider as string | undefined) ?? provider;
+
+      console.log(`[ACP Route] Creating session: provider=${provider}, cwd=${cwd}, modeId=${modeId}, role=${role ?? "CRAFTER"}`);
 
       const store = getHttpSessionStore();
       const manager = getAcpProcessManager();
@@ -116,14 +125,12 @@ export async function POST(request: NextRequest) {
 
       if (isClaudeCode) {
         // ── Claude Code: stream-json protocol with MCP ───────────────
-        // Build MCP config to inject the routa-mcp server into Claude Code
         const mcpConfigs = buildMcpConfigForClaude();
 
         acpSessionId = await manager.createClaudeSession(
           sessionId,
           cwd,
           (msg) => {
-            // Forward translated session/update notifications to SSE
             if (msg.method === "session/update" && msg.params) {
               const params = msg.params as Record<string, unknown>;
               store.pushNotification({
@@ -141,7 +148,6 @@ export async function POST(request: NextRequest) {
           sessionId,
           cwd,
           (msg) => {
-            // Forward all notifications from the agent to SSE
             if (msg.method === "session/update" && msg.params) {
               const params = msg.params as Record<string, unknown>;
               store.pushNotification({
@@ -155,22 +161,64 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // ── Register with orchestrator if role is ROUTA ──────────────
+      let routaAgentId: string | undefined;
+
+      if (role === "ROUTA") {
+        // Initialize orchestrator
+        const orchestrator = initRoutaOrchestrator({
+          defaultCrafterProvider: crafterProvider,
+          defaultGateProvider: gateProvider,
+          defaultCwd: cwd,
+        });
+
+        // Create a ROUTA agent record
+        const system = getRoutaSystem();
+        const agentResult = await system.tools.createAgent({
+          name: `routa-coordinator-${sessionId.slice(0, 8)}`,
+          role: AgentRole.ROUTA,
+          workspaceId: "default",
+        });
+
+        if (agentResult.success && agentResult.data) {
+          routaAgentId = (agentResult.data as { agentId: string }).agentId;
+          orchestrator.registerAgentSession(routaAgentId, sessionId);
+
+          // Set up notification handler for child agent updates
+          orchestrator.setNotificationHandler((targetSessionId, data) => {
+            store.pushNotification({
+              ...data as Record<string, unknown>,
+              sessionId: targetSessionId,
+            } as never);
+          });
+
+          console.log(
+            `[ACP Route] ROUTA coordinator agent created: ${routaAgentId}`
+          );
+        }
+      }
+
       // Persist session for UI listing
       store.upsertSession({
         sessionId,
         cwd,
         workspaceId: "default",
-        routaAgentId: acpSessionId,
+        routaAgentId: routaAgentId ?? acpSessionId,
         provider,
         modeId,
         createdAt: new Date().toISOString(),
       });
 
       console.log(
-        `[ACP Route] Session created: ${sessionId} (provider: ${provider}, agent session: ${acpSessionId})`
+        `[ACP Route] Session created: ${sessionId} (provider: ${provider}, agent session: ${acpSessionId}, role: ${role ?? "CRAFTER"})`
       );
 
-      return jsonrpcResponse(id ?? null, { sessionId, provider });
+      return jsonrpcResponse(id ?? null, {
+        sessionId,
+        provider,
+        role: role ?? "CRAFTER",
+        routaAgentId,
+      });
     }
 
     // ── session/prompt ─────────────────────────────────────────────────
@@ -190,11 +238,34 @@ export async function POST(request: NextRequest) {
 
       // Extract prompt text
       const promptBlocks = p.prompt as Array<{ type: string; text?: string }> | undefined;
-      const promptText =
+      let promptText =
         promptBlocks
           ?.filter((b) => b.type === "text")
           .map((b) => b.text ?? "")
           .join("\n") ?? "";
+
+      // Check if this is a ROUTA coordinator session - inject coordinator context
+      const orchestrator = getRoutaOrchestrator();
+      if (orchestrator) {
+        const store = getHttpSessionStore();
+        const sessionRecord = store.getSession(sessionId);
+        if (sessionRecord?.routaAgentId) {
+          const system = getRoutaSystem();
+          const agent = await system.agentStore.get(sessionRecord.routaAgentId);
+          if (agent?.role === AgentRole.ROUTA) {
+            // First prompt for this coordinator - wrap with coordinator context
+            const isFirstPrompt = !sessionRecord.firstPromptSent;
+            if (isFirstPrompt) {
+              promptText = buildCoordinatorPrompt({
+                agentId: agent.id,
+                workspaceId: "default",
+                userRequest: promptText,
+              });
+              store.markFirstPromptSent(sessionId);
+            }
+          }
+        }
+      }
 
       // ── Claude Code session ─────────────────────────────────────────
       if (manager.isClaudeSession(sessionId)) {

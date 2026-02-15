@@ -33,7 +33,8 @@ export interface UseAcpActions {
   createSession: (
     cwd?: string,
     provider?: string,
-    modeId?: string
+    modeId?: string,
+    role?: string
   ) => Promise<AcpNewSessionResult | null>;
   selectSession: (sessionId: string) => void;
   setProvider: (provider: string) => void;
@@ -102,7 +103,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     async (
       cwd?: string,
       provider?: string,
-      modeId?: string
+      modeId?: string,
+      role?: string
     ): Promise<AcpNewSessionResult | null> => {
       const client = clientRef.current;
       if (!client) return null;
@@ -113,6 +115,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           cwd,
           provider: activeProvider,
           modeId,
+          role,
           mcpServers: [],
         });
         sessionIdRef.current = result.sessionId;

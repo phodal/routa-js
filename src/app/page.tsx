@@ -60,13 +60,14 @@ export default function HomePage() {
     async (provider: string) => {
       await ensureConnected();
       const cwd = repoSelection?.path ?? undefined;
-      const result = await acp.createSession(cwd, provider);
+      const role = selectedAgent !== "CRAFTER" ? selectedAgent : undefined;
+      const result = await acp.createSession(cwd, provider, undefined, role);
       if (result?.sessionId) {
         setActiveSessionId(result.sessionId);
         bumpRefresh();
       }
     },
-    [acp, ensureConnected, bumpRefresh, repoSelection]
+    [acp, ensureConnected, bumpRefresh, repoSelection, selectedAgent]
   );
 
   const handleSelectSession = useCallback(
@@ -82,14 +83,15 @@ export default function HomePage() {
   const ensureSessionForChat = useCallback(async (cwd?: string, provider?: string, modeId?: string): Promise<string | null> => {
     await ensureConnected();
     if (activeSessionId) return activeSessionId;
-    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId);
+    const role = selectedAgent !== "CRAFTER" ? selectedAgent : undefined;
+    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId, role);
     if (result?.sessionId) {
       setActiveSessionId(result.sessionId);
       bumpRefresh();
       return result.sessionId;
     }
     return null;
-  }, [acp, activeSessionId, ensureConnected, bumpRefresh]);
+  }, [acp, activeSessionId, ensureConnected, bumpRefresh, selectedAgent]);
 
   const handleLoadSkill = useCallback(async (name: string): Promise<string | null> => {
     // Pass repoSelection.path so repo-specific skills can be found
@@ -98,12 +100,11 @@ export default function HomePage() {
   }, [skillsHook, repoSelection?.path]);
 
   const handleAgentChange = useCallback((role: AgentRole) => {
-    if (role !== "CRAFTER") {
+    setSelectedAgent(role);
+    if (role === "ROUTA") {
       setShowAgentToast(true);
       setTimeout(() => setShowAgentToast(false), 2500);
-      return;
     }
-    setSelectedAgent(role);
   }, []);
 
   return (
@@ -267,7 +268,7 @@ export default function HomePage() {
       {/* ─── Agent Toast ──────────────────────────────────────────── */}
       {showAgentToast && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium shadow-lg animate-fade-in">
-          Only CRAFTER is supported. Other agents coming soon.
+          ROUTA mode: Coordinator will plan, delegate to CRAFTER agents, and verify with GATE.
         </div>
       )}
     </div>

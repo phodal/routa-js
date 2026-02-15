@@ -1,0 +1,349 @@
+/**
+ * MCP Tool Executor
+ *
+ * Shared logic for executing MCP tools and providing tool definitions.
+ * Used by both /api/mcp route and /api/mcp/tools route.
+ */
+
+import { AgentTools } from "@/core/tools/agent-tools";
+import { getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
+
+const DEFAULT_WORKSPACE_ID = "default";
+
+export async function executeMcpTool(
+  tools: AgentTools,
+  name: string,
+  args: Record<string, unknown>
+) {
+  const workspace = (args.workspaceId as string) ?? DEFAULT_WORKSPACE_ID;
+
+  switch (name) {
+    // ── Task tools ────────────────────────────────────────────────────
+    case "create_task":
+      return formatResult(
+        await tools.createTask({
+          title: args.title as string,
+          objective: args.objective as string,
+          workspaceId: (args.workspaceId as string) ?? workspace,
+          scope: args.scope as string | undefined,
+          acceptanceCriteria: args.acceptanceCriteria as string[] | undefined,
+          verificationCommands: args.verificationCommands as string[] | undefined,
+          dependencies: args.dependencies as string[] | undefined,
+          parallelGroup: args.parallelGroup as string | undefined,
+        })
+      );
+    case "list_tasks":
+      return formatResult(
+        await tools.listTasks((args.workspaceId as string) ?? workspace)
+      );
+
+    // ── Enhanced delegation with process spawning ─────────────────────
+    case "delegate_task_to_agent": {
+      const orchestrator = getRoutaOrchestrator();
+      if (!orchestrator) {
+        return formatResult({
+          success: false,
+          error: "Orchestrator not initialized. Start a session first.",
+        });
+      }
+
+      const callerSessionId =
+        (args.callerSessionId as string) ??
+        orchestrator.getSessionForAgent(args.callerAgentId as string) ??
+        "unknown";
+
+      return formatResult(
+        await orchestrator.delegateTaskWithSpawn({
+          taskId: args.taskId as string,
+          callerAgentId: args.callerAgentId as string,
+          callerSessionId,
+          workspaceId: (args.workspaceId as string) ?? workspace,
+          specialist: args.specialist as string,
+          provider: args.provider as string | undefined,
+          cwd: args.cwd as string | undefined,
+          additionalInstructions: args.additionalInstructions as string | undefined,
+          waitMode: args.waitMode as "immediate" | "after_all" | undefined,
+        })
+      );
+    }
+
+    // ── Agent tools ──────────────────────────────────────────────────
+    case "list_agents":
+      return formatResult(await tools.listAgents(workspace));
+    case "read_agent_conversation":
+      return formatResult(await tools.readAgentConversation(args as never));
+    case "create_agent":
+      return formatResult(
+        await tools.createAgent({
+          name: args.name as string,
+          role: args.role as string,
+          workspaceId: (args.workspaceId as string) ?? workspace,
+          parentId: args.parentId as string | undefined,
+          modelTier: args.modelTier as string | undefined,
+        })
+      );
+    case "delegate_task":
+      return formatResult(await tools.delegate(args as never));
+    case "send_message_to_agent":
+      return formatResult(await tools.messageAgent(args as never));
+    case "report_to_parent":
+      return formatResult(
+        await tools.reportToParent({
+          agentId: args.agentId as string,
+          report: {
+            agentId: args.agentId as string,
+            taskId: args.taskId as string,
+            summary: args.summary as string,
+            filesModified: args.filesModified as string[] | undefined,
+            success: args.success as boolean,
+          },
+        })
+      );
+    case "wake_or_create_task_agent":
+      return formatResult(
+        await tools.wakeOrCreateTaskAgent({
+          taskId: args.taskId as string,
+          contextMessage: args.contextMessage as string,
+          callerAgentId: args.callerAgentId as string,
+          workspaceId: (args.workspaceId as string) ?? workspace,
+          agentName: args.agentName as string | undefined,
+          modelTier: args.modelTier as string | undefined,
+        })
+      );
+    case "send_message_to_task_agent":
+      return formatResult(await tools.sendMessageToTaskAgent(args as never));
+    case "get_agent_status":
+      return formatResult(await tools.getAgentStatus(args.agentId as string));
+    case "get_agent_summary":
+      return formatResult(await tools.getAgentSummary(args.agentId as string));
+    case "subscribe_to_events":
+      return formatResult(await tools.subscribeToEvents(args as never));
+    case "unsubscribe_from_events":
+      return formatResult(
+        await tools.unsubscribeFromEvents(args.subscriptionId as string)
+      );
+    default:
+      return {
+        content: [{ type: "text", text: `Unknown tool: ${name}` }],
+        isError: true,
+      };
+  }
+}
+
+function formatResult(result: { success: boolean; data?: unknown; error?: string }) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          result.success ? result.data : { error: result.error },
+          null,
+          2
+        ),
+      },
+    ],
+    isError: !result.success,
+  };
+}
+
+export function getMcpToolDefinitions() {
+  return [
+    {
+      name: "create_task",
+      description: "Create a new task in the task store. Returns a taskId for delegation.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Task title" },
+          objective: { type: "string", description: "What this task should achieve" },
+          workspaceId: { type: "string", description: "Workspace ID" },
+          scope: { type: "string", description: "What files/areas are in scope" },
+          acceptanceCriteria: { type: "array", items: { type: "string" }, description: "Definition of done items" },
+          verificationCommands: { type: "array", items: { type: "string" }, description: "Commands to verify completion" },
+          dependencies: { type: "array", items: { type: "string" }, description: "Task IDs that must complete first" },
+          parallelGroup: { type: "string", description: "Group for parallel execution" },
+        },
+        required: ["title", "objective"],
+      },
+    },
+    {
+      name: "list_tasks",
+      description: "List all tasks in the workspace with status and assignments",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspaceId: { type: "string", description: "Workspace ID" },
+        },
+      },
+    },
+    {
+      name: "delegate_task_to_agent",
+      description: "Delegate a task to a new agent by spawning a real process. Use specialist='CRAFTER' for implementation and specialist='GATE' for verification.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string", description: "Task ID to delegate" },
+          callerAgentId: { type: "string", description: "Your agent ID" },
+          callerSessionId: { type: "string", description: "Your session ID (optional)" },
+          specialist: { type: "string", enum: ["CRAFTER", "GATE", "crafter", "gate"], description: "Agent type to create" },
+          provider: { type: "string", description: "ACP provider (claude, copilot, opencode, etc.)" },
+          cwd: { type: "string", description: "Working directory" },
+          additionalInstructions: { type: "string", description: "Extra context for the agent" },
+          waitMode: { type: "string", enum: ["immediate", "after_all"], description: "Notification mode" },
+        },
+        required: ["taskId", "callerAgentId", "specialist"],
+      },
+    },
+    {
+      name: "list_agents",
+      description: "List all agents in the current workspace",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspaceId: { type: "string", description: "Workspace ID" },
+        },
+      },
+    },
+    {
+      name: "read_agent_conversation",
+      description: "Read conversation history of another agent",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agentId: { type: "string" },
+          lastN: { type: "number" },
+          startTurn: { type: "number" },
+          endTurn: { type: "number" },
+          includeToolCalls: { type: "boolean" },
+        },
+        required: ["agentId"],
+      },
+    },
+    {
+      name: "create_agent",
+      description: "Create a new agent (ROUTA/CRAFTER/GATE)",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          role: { type: "string", enum: ["ROUTA", "CRAFTER", "GATE"] },
+          workspaceId: { type: "string" },
+          parentId: { type: "string" },
+          modelTier: { type: "string", enum: ["SMART", "FAST"] },
+        },
+        required: ["name", "role"],
+      },
+    },
+    {
+      name: "delegate_task",
+      description: "Assign a task to an existing agent (low-level, prefer delegate_task_to_agent)",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agentId: { type: "string" },
+          taskId: { type: "string" },
+          callerAgentId: { type: "string" },
+        },
+        required: ["agentId", "taskId", "callerAgentId"],
+      },
+    },
+    {
+      name: "send_message_to_agent",
+      description: "Send message from one agent to another",
+      inputSchema: {
+        type: "object",
+        properties: {
+          fromAgentId: { type: "string" },
+          toAgentId: { type: "string" },
+          message: { type: "string" },
+        },
+        required: ["fromAgentId", "toAgentId", "message"],
+      },
+    },
+    {
+      name: "report_to_parent",
+      description: "Submit completion report to parent agent. MUST be called when task is done.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agentId: { type: "string" },
+          taskId: { type: "string" },
+          summary: { type: "string" },
+          filesModified: { type: "array", items: { type: "string" } },
+          success: { type: "boolean" },
+        },
+        required: ["agentId", "taskId", "summary", "success"],
+      },
+    },
+    {
+      name: "wake_or_create_task_agent",
+      description: "Wake existing or create new agent for a task",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string" },
+          contextMessage: { type: "string" },
+          callerAgentId: { type: "string" },
+          workspaceId: { type: "string" },
+          agentName: { type: "string" },
+          modelTier: { type: "string" },
+        },
+        required: ["taskId", "contextMessage", "callerAgentId"],
+      },
+    },
+    {
+      name: "send_message_to_task_agent",
+      description: "Send message to task's assigned agent",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string" },
+          message: { type: "string" },
+          callerAgentId: { type: "string" },
+        },
+        required: ["taskId", "message", "callerAgentId"],
+      },
+    },
+    {
+      name: "get_agent_status",
+      description: "Get agent status, message count, and tasks",
+      inputSchema: {
+        type: "object",
+        properties: { agentId: { type: "string" } },
+        required: ["agentId"],
+      },
+    },
+    {
+      name: "get_agent_summary",
+      description: "Get agent summary with last response and active tasks",
+      inputSchema: {
+        type: "object",
+        properties: { agentId: { type: "string" } },
+        required: ["agentId"],
+      },
+    },
+    {
+      name: "subscribe_to_events",
+      description: "Subscribe to workspace events",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agentId: { type: "string" },
+          agentName: { type: "string" },
+          eventTypes: { type: "array", items: { type: "string" } },
+          excludeSelf: { type: "boolean" },
+        },
+        required: ["agentId", "agentName", "eventTypes"],
+      },
+    },
+    {
+      name: "unsubscribe_from_events",
+      description: "Remove an event subscription",
+      inputSchema: {
+        type: "object",
+        properties: { subscriptionId: { type: "string" } },
+        required: ["subscriptionId"],
+      },
+    },
+  ];
+}
