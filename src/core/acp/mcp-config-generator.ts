@@ -14,6 +14,12 @@ export interface RoutaMcpConfig {
   routaServerUrl: string;
   /** Workspace ID for the MCP session */
   workspaceId?: string;
+  /**
+   * Direct MCP endpoint URL override.
+   * When set, this is used instead of `routaServerUrl + "/api/mcp"`.
+   * Used by the standalone RoutaMcpHttpServer which serves at /mcp (not /api/mcp).
+   */
+  mcpEndpoint?: string;
 }
 
 export interface McpServerConfig {
@@ -93,6 +99,9 @@ export function generateMultipleRoutaMcpConfigs(
  * Get the default Routa MCP configuration for local development.
  *
  * Dynamically detects the server URL based on the current process.
+ * If the standalone RoutaMcpHttpServer is running (on a dynamic port),
+ * it returns its URL directly (e.g. http://127.0.0.1:54321/mcp).
+ * Otherwise, falls back to the Next.js /api/mcp route.
  *
  * @param workspaceId - Optional workspace ID (defaults to "default")
  * @returns Default MCP configuration
@@ -102,6 +111,26 @@ export function getDefaultRoutaMcpConfig(workspaceId?: string): RoutaMcpConfig {
   let routaServerUrl = process.env.ROUTA_SERVER_URL;
   
   if (!routaServerUrl) {
+    // Check if standalone MCP server is running (provides WebSocket + HTTP)
+    try {
+      // Dynamic import to avoid circular dependency
+      const { getMcpServer } = require("@/core/mcp/mcp-server-singleton");
+      const standaloneServer = getMcpServer();
+      if (standaloneServer?.isRunning) {
+        // Standalone server serves at /mcp (not /api/mcp).
+        // Use mcpEndpoint override so mcp-setup doesn't append "/api/mcp".
+        const port = process.env.PORT || "3000";
+        const host = process.env.HOST || "localhost";
+        return {
+          routaServerUrl: `http://${host}:${port}`,
+          mcpEndpoint: standaloneServer.mcpUrl,
+          workspaceId: workspaceId || process.env.ROUTA_WORKSPACE_ID || "default",
+        };
+      }
+    } catch {
+      // mcp-server-singleton not available (e.g., test environment)
+    }
+
     // If running in Next.js, try to detect the port
     const port = process.env.PORT || "3000";
     const host = process.env.HOST || "localhost";

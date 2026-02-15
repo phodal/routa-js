@@ -22,6 +22,7 @@ import { getAcpProcessManager } from "@/core/acp/processer";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
 import { getStandardPresets, getPresetById, resolveCommand } from "@/core/acp/acp-presets";
 import { which } from "@/core/acp/utils";
+import { ensureMcpForProvider } from "@/core/acp/mcp-setup";
 import { v4 as uuidv4 } from "uuid";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
@@ -479,25 +480,13 @@ function jsonrpcResponse(
  * Build MCP configuration JSON for Claude Code.
  * Injects the routa-mcp server so Claude Code can use Routa coordination tools.
  *
- * Claude Code accepts --mcp-config with a JSON object like:
- * {"mcpServers":{"routa":{"url":"http://localhost:3000/api/mcp","type":"sse"}}}
+ * Claude Code accepts --mcp-config with an inline JSON object.
+ * We reuse the shared provider setup path to avoid config drift.
  */
 function buildMcpConfigForClaude(): string[] {
-  // Determine the URL for the MCP server
-  // In development, the Next.js server is on localhost:3000
-  const port = process.env.PORT ?? "3000";
-  const host = process.env.HOST ?? "localhost";
-  const mcpUrl = `http://${host}:${port}/api/mcp`;
-
-  const mcpConfigJson = JSON.stringify({
-    mcpServers: {
-      routa: {
-        url: mcpUrl,
-        type: "sse",
-      },
-    },
-  });
-
-  console.log(`[ACP Route] MCP config for Claude Code: ${mcpConfigJson}`);
-  return [mcpConfigJson];
+  // Keep Claude MCP setup consistent with all other providers.
+  // This path uses streamable HTTP via /api/mcp and includes workspace env.
+  const result = ensureMcpForProvider("claude");
+  console.log(`[ACP Route] MCP config for Claude Code: ${result.summary}`);
+  return result.mcpConfigs;
 }

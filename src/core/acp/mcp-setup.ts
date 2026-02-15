@@ -77,7 +77,8 @@ export function ensureMcpForProvider(
   }
 
   const cfg = config || getDefaultRoutaMcpConfig();
-  const mcpEndpoint = `${cfg.routaServerUrl}/api/mcp`;
+  // Use the direct endpoint override if the standalone MCP server is running
+  const mcpEndpoint = cfg.mcpEndpoint || `${cfg.routaServerUrl}/api/mcp`;
 
   switch (providerId) {
     case "opencode":

@@ -1,143 +1,120 @@
 /**
  * MCP Server API Route - /api/mcp
  *
- * Exposes the Routa MCP server via SSE (Server-Sent Events) transport.
- * External MCP clients (Claude Code, MCP Inspector, etc.) connect here.
+ * Exposes the Routa MCP server via Streamable HTTP (2025-06-18 protocol).
+ * Uses the MCP SDK's WebStandardStreamableHTTPServerTransport for proper
+ * protocol handling including session management and SSE streaming.
  *
- * GET  /api/mcp - SSE stream for MCP messages
- * POST /api/mcp - Send MCP JSON-RPC messages
+ * This endpoint is used by all ACP providers (Claude Code, Copilot, Auggie,
+ * Codex, Gemini, Kimi, OpenCode) when configured with type: "http".
+ *
+ * Supported methods:
+ *   POST   /api/mcp  — Send JSON-RPC messages (initialize, tools/list, tools/call, etc.)
+ *   GET    /api/mcp  — Open SSE stream for server-initiated messages
+ *   DELETE /api/mcp  — Terminate an MCP session
+ *
+ * Session management:
+ *   - Each initialize request creates a new session with a unique ID
+ *   - Subsequent requests include the session ID via Mcp-Session-Id header
+ *   - Sessions are maintained in-memory (same-process)
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { NextRequest } from "next/server";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createRoutaMcpServer } from "@/core/mcp/routa-mcp-server";
-import { executeMcpTool, getMcpToolDefinitions } from "@/core/mcp/mcp-tool-executor";
 
-// Keep a reference to the server and active transports
-const transports = new Map<string, SSEServerTransport>();
+// ─── Session management ────────────────────────────────────────────────
+
+interface McpSession {
+  transport: WebStandardStreamableHTTPServerTransport;
+}
+
+const sessions = new Map<string, McpSession>();
 
 const DEFAULT_WORKSPACE_ID = "default";
 
-export async function GET(request: NextRequest) {
-  const { server } = createRoutaMcpServer(DEFAULT_WORKSPACE_ID);
-
-  // Create SSE response
-  const encoder = new TextEncoder();
-  let transport: SSEServerTransport;
-
-  const stream = new ReadableStream({
-    start(controller) {
-      // Create a fake response object for the SSE transport
-      const sessionId = crypto.randomUUID();
-
-      // Use a custom writable approach since we're in Next.js
-      const responseObj = {
-        writeHead: (_status: number, _headers: Record<string, string>) => responseObj,
-        write: (data: string) => {
-          try {
-            controller.enqueue(encoder.encode(data));
-          } catch {
-            // Stream closed
-          }
-          return true;
-        },
-        on: (_event: string, _handler: () => void) => responseObj,
-        end: () => {
-          try {
-            controller.close();
-          } catch {
-            // Already closed
-          }
-        },
-      };
-
-      // Note: SSE transport needs actual HTTP res/req objects.
-      // For Next.js App Router, we provide a simplified SSE stream.
-      const eventStream = () => {
-        // Send SSE endpoint info
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "endpoint", url: `/api/mcp?sessionId=${sessionId}` })}\n\n`
-          )
-        );
-      };
-
-      eventStream();
-
-      // Store session for POST handler
-      transports.set(sessionId, undefined as unknown as SSEServerTransport);
-
-      // Clean up on close
-      request.signal.addEventListener("abort", () => {
-        transports.delete(sessionId);
-      });
+/**
+ * Create a new MCP session: transport + MCP server + tool registrations.
+ * Returns the transport so it can handle the current request.
+ */
+async function createSession(): Promise<WebStandardStreamableHTTPServerTransport> {
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: () => crypto.randomUUID(),
+    onsessioninitialized: (sessionId: string) => {
+      sessions.set(sessionId, { transport });
+      console.log(
+        `[MCP Route] Session created: ${sessionId} (active: ${sessions.size})`,
+      );
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+  const { server } = createRoutaMcpServer(DEFAULT_WORKSPACE_ID);
+  await server.connect(transport);
+
+  // Clean up when session is closed
+  transport.onclose = () => {
+    const sid = transport.sessionId;
+    if (sid) {
+      sessions.delete(sid);
+      console.log(
+        `[MCP Route] Session closed: ${sid} (active: ${sessions.size})`,
+      );
+    }
+  };
+
+  return transport;
+}
+
+/**
+ * Find an existing session or create a new one for the incoming request.
+ */
+async function getOrCreateSession(
+  request: NextRequest,
+): Promise<WebStandardStreamableHTTPServerTransport> {
+  const sessionId = request.headers.get("mcp-session-id");
+  const existing = sessionId ? sessions.get(sessionId) : undefined;
+
+  if (existing) {
+    return existing.transport;
+  }
+
+  // New session needed (initialize request)
+  return createSession();
+}
+
+/**
+ * Add CORS headers to the transport's response.
+ */
+function withCorsHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  headers.set(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID",
+  );
+  headers.set(
+    "Access-Control-Expose-Headers",
+    "Mcp-Session-Id, MCP-Protocol-Version",
+  );
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }
 
+// ─── Route Handlers ───────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { server, system } = createRoutaMcpServer(DEFAULT_WORKSPACE_ID);
-
-    // Handle JSON-RPC directly
-    // This is a simplified handler that processes MCP tool calls
-    if (body.method === "tools/list") {
-      return NextResponse.json({
-        jsonrpc: "2.0",
-        id: body.id,
-        result: {
-          tools: getMcpToolDefinitions(),
-        },
-      });
-    }
-
-    if (body.method === "tools/call") {
-      const { name, arguments: args } = body.params;
-      const result = await executeMcpTool(system.tools, name, args);
-      return NextResponse.json({
-        jsonrpc: "2.0",
-        id: body.id,
-        result,
-      });
-    }
-
-    // Initialize
-    if (body.method === "initialize") {
-      return NextResponse.json({
-        jsonrpc: "2.0",
-        id: body.id,
-        result: {
-          protocolVersion: "2024-11-05",
-          capabilities: {
-            tools: { listChanged: false },
-          },
-          serverInfo: {
-            name: "routa-mcp",
-            version: "0.1.0",
-          },
-        },
-      });
-    }
-
-    return NextResponse.json(
-      {
-        jsonrpc: "2.0",
-        id: body.id,
-        error: { code: -32601, message: `Method not found: ${body.method}` },
-      },
-      { status: 200 }
-    );
+    const transport = await getOrCreateSession(request);
+    const response = await transport.handleRequest(request);
+    return withCorsHeaders(response);
   } catch (error) {
-    return NextResponse.json(
+    console.error("[MCP Route] POST error:", error);
+    return Response.json(
       {
         jsonrpc: "2.0",
         id: null,
@@ -146,7 +123,64 @@ export async function POST(request: NextRequest) {
           message: error instanceof Error ? error.message : "Internal error",
         },
       },
-      { status: 200 }
+      { status: 500 },
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const sessionId = request.headers.get("mcp-session-id");
+    const session = sessionId ? sessions.get(sessionId) : undefined;
+
+    if (!session) {
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          error: {
+            code: -32600,
+            message: "No active session. Send an initialize POST request first.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const response = await session.transport.handleRequest(request);
+    return withCorsHeaders(response);
+  } catch (error) {
+    console.error("[MCP Route] GET error:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const sessionId = request.headers.get("mcp-session-id");
+    const session = sessionId ? sessions.get(sessionId) : undefined;
+
+    if (!session) {
+      return new Response("Session not found", { status: 404 });
+    }
+
+    const response = await session.transport.handleRequest(request);
+    return withCorsHeaders(response);
+  } catch (error) {
+    console.error("[MCP Route] DELETE error:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID",
+      "Access-Control-Expose-Headers":
+        "Mcp-Session-Id, MCP-Protocol-Version",
+    },
+  });
 }
