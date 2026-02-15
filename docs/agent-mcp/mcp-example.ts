@@ -9,6 +9,7 @@
  *   - Codex:    TOML config at ~/.codex/config.toml [mcp_servers.routa-coordination]
  *   - Gemini:   JSON config at ~/.gemini/settings.json { mcpServers: { httpUrl } }
  *   - Kimi:     TOML config at ~/.kimi/config.toml [mcp.servers.routa-coordination]
+ *   - Copilot:  JSON config at ~/.copilot/mcp-config.json (auto-read by Copilot CLI)
  */
 
 import { AcpProcess } from "@/core/acp/acp-process";
@@ -113,6 +114,20 @@ export async function startKimiWithMcp(workspacePath: string) {
   console.log("Kimi MCP:", mcp.summary);
 
   const config = buildConfigFromPreset("kimi", workspacePath);
+  const process = new AcpProcess(config, (n) => console.log("notification:", n));
+  await process.start();
+  return process;
+}
+
+// ─── Example 7: Copilot with MCP (inline JSON) ─────────────────────────
+
+export async function startCopilotWithMcp(workspacePath: string) {
+  // Writes routa-coordination entry into ~/.copilot/mcp-config.json
+  // Copilot CLI reads this file automatically on startup
+  const mcp = ensureMcpForProvider("copilot");
+  console.log("Copilot MCP:", mcp.summary);
+
+  const config = buildConfigFromPreset("copilot", workspacePath);
   const process = new AcpProcess(config, (n) => console.log("notification:", n));
   await process.start();
   return process;

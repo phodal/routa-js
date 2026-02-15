@@ -10,7 +10,7 @@ import { getDefaultRoutaMcpConfig } from "@/core/acp/mcp-config-generator";
 
 export async function GET() {
   const results: Record<string, unknown> = {};
-  const providers = ["auggie", "opencode", "claude", "codex", "gemini", "kimi"];
+  const providers = ["auggie", "opencode", "claude", "codex", "gemini", "kimi", "copilot"];
 
   for (const providerId of providers) {
     const supported = providerSupportsMcp(providerId);

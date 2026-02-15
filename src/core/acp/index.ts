@@ -50,6 +50,7 @@ export {
   setupMcpForCodex,
   setupMcpForGemini,
   setupMcpForKimi,
+  setupMcpForCopilot,
   providerSupportsMcp,
   isMcpConfigured,
   getMcpStatus,

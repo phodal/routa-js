@@ -19,12 +19,15 @@
  *   │            │  mcpServers.routa-coordination { httpUrl }           │
  *   │  kimi      │  Merge into ~/.kimi/config.toml (TOML format)       │
  *   │            │  [mcp.servers.routa-coordination]                    │
+ *   │  copilot   │  Merge into ~/.copilot/mcp-config.json (JSON)       │
+ *   │            │  Copilot reads this file automatically              │
  *   └────────────┴────────────────────────────────────────────────────────┘
  *
  * Docs:
  *   - Codex:  https://developers.openai.com/codex/mcp/
  *   - Gemini: https://geminicli.com/docs/tools/mcp-server/
  *   - Kimi:   https://moonshotai.github.io/kimi-cli/en/configuration/config-files.html#mcp
+ *   - Copilot: https://docs.github.com/copilot/customizing-copilot/extending-copilot-coding-agent-with-mcp
  */
 
 import * as fs from "fs";
@@ -38,7 +41,7 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
-export type McpSupportedProvider = "claude" | "auggie" | "opencode" | "codex" | "gemini" | "kimi";
+export type McpSupportedProvider = "claude" | "auggie" | "opencode" | "codex" | "gemini" | "kimi" | "copilot";
 
 /**
  * Result of a file-based MCP setup (OpenCode / Auggie).
@@ -55,7 +58,7 @@ export interface McpSetupResult {
 // ─── Public API ────────────────────────────────────────────────────────
 
 export function providerSupportsMcp(providerId: string): boolean {
-  const supported: McpSupportedProvider[] = ["claude", "auggie", "opencode", "codex", "gemini", "kimi"];
+  const supported: McpSupportedProvider[] = ["claude", "auggie", "opencode", "codex", "gemini", "kimi", "copilot"];
   return supported.includes(providerId as McpSupportedProvider);
 }
 
@@ -89,6 +92,8 @@ export function ensureMcpForProvider(
       return ensureMcpForGemini(mcpEndpoint);
     case "kimi":
       return ensureMcpForKimi(mcpEndpoint);
+    case "copilot":
+      return ensureMcpForCopilot(mcpEndpoint, cfg.workspaceId);
     default:
       return { mcpConfigs: [], summary: `${providerId}: unknown` };
   }
@@ -417,6 +422,74 @@ function ensureMcpForKimi(mcpEndpoint: string): McpSetupResult {
   }
 }
 
+// ─── GitHub Copilot ─────────────────────────────────────────────────────
+//
+// GitHub Copilot CLI reads MCP config from ~/.copilot/mcp-config.json
+// and also supports --additional-mcp-config <json|@file> for extra servers.
+// https://docs.github.com/copilot/customizing-copilot/extending-copilot-coding-agent-with-mcp
+//
+// We write to the default config file (~/.copilot/mcp-config.json) so that
+// the config is picked up automatically without needing special CLI flags.
+//
+// Format: { "mcpServers": { "<name>": { "type": "http", "url": "...", "tools": ["*"] } } }
+
+const COPILOT_CONFIG_DIR = path.join(os.homedir(), ".copilot");
+const COPILOT_MCP_CONFIG_FILE = path.join(COPILOT_CONFIG_DIR, "mcp-config.json");
+
+function ensureMcpForCopilot(
+  mcpEndpoint: string,
+  workspaceId?: string,
+): McpSetupResult {
+  try {
+    // Read existing config (or start fresh)
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(COPILOT_MCP_CONFIG_FILE)) {
+      const raw = fs.readFileSync(COPILOT_MCP_CONFIG_FILE, "utf-8");
+      existing = JSON.parse(raw);
+    }
+
+    // Ensure "mcpServers" key exists
+    const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
+
+    // Copilot coding agent format: type, url, tools
+    mcpServers["routa-coordination"] = {
+      type: "http",
+      url: mcpEndpoint,
+      tools: ["*"],
+      env: {
+        ROUTA_WORKSPACE_ID: workspaceId || "default",
+      },
+    };
+
+    existing.mcpServers = mcpServers;
+
+    // Write back
+    fs.mkdirSync(COPILOT_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(
+      COPILOT_MCP_CONFIG_FILE,
+      JSON.stringify(existing, null, 2) + "\n",
+      "utf-8",
+    );
+
+    console.log(
+      `[MCP:Copilot] Wrote routa-coordination to ${COPILOT_MCP_CONFIG_FILE}`,
+    );
+
+    // Copilot reads ~/.copilot/mcp-config.json automatically – no CLI args needed
+    return {
+      mcpConfigs: [],
+      summary: `copilot: wrote ${COPILOT_MCP_CONFIG_FILE}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[MCP:Copilot] Failed to write config: ${msg}`);
+    return {
+      mcpConfigs: [],
+      summary: `copilot: config write failed – ${msg}`,
+    };
+  }
+}
+
 // ─── Legacy convenience wrappers ───────────────────────────────────────
 
 /** @deprecated Use ensureMcpForProvider("claude", config) */
@@ -445,6 +518,10 @@ export function setupMcpForGemini(config?: RoutaMcpConfig): string[] {
 
 export function setupMcpForKimi(config?: RoutaMcpConfig): string[] {
   return ensureMcpForProvider("kimi", config).mcpConfigs;
+}
+
+export function setupMcpForCopilot(config?: RoutaMcpConfig): string[] {
+  return ensureMcpForProvider("copilot", config).mcpConfigs;
 }
 
 // ─── Helpers (unchanged) ───────────────────────────────────────────────
