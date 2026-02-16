@@ -622,6 +622,12 @@ export default function HomePage() {
           <ProtocolBadge name="MCP" endpoint="/api/mcp" />
           <ProtocolBadge name="ACP" endpoint="/api/acp" />
           <a
+            href="/settings/agents"
+            className="px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-[11px] font-medium text-indigo-600 dark:text-indigo-300"
+          >
+            Install Agents
+          </a>
+          <a
             href="/mcp-tools"
             className="px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-[11px] font-medium text-blue-600 dark:text-blue-300"
           >
