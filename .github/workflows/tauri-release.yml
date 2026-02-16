@@ -2,8 +2,8 @@ name: 'Tauri Release'
 
 on:
   push:
-    branches:
-      - release
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -17,12 +17,16 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
+            arch: 'arm64'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
+            arch: 'x64'
           - platform: 'ubuntu-22.04'
             args: ''
+            arch: 'x64'
           - platform: 'windows-latest'
             args: ''
+            arch: 'x64'
 
     runs-on: ${{ matrix.platform }}
 
@@ -64,7 +68,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: app-v__VERSION__
+          tagName: v__VERSION__
           releaseName: 'Routa Desktop v__VERSION__'
           releaseBody: 'See the assets to download and install Routa Desktop.'
           releaseDraft: true

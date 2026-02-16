@@ -8,6 +8,7 @@ on:
       - 'package.json'
       - 'next.config.ts'
       - 'scripts/build-static.mjs'
+      - 'scripts/prepare-frontend.mjs'
   push:
     branches:
       - main
@@ -17,6 +18,7 @@ on:
       - 'package.json'
       - 'next.config.ts'
       - 'scripts/build-static.mjs'
+      - 'scripts/prepare-frontend.mjs'
   workflow_dispatch:
 
 jobs:
@@ -27,12 +29,16 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
+            arch: 'arm64'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
+            arch: 'x64'
           - platform: 'ubuntu-22.04'
             args: ''
+            arch: 'x64'
           - platform: 'windows-latest'
             args: ''
+            arch: 'x64'
 
     runs-on: ${{ matrix.platform }}
 
@@ -79,7 +85,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-build-${{ matrix.platform }}-${{ matrix.args && 'arm64' || 'x64' }}
+          name: tauri-build-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             apps/desktop/src-tauri/target/release/bundle/**/*.dmg
             apps/desktop/src-tauri/target/release/bundle/**/*.app

@@ -9,8 +9,9 @@
 import { execSync } from "child_process";
 import { renameSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
+import { fileURLToPath } from "url";
 
-const rootDir = new URL("..", import.meta.url).pathname;
+const rootDir = join(fileURLToPath(import.meta.url), "..", "..");
 const apiDir = join(rootDir, "src/app/api");
 const apiBackup = join(rootDir, "src/app/_api_excluded");
 
@@ -27,7 +28,7 @@ try {
   moveDir(apiDir, apiBackup);
 
   console.log("[build-static] Running Next.js static export...");
-  execSync("ROUTA_BUILD_STATIC=1 npx next build", {
+  execSync("npx next build", {
     cwd: rootDir,
     stdio: "inherit",
     env: { ...process.env, ROUTA_BUILD_STATIC: "1" },
