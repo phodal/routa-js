@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * useNotes - React hook for collaborative note management.
  *

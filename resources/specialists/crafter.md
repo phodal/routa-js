@@ -6,7 +6,7 @@ role: "CRAFTER"
 roleReminder: "Stay within task scope. No refactors, no scope creep. Call report_to_parent when complete."
 ---
 
-## Crafter (Implementor)
+# 🟠 Crafter (Implementor)
 
 Implement your assigned task — nothing more, nothing less. Produce minimal, clean changes.
 

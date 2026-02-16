@@ -64,7 +64,7 @@ ensureDir(bundleRoot);
 console.log("[build-desktop-bundle] Copying standalone server payload...");
 cpSync(standaloneDir, bundleRoot, { recursive: true });
 
-const targetNextStatic = path.join(bundleRoot, ".next", "static");
+const targetNextStatic = path.join(bundleRoot, ".next-desktop", "static");
 ensureDir(path.dirname(targetNextStatic));
 if (existsSync(staticDir)) {
   cpSync(staticDir, targetNextStatic, { recursive: true });
