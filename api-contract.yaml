@@ -1,0 +1,1217 @@
+openapi: 3.1.0
+info:
+  title: Routa.js API Contract
+  description: |
+    Single source of truth for the Routa.js dual-backend API.
+    Both the Next.js backend (src/app/api/) and the Rust backend (crates/routa-server/)
+    MUST implement all endpoints defined here with compatible request/response shapes.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3000
+    description: Next.js backend (dev)
+  - url: http://localhost:3210
+    description: Rust backend (desktop)
+
+# ─────────────────────────────────────────────────────────
+# Shared component schemas
+# ─────────────────────────────────────────────────────────
+components:
+  schemas:
+    # ── Enums ──
+    AgentRole:
+      type: string
+      enum: [ROUTA, CRAFTER, GATE, DEVELOPER]
+
+    ModelTier:
+      type: string
+      enum: [SMART, BALANCED, FAST]
+
+    AgentStatus:
+      type: string
+      enum: [PENDING, ACTIVE, COMPLETED, ERROR, CANCELLED]
+
+    TaskStatus:
+      type: string
+      enum: [PENDING, IN_PROGRESS, REVIEW_REQUIRED, COMPLETED, NEEDS_FIX, BLOCKED, CANCELLED]
+
+    VerificationVerdict:
+      type: string
+      enum: [APPROVED, NOT_APPROVED, BLOCKED]
+
+    NoteType:
+      type: string
+      enum: [spec, task, general]
+
+    WorkspaceStatus:
+      type: string
+      enum: [active, archived]
+
+    # ── Models ──
+    Agent:
+      type: object
+      required: [id, name, role, modelTier, workspaceId, status, createdAt, updatedAt, metadata]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/AgentRole"
+        modelTier:
+          $ref: "#/components/schemas/ModelTier"
+        workspaceId:
+          type: string
+        parentId:
+          type: string
+        status:
+          $ref: "#/components/schemas/AgentStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    Task:
+      type: object
+      required: [id, title, objective, status, dependencies, workspaceId, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        objective:
+          type: string
+        scope:
+          type: string
+        acceptanceCriteria:
+          type: array
+          items:
+            type: string
+        verificationCommands:
+          type: array
+          items:
+            type: string
+        assignedTo:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        dependencies:
+          type: array
+          items:
+            type: string
+        parallelGroup:
+          type: string
+        workspaceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completionSummary:
+          type: string
+        verificationVerdict:
+          $ref: "#/components/schemas/VerificationVerdict"
+        verificationReport:
+          type: string
+
+    NoteMetadata:
+      type: object
+      required: [type]
+      properties:
+        type:
+          $ref: "#/components/schemas/NoteType"
+        taskStatus:
+          $ref: "#/components/schemas/TaskStatus"
+        assignedAgentIds:
+          type: array
+          items:
+            type: string
+        parentNoteId:
+          type: string
+        linkedTaskId:
+          type: string
+        custom:
+          type: object
+          additionalProperties:
+            type: string
+
+    Note:
+      type: object
+      required: [id, title, content, workspaceId, metadata, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        workspaceId:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/NoteMetadata"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Workspace:
+      type: object
+      required: [id, title, status, metadata, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        repoPath:
+          type: string
+        branch:
+          type: string
+        status:
+          $ref: "#/components/schemas/WorkspaceStatus"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ── Common Response Shapes ──
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    DeletedResponse:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: boolean
+          const: true
+
+# ─────────────────────────────────────────────────────────
+# API Paths
+# ─────────────────────────────────────────────────────────
+paths:
+  # ── Agents ──
+  /api/agents:
+    get:
+      operationId: listAgents
+      summary: List agents (or get single by id query param)
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+          description: If provided, returns single agent
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+            default: "default"
+        - name: role
+          in: query
+          schema:
+            $ref: "#/components/schemas/AgentRole"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/AgentStatus"
+        - name: parentId
+          in: query
+          schema:
+            type: string
+        - name: summary
+          in: query
+          schema:
+            type: string
+          description: If present with id, returns agent summary (Next.js only)
+      responses:
+        "200":
+          description: Agent list or single agent
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      agents:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Agent"
+                  - $ref: "#/components/schemas/Agent"
+    post:
+      operationId: createAgent
+      summary: Create a new agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role]
+              properties:
+                name:
+                  type: string
+                role:
+                  $ref: "#/components/schemas/AgentRole"
+                workspaceId:
+                  type: string
+                  default: "default"
+                parentId:
+                  type: string
+                modelTier:
+                  $ref: "#/components/schemas/ModelTier"
+      responses:
+        "200":
+          description: Created agent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agentId:
+                    type: string
+                  agent:
+                    $ref: "#/components/schemas/Agent"
+
+  /api/agents/{id}:
+    get:
+      operationId: getAgent
+      summary: Get agent by ID (REST-style path param)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Single agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAgent
+      summary: Delete an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  /api/agents/{id}/status:
+    post:
+      operationId: updateAgentStatus
+      summary: Update agent status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: "#/components/schemas/AgentStatus"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: boolean
+                    const: true
+
+  # ── Tasks ──
+  /api/tasks:
+    get:
+      operationId: listTasks
+      summary: List tasks
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+            default: "default"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/TaskStatus"
+        - name: assignedTo
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
+    post:
+      operationId: createTask
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, objective]
+              properties:
+                title:
+                  type: string
+                objective:
+                  type: string
+                workspaceId:
+                  type: string
+                  default: "default"
+                scope:
+                  type: string
+                acceptanceCriteria:
+                  type: array
+                  items:
+                    type: string
+                verificationCommands:
+                  type: array
+                  items:
+                    type: string
+                dependencies:
+                  type: array
+                  items:
+                    type: string
+                parallelGroup:
+                  type: string
+      responses:
+        "200":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    $ref: "#/components/schemas/Task"
+
+  /api/tasks/{id}:
+    get:
+      operationId: getTask
+      summary: Get task by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Single task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: Task not found
+    delete:
+      operationId: deleteTask
+      summary: Delete a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  /api/tasks/{id}/status:
+    post:
+      operationId: updateTaskStatus
+      summary: Update task status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: "#/components/schemas/TaskStatus"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: boolean
+
+  /api/tasks/ready:
+    get:
+      operationId: findReadyTasks
+      summary: Find tasks with all dependencies satisfied
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+            default: "default"
+      responses:
+        "200":
+          description: Ready tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
+
+  # ── Notes ──
+  /api/notes:
+    get:
+      operationId: listNotes
+      summary: List notes or get single by noteId
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+            default: "default"
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/NoteType"
+        - name: noteId
+          in: query
+          schema:
+            type: string
+          description: If provided, returns single note
+      responses:
+        "200":
+          description: Notes list or single note
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      notes:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Note"
+                  - type: object
+                    properties:
+                      note:
+                        $ref: "#/components/schemas/Note"
+    post:
+      operationId: createOrUpdateNote
+      summary: Create or update a note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                noteId:
+                  type: string
+                title:
+                  type: string
+                content:
+                  type: string
+                workspaceId:
+                  type: string
+                  default: "default"
+                type:
+                  $ref: "#/components/schemas/NoteType"
+                metadata:
+                  $ref: "#/components/schemas/NoteMetadata"
+      responses:
+        "200":
+          description: Created/updated note
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: "#/components/schemas/Note"
+    delete:
+      operationId: deleteNoteByQuery
+      summary: Delete note by query params
+      parameters:
+        - name: noteId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+            default: "default"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    const: true
+                  noteId:
+                    type: string
+
+  /api/notes/events:
+    get:
+      operationId: noteEventsSse
+      summary: SSE stream for note change events
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream: {}
+
+  /api/notes/{workspaceId}/{noteId}:
+    get:
+      operationId: getNote
+      summary: Get note by workspace + note ID
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Single note
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: "#/components/schemas/Note"
+    delete:
+      operationId: deleteNotePath
+      summary: Delete note by path params
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    const: true
+                  noteId:
+                    type: string
+
+  # ── Workspaces ──
+  /api/workspaces:
+    get:
+      operationId: listWorkspaces
+      summary: List all workspaces
+      responses:
+        "200":
+          description: Workspace list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspaces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Workspace"
+    post:
+      operationId: createWorkspace
+      summary: Create a workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                repoPath:
+                  type: string
+                branch:
+                  type: string
+                metadata:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        "200":
+          description: Created workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspace:
+                    $ref: "#/components/schemas/Workspace"
+
+  /api/workspaces/{id}:
+    get:
+      operationId: getWorkspace
+      summary: Get workspace by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Single workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "404":
+          description: Workspace not found
+    delete:
+      operationId: deleteWorkspace
+      summary: Delete workspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  # ── Skills ──
+  /api/skills:
+    get:
+      operationId: listSkills
+      summary: List skills or get by name
+      parameters:
+        - name: name
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Skills list or single skill
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: reloadSkills
+      summary: Reload skills from disk
+      responses:
+        "200":
+          description: Reloaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reloaded:
+                    type: boolean
+                    const: true
+
+  /api/skills/clone:
+    get:
+      operationId: discoverSkills
+      summary: Discover skills from repo path
+      parameters:
+        - name: repoPath
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Discovered skills
+    post:
+      operationId: cloneSkillRepo
+      summary: Clone a skill repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                skillsDir:
+                  type: string
+      responses:
+        "200":
+          description: Cloned
+
+  /api/skills/upload:
+    post:
+      operationId: uploadSkillZip
+      summary: Upload skill as zip
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Uploaded
+
+  # ── Sessions ──
+  /api/sessions:
+    get:
+      operationId: listSessions
+      summary: List ACP sessions
+      responses:
+        "200":
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      type: object
+
+  # ── ACP ──
+  /api/acp:
+    post:
+      operationId: acpRpc
+      summary: ACP JSON-RPC endpoint
+      description: |
+        Methods: initialize, _providers/list, session/new, session/prompt,
+        session/cancel, session/load, session/set_mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jsonrpc:
+                  type: string
+                  const: "2.0"
+                method:
+                  type: string
+                params:
+                  type: object
+                id:
+                  oneOf:
+                    - type: string
+                    - type: number
+      responses:
+        "200":
+          description: JSON-RPC response
+    get:
+      operationId: acpSse
+      summary: ACP SSE stream
+      parameters:
+        - name: sessionId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream: {}
+
+  # ── MCP ──
+  /api/mcp:
+    post:
+      operationId: mcpPost
+      summary: MCP Streamable HTTP (JSON-RPC)
+      description: |
+        Methods: initialize, tools/list, tools/call, notifications/initialized
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: JSON-RPC response
+    get:
+      operationId: mcpGet
+      summary: MCP SSE stream
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream: {}
+    delete:
+      operationId: mcpDelete
+      summary: Terminate MCP session
+      responses:
+        "200":
+          description: Terminated
+
+  /api/mcp/tools:
+    get:
+      operationId: listMcpTools
+      summary: List MCP tools
+      responses:
+        "200":
+          description: Tools list
+    post:
+      operationId: executeMcpTool
+      summary: Execute an MCP tool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                args:
+                  type: object
+      responses:
+        "200":
+          description: Tool result
+
+  /api/mcp-server:
+    get:
+      operationId: mcpServerStatus
+      summary: Get MCP server status
+      responses:
+        "200":
+          description: Status
+    post:
+      operationId: mcpServerStart
+      summary: Start MCP server
+      responses:
+        "200":
+          description: Started
+    delete:
+      operationId: mcpServerStop
+      summary: Stop MCP server
+      responses:
+        "200":
+          description: Stopped
+
+  /api/test-mcp:
+    get:
+      operationId: testMcp
+      summary: Test MCP config
+      responses:
+        "200":
+          description: Config
+
+  # ── Clone ──
+  /api/clone:
+    get:
+      operationId: listClonedRepos
+      summary: List cloned repositories
+      responses:
+        "200":
+          description: Repo list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repos:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: cloneRepo
+      summary: Clone a GitHub repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+      responses:
+        "200":
+          description: Cloned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  path:
+                    type: string
+                  name:
+                    type: string
+                  branch:
+                    type: string
+                  branches:
+                    type: array
+                    items:
+                      type: string
+                  existed:
+                    type: boolean
+    patch:
+      operationId: switchBranch
+      summary: Switch branch on cloned repo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repoPath, branch]
+              properties:
+                repoPath:
+                  type: string
+                branch:
+                  type: string
+      responses:
+        "200":
+          description: Switched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  branch:
+                    type: string
+                  branches:
+                    type: array
+                    items:
+                      type: string
+
+  /api/clone/progress:
+    post:
+      operationId: cloneWithProgress
+      summary: Clone with SSE progress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+      responses:
+        "200":
+          description: SSE progress stream
+          content:
+            text/event-stream: {}
+
+  /api/clone/branches:
+    get:
+      operationId: getBranches
+      summary: Get branch info
+      parameters:
+        - name: repoPath
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Branch info
+    post:
+      operationId: fetchBranches
+      summary: Fetch remote branches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                repoPath:
+                  type: string
+      responses:
+        "200":
+          description: Fetched
+    patch:
+      operationId: checkoutBranch
+      summary: Checkout branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                repoPath:
+                  type: string
+                branch:
+                  type: string
+                pull:
+                  type: boolean
+      responses:
+        "200":
+          description: Checked out
+
+  # ── A2A ──
+  /api/a2a/sessions:
+    get:
+      operationId: listA2aSessions
+      summary: List A2A sessions
+      responses:
+        "200":
+          description: Sessions
+
+  /api/a2a/card:
+    get:
+      operationId: getAgentCard
+      summary: A2A agent card
+      responses:
+        "200":
+          description: Agent card
+
+  /api/a2a/rpc:
+    post:
+      operationId: a2aRpc
+      summary: A2A JSON-RPC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: JSON-RPC response
+    get:
+      operationId: a2aRpcSse
+      summary: A2A SSE stream
+      parameters:
+        - name: sessionId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream: {}
+
+  # ── Health (Rust only — recommended for Next.js) ──
+  /api/health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy

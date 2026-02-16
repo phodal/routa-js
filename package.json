@@ -19,7 +19,15 @@
     "db:studio": "drizzle-kit studio",
     "db:sqlite:generate": "drizzle-kit generate --config=drizzle-sqlite.config.ts",
     "db:sqlite:migrate": "drizzle-kit migrate --config=drizzle-sqlite.config.ts",
-    "db:sqlite:push": "drizzle-kit push --config=drizzle-sqlite.config.ts"
+    "db:sqlite:push": "drizzle-kit push --config=drizzle-sqlite.config.ts",
+    "api:check": "npx tsx scripts/check-api-parity.ts",
+    "api:check:json": "npx tsx scripts/check-api-parity.ts --json",
+    "api:check:fix": "npx tsx scripts/check-api-parity.ts --fix-hint",
+    "api:test": "npx tsx tests/api-contract/run.ts",
+    "api:test:nextjs": "BASE_URL=http://localhost:3000 npx tsx tests/api-contract/run.ts",
+    "api:test:rust": "BASE_URL=http://localhost:3210 npx tsx tests/api-contract/run.ts",
+    "api:validate": "./scripts/validate-api-parity.sh",
+    "api:validate:full": "./scripts/validate-api-parity.sh --runtime"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.10",
