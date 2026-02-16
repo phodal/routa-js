@@ -11,6 +11,7 @@ pub mod api;
 pub mod db;
 pub mod error;
 pub mod git;
+pub mod shell_env;
 pub mod mcp;
 pub mod models;
 pub mod skills;
@@ -59,6 +60,11 @@ pub async fn start_server(config: ServerConfig) -> Result<SocketAddr, String> {
                 .unwrap_or_else(|_| "routa_desktop=info,tower_http=info".into()),
         )
         .init();
+
+    // Resolve and set the full shell PATH early so all child processes
+    // (agent CLIs, git, etc.) can be found even when launched from Finder.
+    let full_path = shell_env::full_path();
+    std::env::set_var("PATH", full_path);
 
     tracing::info!(
         "Starting Routa backend server on {}:{}",

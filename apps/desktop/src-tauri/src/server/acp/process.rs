@@ -54,9 +54,15 @@ impl AcpProcess {
             cwd,
         );
 
-        let mut child = tokio::process::Command::new(command)
+        // Resolve the actual binary path using the full shell PATH
+        // (macOS GUI apps have a minimal PATH that won't find user CLI tools)
+        let resolved_command = crate::server::shell_env::which(command)
+            .unwrap_or_else(|| command.to_string());
+
+        let mut child = tokio::process::Command::new(&resolved_command)
             .args(args)
             .current_dir(cwd)
+            .env("PATH", crate::server::shell_env::full_path())
             .env("NODE_NO_READLINE", "1")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -64,8 +70,8 @@ impl AcpProcess {
             .spawn()
             .map_err(|e| {
                 format!(
-                    "Failed to spawn '{}': {}. Is it installed and in PATH?",
-                    command, e
+                    "Failed to spawn '{}' (resolved: '{}'): {}. Is it installed and in PATH?",
+                    command, resolved_command, e
                 )
             })?;
 

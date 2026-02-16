@@ -51,20 +51,13 @@ async fn acp_rpc(
         }
 
         "_providers/list" => {
+            use crate::server::shell_env;
+
             let presets = acp::get_presets();
 
             let mut providers: Vec<serde_json::Value> = Vec::new();
             for preset in &presets {
-                let cmd = preset.command.clone();
-                let installed = tokio::task::spawn_blocking(move || {
-                    std::process::Command::new("which")
-                        .arg(&cmd)
-                        .output()
-                        .map(|o| o.status.success())
-                        .unwrap_or(false)
-                })
-                .await
-                .unwrap_or(false);
+                let installed = shell_env::which(&preset.command).is_some();
 
                 providers.push(serde_json::json!({
                     "id": preset.name,

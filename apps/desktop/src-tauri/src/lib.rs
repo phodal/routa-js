@@ -311,9 +311,8 @@ pub fn run() {
             log_frontend,
         ])
         .setup(|app| {
-            #[cfg(debug_assertions)]
-            {
-                let window = app.get_webview_window("main").unwrap();
+            // Always open devtools (in both debug and release builds)
+            if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();
             }
 
@@ -327,17 +326,6 @@ pub fn run() {
             let port = api_port();
             let api_url = std::env::var("ROUTA_DESKTOP_API_URL")
                 .unwrap_or_else(|_| format!("http://{}:{}", api_host, port));
-
-            #[cfg(not(debug_assertions))]
-            {
-                let force_debug =
-                    std::env::var("ROUTA_TAURI_DEBUG").ok().as_deref() == Some("1");
-                if force_debug {
-                    if let Some(window) = app.get_webview_window("main") {
-                        window.open_devtools();
-                    }
-                }
-            }
 
             match api_mode.as_str() {
                 "off" => {

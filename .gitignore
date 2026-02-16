@@ -22,6 +22,7 @@ out
 apps/desktop/src-tauri/target/
 apps/desktop/app-icon.png
 apps/desktop/src-tauri/bundled/
+apps/desktop/src-tauri/frontend/
 **/gen/**
 
 # Misc
@@ -94,3 +95,4 @@ apps/desktop/src-tauri/icons/*
 *.db-journal
 *.db-wal
 **/chunks/
+**/_next/static/*

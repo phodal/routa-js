@@ -33,16 +33,7 @@ async fn test_mcp() -> Json<serde_json::Value> {
             _ => continue,
         };
 
-        let cmd_owned = cmd.to_string();
-        let installed = tokio::task::spawn_blocking(move || {
-            std::process::Command::new("which")
-                .arg(&cmd_owned)
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
-        })
-        .await
-        .unwrap_or(false);
+        let installed = crate::server::shell_env::which(cmd).is_some();
 
         results.insert(
             provider.to_string(),
