@@ -17,6 +17,12 @@ import {
   AcpNewSessionResult,
   AcpProviderInfo,
 } from "../acp-client";
+import {
+  desktopStaticApiError,
+  isDesktopStaticRuntime,
+  logRuntime,
+  toErrorMessage,
+} from "../utils/diagnostics";
 
 export interface UseAcpState {
   connected: boolean;
@@ -68,6 +74,9 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
   /** Connect (initialize only). Session creation is explicit. */
   const connect = useCallback(async () => {
     try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("ACP");
+      }
       setState((s) => ({ ...s, loading: true, error: null }));
 
       const client = new BrowserAcpClient(baseUrl);
@@ -91,10 +100,11 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         loading: false,
       }));
     } catch (err) {
+      logRuntime("error", "useAcp.connect", "Failed to connect ACP client", err);
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : "Connection failed",
+        error: toErrorMessage(err) || "Connection failed",
       }));
     }
   }, [baseUrl]);
@@ -109,6 +119,9 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       const client = clientRef.current;
       if (!client) return null;
       try {
+        if (isDesktopStaticRuntime()) {
+          throw desktopStaticApiError("ACP");
+        }
         setState((s) => ({ ...s, loading: true, error: null, updates: [] }));
         const activeProvider = provider ?? state.selectedProvider;
         const result = await client.newSession({
@@ -127,11 +140,11 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         }));
         return result;
       } catch (err) {
+        logRuntime("error", "useAcp.createSession", "Failed to create ACP session", err);
         setState((s) => ({
           ...s,
           loading: false,
-          error:
-            err instanceof Error ? err.message : "Session creation failed",
+          error: toErrorMessage(err) || "Session creation failed",
         }));
         return null;
       }
@@ -151,9 +164,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     try {
       await client.setMode(sessionId, modeId);
     } catch (err) {
+      logRuntime("warn", "useAcp.setMode", "Failed to set mode", err);
       setState((s) => ({
         ...s,
-        error: err instanceof Error ? err.message : "Failed to set mode",
+        error: toErrorMessage(err) || "Failed to set mode",
       }));
     }
   }, []);
@@ -177,10 +191,11 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       await client.prompt(sessionId, text);
       setState((s) => ({ ...s, loading: false }));
     } catch (err) {
+      logRuntime("error", "useAcp.prompt", "Failed to send prompt", err);
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : "Prompt failed",
+        error: toErrorMessage(err) || "Prompt failed",
       }));
     }
   }, []);

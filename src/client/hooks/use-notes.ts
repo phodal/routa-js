@@ -9,6 +9,12 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  desktopStaticApiError,
+  isDesktopStaticRuntime,
+  logRuntime,
+  toErrorMessage,
+} from "../utils/diagnostics";
 
 export interface NoteData {
   id: string;
@@ -64,6 +70,10 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
   // ─── Fetch Notes ──────────────────────────────────────────────────
 
   const fetchNotes = useCallback(async () => {
+    if (isDesktopStaticRuntime()) {
+      setError(desktopStaticApiError("Notes").message);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -72,7 +82,8 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
       const data = await res.json();
       setNotes(data.notes ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch notes");
+      logRuntime("warn", "useNotes.fetchNotes", "Failed to fetch notes", err);
+      setError(toErrorMessage(err) || "Failed to fetch notes");
     } finally {
       setLoading(false);
     }
@@ -80,6 +91,10 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
 
   const fetchNote = useCallback(
     async (noteId: string): Promise<NoteData | null> => {
+      if (isDesktopStaticRuntime()) {
+        setError(desktopStaticApiError("Notes").message);
+        return null;
+      }
       try {
         const res = await fetch(
           `/api/notes?workspaceId=${encodeURIComponent(workspaceId)}&noteId=${encodeURIComponent(noteId)}`
@@ -104,6 +119,10 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
       type?: "spec" | "task" | "general";
       metadata?: Record<string, unknown>;
     }): Promise<NoteData | null> => {
+      if (isDesktopStaticRuntime()) {
+        setError(desktopStaticApiError("Notes").message);
+        return null;
+      }
       try {
         const res = await fetch("/api/notes", {
           method: "POST",
@@ -114,7 +133,8 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
         const data = await res.json();
         return data.note ?? null;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to create note");
+        logRuntime("warn", "useNotes.createNote", "Failed to create note", err);
+        setError(toErrorMessage(err) || "Failed to create note");
         return null;
       }
     },
@@ -126,6 +146,10 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
       noteId: string,
       update: { title?: string; content?: string; metadata?: Record<string, unknown> }
     ): Promise<NoteData | null> => {
+      if (isDesktopStaticRuntime()) {
+        setError(desktopStaticApiError("Notes").message);
+        return null;
+      }
       try {
         const res = await fetch("/api/notes", {
           method: "POST",
@@ -136,7 +160,8 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
         const data = await res.json();
         return data.note ?? null;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update note");
+        logRuntime("warn", "useNotes.updateNote", "Failed to update note", err);
+        setError(toErrorMessage(err) || "Failed to update note");
         return null;
       }
     },
@@ -145,6 +170,10 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
 
   const deleteNote = useCallback(
     async (noteId: string): Promise<void> => {
+      if (isDesktopStaticRuntime()) {
+        setError(desktopStaticApiError("Notes").message);
+        return;
+      }
       try {
         const res = await fetch(
           `/api/notes?noteId=${encodeURIComponent(noteId)}&workspaceId=${encodeURIComponent(workspaceId)}`,
@@ -152,7 +181,8 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
         );
         if (!res.ok) throw new Error(`Failed to delete note: ${res.status}`);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete note");
+        logRuntime("warn", "useNotes.deleteNote", "Failed to delete note", err);
+        setError(toErrorMessage(err) || "Failed to delete note");
       }
     },
     [workspaceId]
@@ -161,6 +191,11 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
   // ─── SSE Subscription ────────────────────────────────────────────
 
   const connectSSE = useCallback(() => {
+    if (isDesktopStaticRuntime()) {
+      setConnected(false);
+      setError(desktopStaticApiError("Notes SSE").message);
+      return;
+    }
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
@@ -209,6 +244,7 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
     };
 
     es.onerror = () => {
+      logRuntime("warn", "useNotes.connectSSE", "SSE connection error");
       setConnected(false);
       es.close();
       eventSourceRef.current = null;

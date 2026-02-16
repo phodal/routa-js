@@ -85,3 +85,5 @@ logs
 # pnpm-lock.yaml
 test-results
 .routa
+apps/desktop/src-tauri/icons/*
+.next-desktop

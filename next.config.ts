@@ -1,8 +1,12 @@
 import type { NextConfig } from "next";
 
 const isStaticBuild = process.env.ROUTA_BUILD_STATIC === "1";
+const isDesktopServerBuild = process.env.ROUTA_DESKTOP_SERVER_BUILD === "1";
 
 const nextConfig: NextConfig = {
+  typescript: {
+    tsconfigPath: isDesktopServerBuild ? "tsconfig.desktop.json" : "tsconfig.json",
+  },
   serverExternalPackages: [
     "@modelcontextprotocol/sdk",
     "@agentclientprotocol/sdk",
@@ -11,6 +15,7 @@ const nextConfig: NextConfig = {
     "utf-8-validate",
     "better-sqlite3",
   ],
+  ...(isDesktopServerBuild ? { distDir: ".next-desktop" } : {}),
   ...(isStaticBuild
     ? {
         output: "export",

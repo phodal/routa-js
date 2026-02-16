@@ -617,7 +617,7 @@ class TauriEnv implements IPlatformEnv {
       const envKeys = ["HOME", "USERPROFILE", "PATH", "DATABASE_URL", "NODE_ENV"];
       for (const key of envKeys) {
         try {
-          const value = await core.invoke("get_env", { name: key });
+          const value = await core.invoke("get_env", { key });
           if (value) this._envCache.set(key, value as string);
         } catch {
           // Key not available

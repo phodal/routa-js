@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "cd ../.. && npm run dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "cd ../.. && npm run build:static",
+    "beforeBuildCommand": "cd ../.. && npm run build:desktop",
     "frontendDist": "../../../out"
   },
   "app": {
@@ -39,50 +39,10 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": [
-        {
-          "name": "git",
-          "cmd": "git",
-          "args": true
-        },
-        {
-          "name": "opencode",
-          "cmd": "opencode",
-          "args": true
-        },
-        {
-          "name": "codex-acp",
-          "cmd": "codex-acp",
-          "args": true
-        },
-        {
-          "name": "gemini",
-          "cmd": "gemini",
-          "args": true
-        },
-        {
-          "name": "claude",
-          "cmd": "claude",
-          "args": true
-        },
-        {
-          "name": "copilot",
-          "cmd": "copilot",
-          "args": true
-        }
-      ]
-    },
-    "fs": {
-      "scope": {
-        "allow": ["$HOME/**", "$APPDATA/**", "$DESKTOP/**", "$DOCUMENT/**", "$DOWNLOAD/**"],
-        "deny": []
-      }
+      "open": true
     },
     "sql": {
-      "preload": {
-        "db": "sqlite:routa.db"
-      }
+      "preload": ["sqlite:routa.db"]
     }
   }
 }

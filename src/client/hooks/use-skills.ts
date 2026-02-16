@@ -18,6 +18,12 @@ import {
   SkillContent,
   CloneSkillsResult,
 } from "../skill-client";
+import {
+  desktopStaticApiError,
+  isDesktopStaticRuntime,
+  logRuntime,
+  toErrorMessage,
+} from "../utils/diagnostics";
 
 export interface UseSkillsState {
   skills: SkillSummary[];
@@ -55,29 +61,37 @@ export function useSkills(
 
   const refresh = useCallback(async () => {
     try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("Skills");
+      }
       setState((s) => ({ ...s, loading: true, error: null }));
       const skills = await clientRef.current.list();
       setState((s) => ({ ...s, skills, loading: false }));
     } catch (err) {
+      logRuntime("warn", "useSkills.refresh", "Failed to refresh skills", err);
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : "Failed to load skills",
+        error: toErrorMessage(err) || "Failed to load skills",
       }));
     }
   }, []);
 
   const loadSkill = useCallback(async (name: string, repoPath?: string) => {
     try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("Skills");
+      }
       setState((s) => ({ ...s, loading: true, error: null }));
       const skill = await clientRef.current.load(name, repoPath);
       setState((s) => ({ ...s, loadedSkill: skill, loading: false }));
       return skill;
     } catch (err) {
+      logRuntime("warn", "useSkills.loadSkill", `Failed to load skill: ${name}`, err);
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : "Failed to load skill",
+        error: toErrorMessage(err) || "Failed to load skill",
       }));
       return null;
     }
@@ -85,21 +99,28 @@ export function useSkills(
 
   const reloadFromDisk = useCallback(async () => {
     try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("Skills");
+      }
       setState((s) => ({ ...s, loading: true, error: null }));
       await clientRef.current.reload();
       const skills = await clientRef.current.list();
       setState((s) => ({ ...s, skills, loading: false }));
     } catch (err) {
+      logRuntime("warn", "useSkills.reloadFromDisk", "Failed to reload skills", err);
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : "Failed to reload skills",
+        error: toErrorMessage(err) || "Failed to reload skills",
       }));
     }
   }, []);
 
   const cloneFromGithub = useCallback(async (url: string) => {
     try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("Skills");
+      }
       setState((s) => ({ ...s, cloning: true, error: null }));
       const result = await clientRef.current.cloneFromGithub(url);
 
@@ -117,8 +138,8 @@ export function useSkills(
 
       return result;
     } catch (err) {
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to clone skills";
+      const errorMsg = toErrorMessage(err) || "Failed to clone skills";
+      logRuntime("error", "useSkills.cloneFromGithub", `Failed to clone skills from ${url}`, err);
       setState((s) => ({
         ...s,
         cloning: false,
@@ -137,9 +158,13 @@ export function useSkills(
 
   const loadRepoSkills = useCallback(async (repoPath: string) => {
     try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("Skills");
+      }
       const repoSkills = await clientRef.current.listFromRepo(repoPath);
       setState((s) => ({ ...s, repoSkills }));
-    } catch {
+    } catch (err) {
+      logRuntime("warn", "useSkills.loadRepoSkills", `Failed to load repo skills: ${repoPath}`, err);
       // Silently fail - repo may not have skills
       setState((s) => ({ ...s, repoSkills: [] }));
     }
