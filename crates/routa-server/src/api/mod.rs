@@ -1,4 +1,5 @@
 pub mod a2a;
+pub mod acp_registry;
 pub mod acp_routes;
 pub mod agents;
 pub mod clone;
@@ -32,6 +33,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/skills/upload", skills_upload::router())
         .nest("/api/sessions", sessions::router())
         .nest("/api/acp", acp_routes::router())
+        .nest("/api/acp", acp_registry::router())
         .nest("/api/mcp", mcp_routes::router())
         .nest("/api/mcp/tools", mcp_tools::router())
         .nest("/api/mcp-server", mcp_server_mgmt::router())

@@ -4009,6 +4009,7 @@ dependencies = [
  "dirs 5.0.1",
  "glob",
  "regex",
+ "reqwest 0.12.28",
  "rmcp",
  "rusqlite",
  "schemars 1.2.1",

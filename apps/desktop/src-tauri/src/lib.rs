@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+use tauri::menu::{Menu, MenuItem, Submenu};
 use tauri::Manager;
 
 // Re-export routa_server for external use
@@ -312,6 +313,100 @@ pub fn run() {
             log_frontend,
         ])
         .setup(|app| {
+            // ─── Build Application Menu ─────────────────────────────────────
+            let app_handle = app.handle();
+
+            // Create menu items
+            let install_agents = MenuItem::with_id(
+                app_handle,
+                "install_agents",
+                "Install Agents...",
+                true,
+                Some("CmdOrCtrl+Shift+I"),
+            )?;
+
+            let mcp_tools = MenuItem::with_id(
+                app_handle,
+                "mcp_tools",
+                "MCP Tools",
+                true,
+                Some("CmdOrCtrl+Shift+M"),
+            )?;
+
+            let reload = MenuItem::with_id(
+                app_handle,
+                "reload",
+                "Reload",
+                true,
+                Some("CmdOrCtrl+R"),
+            )?;
+
+            let quit = MenuItem::with_id(
+                app_handle,
+                "quit",
+                "Quit",
+                true,
+                Some("CmdOrCtrl+Q"),
+            )?;
+
+            // Build Tools submenu
+            let tools_submenu = Submenu::with_items(
+                app_handle,
+                "Tools",
+                true,
+                &[&install_agents, &mcp_tools],
+            )?;
+
+            // Build File submenu
+            let file_submenu = Submenu::with_items(
+                app_handle,
+                "File",
+                true,
+                &[&reload, &quit],
+            )?;
+
+            // Build main menu
+            let menu = Menu::with_items(app_handle, &[&file_submenu, &tools_submenu])?;
+
+            // Set the menu on the main window
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_menu(menu)?;
+            }
+
+            // ─── Handle Menu Events ─────────────────────────────────────────
+            app.on_menu_event(move |app_handle, event| {
+                match event.id().as_ref() {
+                    "install_agents" => {
+                        // Navigate to the agent installation page
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let port = api_port();
+                            let url = format!("http://127.0.0.1:{}/settings/agents", port);
+                            let js = format!("window.location.href = '{}';", url);
+                            let _ = window.eval(&js);
+                            println!("[menu] Navigating to Install Agents: {}", url);
+                        }
+                    }
+                    "mcp_tools" => {
+                        // Navigate to MCP tools page
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let port = api_port();
+                            let url = format!("http://127.0.0.1:{}/mcp-tools", port);
+                            let js = format!("window.location.href = '{}';", url);
+                            let _ = window.eval(&js);
+                            println!("[menu] Navigating to MCP Tools: {}", url);
+                        }
+                    }
+                    "reload" => {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.eval("window.location.reload();");
+                        }
+                    }
+                    "quit" => {
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                }
+            });
             // Always open devtools (in both debug and release builds)
             if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();
