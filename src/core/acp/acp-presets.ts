@@ -5,10 +5,27 @@
  * Each preset defines how to spawn and communicate with a specific ACP-compliant
  * CLI tool (OpenCode, Gemini, Codex, Copilot, Auggie, etc.).
  *
+ * Supports two modes:
+ * 1. Static presets - hardcoded agent configurations
+ * 2. Registry-based - dynamically loaded from ACP Registry
+ *
  * Ported from AcpAgentPresets.kt with TypeScript adaptations.
  */
 
 import { which } from "./utils";
+import {
+  type RegistryAgent,
+  fetchRegistry,
+  getRegistryAgent,
+  detectPlatformTarget,
+} from "./acp-registry";
+import { type DistributionType, buildAgentCommand } from "./acp-installer";
+
+/** Source of the preset configuration */
+export type PresetSource = "static" | "registry";
+
+/** Distribution type for registry-sourced presets */
+export type PresetDistributionType = DistributionType;
 
 export interface AcpAgentPreset {
   /** Unique identifier for this preset (e.g. "opencode", "gemini") */
@@ -29,6 +46,20 @@ export interface AcpAgentPreset {
    * Non-standard providers are excluded from the standard AcpProcess flow.
    */
   nonStandardApi?: boolean;
+  /** Source of this preset (static hardcoded or from registry) */
+  source?: PresetSource;
+  /** Distribution type when from registry */
+  distributionType?: PresetDistributionType;
+  /** Agent version (for registry agents) */
+  version?: string;
+  /** Icon URL (for registry agents) */
+  icon?: string;
+  /** Additional environment variables */
+  env?: Record<string, string>;
+  /** Repository URL */
+  repository?: string;
+  /** License */
+  license?: string;
 }
 
 /**
@@ -162,4 +193,157 @@ export async function detectInstalledPresets(): Promise<AcpAgentPreset[]> {
   }
 
   return results;
+}
+
+// ─── Registry-Based Presets ─────────────────────────────────────────────────
+
+/**
+ * Convert a registry agent to an AcpAgentPreset.
+ * Uses the best available distribution type (npx > uvx > binary).
+ */
+export function registryAgentToPreset(
+  agent: RegistryAgent,
+  command: string,
+  args: string[],
+  distType: DistributionType,
+  env?: Record<string, string>
+): AcpAgentPreset {
+  return {
+    id: agent.id,
+    name: agent.name,
+    command,
+    args,
+    description: agent.description,
+    source: "registry",
+    distributionType: distType,
+    version: agent.version,
+    icon: agent.icon,
+    env,
+    repository: agent.repository,
+    license: agent.license,
+    // Registry agents use standard ACP API unless explicitly marked
+    nonStandardApi: false,
+  };
+}
+
+/**
+ * Fetch all presets from the ACP Registry.
+ * Only returns presets that can be run on the current platform.
+ */
+export async function fetchRegistryPresets(): Promise<AcpAgentPreset[]> {
+  const registry = await fetchRegistry();
+  const presets: AcpAgentPreset[] = [];
+
+  for (const agent of registry.agents) {
+    const cmdInfo = await buildAgentCommand(agent.id);
+    if (cmdInfo) {
+      // Determine distribution type
+      let distType: DistributionType = "npx";
+      if (cmdInfo.command === "uvx") distType = "uvx";
+      else if (!cmdInfo.command.includes("npx") && !cmdInfo.command.includes("uvx")) {
+        distType = "binary";
+      }
+
+      presets.push(
+        registryAgentToPreset(agent, cmdInfo.command, cmdInfo.args, distType, cmdInfo.env)
+      );
+    }
+  }
+
+  return presets;
+}
+
+/**
+ * Get a preset from the registry by ID.
+ * Returns null if not found or not available on current platform.
+ */
+export async function getRegistryPresetById(id: string): Promise<AcpAgentPreset | null> {
+  const agent = await getRegistryAgent(id);
+  if (!agent) return null;
+
+  const cmdInfo = await buildAgentCommand(id);
+  if (!cmdInfo) return null;
+
+  let distType: DistributionType = "npx";
+  if (cmdInfo.command === "uvx") distType = "uvx";
+  else if (!cmdInfo.command.includes("npx") && !cmdInfo.command.includes("uvx")) {
+    distType = "binary";
+  }
+
+  return registryAgentToPreset(agent, cmdInfo.command, cmdInfo.args, distType, cmdInfo.env);
+}
+
+/**
+ * Get all available presets (static + registry).
+ * Prefers static presets when IDs conflict.
+ */
+export async function getAllAvailablePresets(): Promise<AcpAgentPreset[]> {
+  const staticPresets: AcpAgentPreset[] = [...ACP_AGENT_PRESETS].map((p) => ({
+    ...p,
+    source: "static" as PresetSource,
+  }));
+
+  const staticIds = new Set(staticPresets.map((p) => p.id));
+
+  try {
+    const registryPresets = await fetchRegistryPresets();
+    // Add registry presets that don't conflict with static ones
+    for (const preset of registryPresets) {
+      if (!staticIds.has(preset.id)) {
+        staticPresets.push(preset);
+      }
+    }
+  } catch (error) {
+    console.warn("[AcpPresets] Failed to fetch registry presets:", error);
+    // Continue with static presets only
+  }
+
+  return staticPresets;
+}
+
+/**
+ * Get preset by ID, checking both static and registry sources.
+ * Static presets take precedence.
+ */
+export async function getPresetByIdWithRegistry(
+  id: string
+): Promise<AcpAgentPreset | undefined> {
+  // Check static presets first
+  const staticPreset = getPresetById(id);
+  if (staticPreset) {
+    return { ...staticPreset, source: "static" };
+  }
+
+  // Fall back to registry
+  const registryPreset = await getRegistryPresetById(id);
+  return registryPreset ?? undefined;
+}
+
+/**
+ * Sync static presets with registry data.
+ * Updates version, icon, and other metadata from registry.
+ */
+export async function syncPresetsWithRegistry(): Promise<AcpAgentPreset[]> {
+  const registry = await fetchRegistry();
+  const registryMap = new Map(registry.agents.map((a) => [a.id, a]));
+
+  const synced: AcpAgentPreset[] = [];
+
+  for (const preset of ACP_AGENT_PRESETS) {
+    const registryAgent = registryMap.get(preset.id);
+    if (registryAgent) {
+      synced.push({
+        ...preset,
+        source: "static",
+        version: registryAgent.version,
+        icon: registryAgent.icon,
+        repository: registryAgent.repository,
+        license: registryAgent.license,
+      });
+    } else {
+      synced.push({ ...preset, source: "static" });
+    }
+  }
+
+  return synced;
 }
