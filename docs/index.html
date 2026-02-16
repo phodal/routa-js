@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Routa JS - Multi-Agent Coordinator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .subtitle {
+            font-size: 1.5rem;
+            color: #666;
+            margin-bottom: 2rem;
+        }
+        
+        .description {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            line-height: 1.8;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+        
+        .feature {
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .feature h3 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .links {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin: 2rem 0;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .architecture {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+        
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        
+        .docs-list {
+            list-style: none;
+            margin: 2rem 0;
+        }
+        
+        .docs-list li {
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        
+        .docs-list a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .docs-list a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Routa JS</h1>
+        <p class="subtitle">Multi-Agent Coordinator (Browser + Server)</p>
+        
+        <p class="description">
+            TypeScript/Next.js implementation of the Routa multi-agent coordination system with 
+            <strong>MCP + ACP + A2A</strong> protocol support. Build and coordinate intelligent agents 
+            that work together seamlessly.
+        </p>
+        
+        <div class="links">
+            <a href="https://github.com/phodal/routa-js" class="btn" target="_blank">
+                📦 View on GitHub
+            </a>
+            <a href="agent-mcp/MCP_SETUP_GUIDE.html" class="btn btn-secondary">
+                📖 MCP Setup Guide
+            </a>
+            <a href="agent-mcp/MCP_IMPLEMENTATION.html" class="btn btn-secondary">
+                🔧 MCP Implementation
+            </a>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>🤖 Multi-Agent System</h3>
+                <p>Coordinate multiple AI agents with different roles: ROUTA (coordinator), CRAFTER (implementor), and GATE (verifier).</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🔌 Protocol Support</h3>
+                <p>Built-in support for MCP (Model Context Protocol), ACP (Agent Client Protocol), and A2A (Agent-to-Agent) communication.</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🎯 Skill Discovery</h3>
+                <p>Automatically discover and load agent skills from SKILL.md files. OpenCode compatible skill system.</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🌐 Web Interface</h3>
+                <p>Modern React-based UI for managing agents, viewing skills, and interacting with your agent system.</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🔄 Real-time Communication</h3>
+                <p>WebSocket and SSE support for real-time agent communication and status updates.</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🛠️ 12 Coordination Tools</h3>
+                <p>Rich set of tools for agent creation, task delegation, messaging, and event subscription.</p>
+            </div>
+        </div>
+        
+        <div class="architecture">
+            <h2>Architecture</h2>
+            <pre>
+┌─────────────────────────────────────────────────────────────┐
+│  Browser (React)                                            │
+│  ├─ ChatPanel      → ACP JSON-RPC → /api/acp               │
+│  ├─ AgentPanel     → REST         → /api/agents             │
+│  ├─ SkillPanel     → REST         → /api/skills             │
+│  └─ BrowserAcpClient + SkillClient (SSE + HTTP)             │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ HTTP
+┌──────────────────────▼──────────────────────────────────────┐
+│  Next.js Server                                             │
+│  ├─ /api/mcp    → MCP Server (SSE + JSON-RPC)               │
+│  ├─ /api/acp    → ACP Agent (JSON-RPC + SSE streaming)      │
+│  ├─ /api/agents → REST API for agent management             │
+│  └─ /api/skills → REST API for skill discovery              │
+└─────────────────────────────────────────────────────────────┘
+           │                         │
+           │ MCP (SSE/WS)            │ ACP (stdio/JSON-RPC)
+           ▼                         ▼
+    Claude Code / MCP         OpenCode / Codex
+    Inspector / etc.          / external agents
+            </pre>
+        </div>
+        
+        <h2>📚 Documentation</h2>
+        <ul class="docs-list">
+            <li>
+                <a href="agent-mcp/MCP_SETUP_GUIDE.html">MCP Setup Guide</a> - 
+                Configure MCP for different ACP providers (Claude Code, Codex, OpenCode)
+            </li>
+            <li>
+                <a href="agent-mcp/MCP_IMPLEMENTATION.html">MCP Implementation Guide</a> - 
+                Detailed implementation details and API reference
+            </li>
+        </ul>
+        
+        <h2>🚀 Quick Start</h2>
+        <pre>
+# Clone the repository
+git clone https://github.com/phodal/routa-js.git
+
+# Install dependencies
+cd routa-js
+npm install --legacy-peer-deps
+
+# Run development server
+npm run dev
+
+# Open http://localhost:3000
+        </pre>
+        
+        <h2>Agent Roles</h2>
+        <div class="features">
+            <div class="feature">
+                <h3>ROUTA</h3>
+                <p>Coordinator - plans, delegates, orchestrates tasks across the system</p>
+            </div>
+            <div class="feature">
+                <h3>CRAFTER</h3>
+                <p>Implementor - writes code, makes changes, builds features</p>
+            </div>
+            <div class="feature">
+                <h3>GATE</h3>
+                <p>Verifier - reviews and validates work, ensures quality</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

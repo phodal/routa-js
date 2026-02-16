@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Setup Guide - Routa JS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 3rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 2rem;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 1.5rem;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        
+        h2 {
+            color: #764ba2;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        h3 {
+            color: #667eea;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: #666;
+            font-style: italic;
+        }
+        
+        a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        ul, ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        li {
+            margin: 0.5rem 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.75rem;
+            text-align: left;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../index.html" class="back-link">← Back to Home</a>
+        <h1>MCP Setup Guide for ACP Providers</h1>
+<p>This guide explains how to configure MCP (Model Context Protocol) for different ACP providers (Claude Code, Codex, OpenCode) to connect to the Routa MCP server.</p>
+<h2>Overview</h2>
+<p>The Routa MCP server exposes coordination tools via HTTP at <code>/api/mcp</code>. AI providers can connect to this server to access tools like:</p>
+<ul>
+<li><code>list_agents</code> - List all agents in the workspace</li>
+<li><code>create_agent</code> - Create new agents (ROUTA/CRAFTER/GATE)</li>
+<li><code>delegate_task</code> - Assign tasks to agents</li>
+<li><code>send_message_to_agent</code> - Inter-agent communication</li>
+<li><code>report_to_parent</code> - Submit completion reports</li>
+<li>And more...</li>
+</ul>
+<h2>Architecture</h2>
+<pre><code>┌─────────────────┐         ┌──────────────────┐         ┌─────────────────┐
+│  AI Provider    │         │  Routa MCP       │         │  Routa System   │
+│  (Claude/Codex) │ ──MCP──&gt;│  Server          │ ──────&gt; │  (AgentTools)   │
+│                 │         │  /api/mcp        │         │                 │
+└─────────────────┘         └──────────────────┘         └─────────────────┘
+</code></pre>
+<h2>Quick Start</h2>
+<h3>1. Basic Usage</h3>
+<pre><code class="language-typescript">import { buildConfigFromPreset } from &#39;./opencode-process&#39;;
+import { setupMcpForCodex } from &#39;./mcp-setup&#39;;
+
+// Setup MCP for Codex
+const mcpConfigs = setupMcpForCodex({
+  routaServerUrl: &#39;http://localhost:3000&#39;,
+  workspaceId: &#39;my-workspace&#39;
+});
+
+// Build config with MCP enabled
+const config = buildConfigFromPreset(
+  &#39;codex&#39;,
+  &#39;/path/to/workspace&#39;,
+  [],      // extra args
+  {},      // extra env
+  mcpConfigs  // MCP configs
+);
+
+// Start the process
+const process = new AcpProcess(config, (notification) =&gt; {
+  console.log(&#39;Notification:&#39;, notification);
+});
+
+await process.start();
+</code></pre>
+<h3>2. Claude Code Example</h3>
+<pre><code class="language-typescript">import { ClaudeCodeProcess } from &#39;./claude-code-process&#39;;
+import { setupMcpForClaudeCode } from &#39;./mcp-setup&#39;;
+
+const mcpConfigs = setupMcpForClaudeCode({
+  routaServerUrl: &#39;http://localhost:3000&#39;,
+  workspaceId: &#39;my-workspace&#39;
+});
+
+const config = {
+  preset: getPresetById(&#39;claude&#39;),
+  command: &#39;claude&#39;,
+  cwd: &#39;/path/to/workspace&#39;,
+  displayName: &#39;Claude Code&#39;,
+  mcpConfigs,  // MCP configs
+};
+
+const process = new ClaudeCodeProcess(config, (notification) =&gt; {
+  console.log(&#39;Notification:&#39;, notification);
+});
+
+await process.start();
+</code></pre>
+<h3>3. OpenCode Example</h3>
+<pre><code class="language-typescript">import { buildConfigFromPreset } from &#39;./opencode-process&#39;;
+import { setupMcpForOpenCode } from &#39;./mcp-setup&#39;;
+
+const mcpConfigs = setupMcpForOpenCode({
+  routaServerUrl: &#39;http://localhost:3000&#39;,
+  workspaceId: &#39;my-workspace&#39;
+});
+
+const config = buildConfigFromPreset(
+  &#39;opencode&#39;,
+  &#39;/path/to/workspace&#39;,
+  [],
+  {},
+  mcpConfigs
+);
+
+const process = new AcpProcess(config, (notification) =&gt; {
+  console.log(&#39;Notification:&#39;, notification);
+});
+
+await process.start();
+</code></pre>
+<h2>Environment Variables</h2>
+<p>You can configure the Routa server URL and workspace ID via environment variables:</p>
+<pre><code class="language-bash">export ROUTA_SERVER_URL=http://localhost:3000
+export ROUTA_WORKSPACE_ID=my-workspace
+</code></pre>
+<p>Then use the default configuration:</p>
+<pre><code class="language-typescript">import { setupMcpForCodex, getDefaultRoutaMcpConfig } from &#39;./mcp-setup&#39;;
+
+// Uses environment variables
+const mcpConfigs = setupMcpForCodex();
+</code></pre>
+<h2>MCP Configuration Format</h2>
+<p>The MCP configuration is a JSON object with the following structure:</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;routa-coordination&quot;,
+  &quot;type&quot;: &quot;http&quot;,
+  &quot;url&quot;: &quot;http://localhost:3000/api/mcp&quot;,
+  &quot;env&quot;: {
+    &quot;ROUTA_WORKSPACE_ID&quot;: &quot;my-workspace&quot;
+  }
+}
+</code></pre>
+<p>This JSON is passed to providers via the <code>--mcp-config</code> flag:</p>
+<pre><code class="language-bash">codex-acp --mcp-config &#39;{&quot;name&quot;:&quot;routa-coordination&quot;,&quot;type&quot;:&quot;http&quot;,&quot;url&quot;:&quot;http://localhost:3000/api/mcp&quot;}&#39;
+</code></pre>
+<h2>Checking MCP Status</h2>
+<pre><code class="language-typescript">import { getMcpStatus } from &#39;./mcp-setup&#39;;
+
+const status = getMcpStatus(&#39;codex&#39;, mcpConfigs);
+console.log(status);
+// {
+//   supported: true,
+//   configured: true,
+//   configCount: 1
+// }
+</code></pre>
+<h2>Troubleshooting</h2>
+<h3>Provider doesn&#39;t support --mcp-config</h3>
+<p>Some providers may not support the <code>--mcp-config</code> flag. Check the provider&#39;s documentation or use <code>providerSupportsMcp()</code> to verify:</p>
+<pre><code class="language-typescript">import { providerSupportsMcp } from &#39;./mcp-setup&#39;;
+
+if (providerSupportsMcp(&#39;codex&#39;)) {
+  // Setup MCP
+} else {
+  console.warn(&#39;Provider does not support MCP&#39;);
+}
+</code></pre>
+<h3>Connection errors</h3>
+<p>If the provider can&#39;t connect to the Routa MCP server:</p>
+<ol>
+<li>Ensure the routa-js server is running (<code>npm run dev</code>)</li>
+<li>Check the server URL is correct</li>
+<li>Verify the <code>/api/mcp</code> endpoint is accessible</li>
+<li>Check firewall/network settings</li>
+</ol>
+<h3>Validation</h3>
+<p>You can validate the MCP configuration before using it:</p>
+<pre><code class="language-typescript">import { validateRoutaMcpConfig } from &#39;./mcp-config-generator&#39;;
+
+const config = {
+  routaServerUrl: &#39;http://localhost:3000&#39;,
+  workspaceId: &#39;my-workspace&#39;
+};
+
+const isValid = await validateRoutaMcpConfig(config);
+if (!isValid) {
+  console.error(&#39;MCP configuration is invalid or server is not reachable&#39;);
+}
+</code></pre>
+
+    </div>
+</body>
+</html>
