@@ -8,11 +8,14 @@
 import { InMemoryAgentStore, AgentStore } from "./store/agent-store";
 import { InMemoryConversationStore, ConversationStore } from "./store/conversation-store";
 import { InMemoryTaskStore, TaskStore } from "./store/task-store";
-import { InMemoryNoteStore, NoteStore } from "./store/note-store";
+import { NoteStore } from "./store/note-store";
 import { EventBus } from "./events/event-bus";
 import { AgentTools } from "./tools/agent-tools";
 import { NoteTools } from "./tools/note-tools";
 import { WorkspaceTools } from "./tools/workspace-tools";
+import { CRDTNoteStore } from "./notes/crdt-note-store";
+import { CRDTDocumentManager } from "./notes/crdt-document-manager";
+import { NoteEventBroadcaster, getNoteEventBroadcaster } from "./notes/note-event-broadcaster";
 
 export interface RoutaSystem {
   agentStore: AgentStore;
@@ -23,6 +26,10 @@ export interface RoutaSystem {
   tools: AgentTools;
   noteTools: NoteTools;
   workspaceTools: WorkspaceTools;
+  /** CRDT document manager (available when noteStore is CRDTNoteStore) */
+  crdtManager: CRDTDocumentManager;
+  /** Note event broadcaster for SSE */
+  noteBroadcaster: NoteEventBroadcaster;
 }
 
 /**
@@ -32,7 +39,12 @@ export function createInMemorySystem(): RoutaSystem {
   const agentStore = new InMemoryAgentStore();
   const conversationStore = new InMemoryConversationStore();
   const taskStore = new InMemoryTaskStore();
-  const noteStore = new InMemoryNoteStore();
+
+  // CRDT-backed note store with event broadcasting
+  const noteBroadcaster = getNoteEventBroadcaster();
+  const crdtManager = new CRDTDocumentManager();
+  const noteStore = new CRDTNoteStore(noteBroadcaster, crdtManager);
+
   const eventBus = new EventBus();
   const tools = new AgentTools(agentStore, conversationStore, taskStore, eventBus);
   const noteTools = new NoteTools(noteStore, taskStore);
@@ -47,6 +59,8 @@ export function createInMemorySystem(): RoutaSystem {
     tools,
     noteTools,
     workspaceTools,
+    crdtManager,
+    noteBroadcaster,
   };
 }
 

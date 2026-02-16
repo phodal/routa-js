@@ -15,8 +15,10 @@ import { SkillPanel } from "@/client/components/skill-panel";
 import { ChatPanel } from "@/client/components/chat-panel";
 import { SessionPanel } from "@/client/components/session-panel";
 import { TaskPanel, type CrafterAgent, type CrafterMessage } from "@/client/components/task-panel";
+import { CollaborativeTaskEditor } from "@/client/components/collaborative-task-editor";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useSkills } from "@/client/hooks/use-skills";
+import { useNotes } from "@/client/hooks/use-notes";
 import type { RepoSelection } from "@/client/components/repo-picker";
 import type { ParsedTask } from "@/client/utils/task-block-parser";
 
@@ -31,6 +33,10 @@ export default function HomePage() {
   const [routaTasks, setRoutaTasks] = useState<ParsedTask[]>([]);
   const acp = useAcp();
   const skillsHook = useSkills();
+  const notesHook = useNotes("default");
+
+  // ── Collaborative editing panel view ──────────────────────────────────
+  const [taskPanelMode, setTaskPanelMode] = useState<"tasks" | "collab">("tasks");
 
   // ── Resizable sidebar state ──────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(380);
@@ -293,9 +299,45 @@ export default function HomePage() {
 
   // ── Routa Task Panel Handlers ─────────────────────────────────────────
 
-  const handleTasksDetected = useCallback((tasks: ParsedTask[]) => {
+  const handleTasksDetected = useCallback(async (tasks: ParsedTask[]) => {
     setRoutaTasks(tasks);
-  }, []);
+
+    // Auto-save tasks to Notes system for collaborative editing
+    for (const task of tasks) {
+      try {
+        await notesHook.createNote({
+          noteId: `task-${task.id}`,
+          title: task.title,
+          content: [
+            task.objective && `## Objective\n${task.objective}`,
+            task.scope && `## Scope\n${task.scope}`,
+            task.definitionOfDone && `## Definition of Done\n${task.definitionOfDone}`,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          type: "task",
+          metadata: { taskStatus: "PENDING" },
+        });
+      } catch {
+        // Note may already exist, try updating
+        await notesHook.updateNote(`task-${task.id}`, {
+          title: task.title,
+          content: [
+            task.objective && `## Objective\n${task.objective}`,
+            task.scope && `## Scope\n${task.scope}`,
+            task.definitionOfDone && `## Definition of Done\n${task.definitionOfDone}`,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        });
+      }
+    }
+
+    // Auto-switch to collab mode when tasks are detected
+    if (tasks.length > 0) {
+      setTaskPanelMode("collab");
+    }
+  }, [notesHook]);
 
   /**
    * Call a Routa MCP tool via the /api/mcp endpoint.
@@ -525,7 +567,8 @@ export default function HomePage() {
     setConcurrency(n);
   }, []);
 
-  const showTaskPanel = routaTasks.length > 0 || crafterAgents.length > 0;
+  const hasCollabNotes = notesHook.notes.some((n) => n.metadata.type === "task" || n.metadata.type === "spec");
+  const showTaskPanel = routaTasks.length > 0 || crafterAgents.length > 0 || hasCollabNotes;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
@@ -701,19 +744,56 @@ export default function HomePage() {
               <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-indigo-400 group-active:bg-indigo-500 transition-colors" />
             </div>
 
-            <TaskPanel
-              tasks={routaTasks}
-              onConfirmAll={handleConfirmAllTasks}
-              onExecuteAll={handleExecuteAllTasks}
-              onConfirmTask={handleConfirmTask}
-              onEditTask={handleEditTask}
-              onExecuteTask={handleExecuteTask}
-              crafterAgents={crafterAgents}
-              activeCrafterId={activeCrafterId}
-              onSelectCrafter={handleSelectCrafter}
-              concurrency={concurrency}
-              onConcurrencyChange={handleConcurrencyChange}
-            />
+            {/* Panel Mode Toggle */}
+            {hasCollabNotes && (
+              <div className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 flex items-center gap-1">
+                <button
+                  onClick={() => setTaskPanelMode("tasks")}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                    taskPanelMode === "tasks"
+                      ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  Tasks
+                </button>
+                <button
+                  onClick={() => setTaskPanelMode("collab")}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors flex items-center gap-1 ${
+                    taskPanelMode === "collab"
+                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${notesHook.connected ? "bg-green-500" : "bg-gray-400"}`} />
+                  Collab Edit
+                </button>
+              </div>
+            )}
+
+            {taskPanelMode === "tasks" ? (
+              <TaskPanel
+                tasks={routaTasks}
+                onConfirmAll={handleConfirmAllTasks}
+                onExecuteAll={handleExecuteAllTasks}
+                onConfirmTask={handleConfirmTask}
+                onEditTask={handleEditTask}
+                onExecuteTask={handleExecuteTask}
+                crafterAgents={crafterAgents}
+                activeCrafterId={activeCrafterId}
+                onSelectCrafter={handleSelectCrafter}
+                concurrency={concurrency}
+                onConcurrencyChange={handleConcurrencyChange}
+              />
+            ) : (
+              <CollaborativeTaskEditor
+                notes={notesHook.notes}
+                connected={notesHook.connected}
+                onUpdateNote={notesHook.updateNote}
+                onDeleteNote={notesHook.deleteNote}
+                workspaceId="default"
+              />
+            )}
           </aside>
         )}
       </div>
