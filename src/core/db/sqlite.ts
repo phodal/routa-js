@@ -20,12 +20,13 @@ const GLOBAL_KEY = "__routa_sqlite_db__";
  * Get or create a SQLite database instance.
  *
  * @param dbPath - Path to the SQLite database file.
- *                 Defaults to "routa.db" in the current directory.
+ *                 Defaults to ROUTA_DB_PATH env var, or "routa.db" in the
+ *                 current directory.
  */
 export function getSqliteDatabase(dbPath?: string): SqliteDatabase {
   const g = globalThis as Record<string, unknown>;
   if (!g[GLOBAL_KEY]) {
-    const resolvedPath = dbPath ?? "routa.db";
+    const resolvedPath = dbPath ?? process.env.ROUTA_DB_PATH ?? "routa.db";
     console.log(`[SQLite] Opening database at: ${resolvedPath}`);
     const sqlite = new BetterSqlite3(resolvedPath);
 

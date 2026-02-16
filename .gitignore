@@ -87,4 +87,9 @@ logs
 test-results
 .routa
 apps/desktop/src-tauri/icons/*
-.next-desktop
+.next-desktop/
+
+# SQLite database files
+*.db
+*.db-journal
+*.db-wal

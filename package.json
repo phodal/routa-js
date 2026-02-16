@@ -63,16 +63,16 @@
   "optionalDependencies": {
     "@google/generative-ai-cli": "^1.0.0",
     "@openai/codex": "latest",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^11.10.0",
     "opencode-ai": "latest"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@types/better-sqlite3": "^7.6.0",
     "@types/eventsource": "^1.1.15",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/better-sqlite3": "^7.6.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.20",

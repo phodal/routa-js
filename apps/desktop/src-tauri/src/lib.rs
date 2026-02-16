@@ -145,19 +145,36 @@ fn start_embedded_next_server(
         ));
     }
 
+    // Determine a writable path for the SQLite database.
+    // Prefer ROUTA_DB_PATH env, otherwise use <app_data_dir>/routa.db.
+    let db_path = std::env::var("ROUTA_DB_PATH").unwrap_or_else(|_| {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".routa"));
+        std::fs::create_dir_all(&data_dir).ok();
+        data_dir
+            .join("routa.db")
+            .to_string_lossy()
+            .to_string()
+    });
+
     let node_bin = env_or_default("ROUTA_NODE_BIN", "node");
     println!(
         "[desktop-server] Starting embedded server: {} {}",
         node_bin,
         server_js.to_string_lossy()
     );
+    println!("[desktop-server] Database path: {}", db_path);
 
     let mut child = Command::new(node_bin)
         .arg("server.js")
-        .current_dir(server_root)
+        .current_dir(&server_root)
         .env("HOSTNAME", host)
         .env("PORT", port.to_string())
         .env("ROUTA_DESKTOP_SERVER_BUILD", "1")
+        .env("ROUTA_DB_DRIVER", "sqlite")
+        .env("ROUTA_DB_PATH", &db_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

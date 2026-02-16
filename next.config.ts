@@ -17,7 +17,14 @@ const nextConfig: NextConfig = {
     "better-sqlite3",
   ],
   ...(isDesktopServerBuild ? { distDir: ".next-desktop" } : {}),
-  ...(isDesktopStandaloneBuild ? { output: "standalone" } : {}),
+  ...(isDesktopStandaloneBuild
+    ? {
+        output: "standalone",
+        outputFileTracingIncludes: {
+          "/*": ["./node_modules/better-sqlite3/**/*"],
+        },
+      }
+    : {}),
   ...(isStaticBuild
     ? {
         output: "export",
