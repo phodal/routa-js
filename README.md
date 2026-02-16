@@ -19,9 +19,10 @@
 
 Routa JS is a powerful **multi-agent coordination platform** that enables seamless collaboration between AI agents through standardized protocols. Built with TypeScript and Next.js, it provides a full-stack solution for orchestrating multiple AI agents working together on complex tasks.
 
-The platform supports three major protocols:
+The platform supports four major protocols:
 - **MCP (Model Context Protocol)** - For AI model integration (Claude Code, etc.)
 - **ACP (Agent Client Protocol)** - For agent communication and session management
+- **A2A (Agent-to-Agent)** - For external agent federation and discovery
 - **Skills System** - OpenCode-compatible skill discovery and execution
 
 Whether you're building autonomous coding assistants, orchestrating multi-agent workflows, or creating collaborative AI systems, Routa JS provides the infrastructure you need.
@@ -31,6 +32,7 @@ Whether you're building autonomous coding assistants, orchestrating multi-agent 
 ### Multi-Protocol Support
 - **MCP Server** - Expose 12 coordination tools to AI clients via HTTP/SSE
 - **ACP Agent** - Full Agent Client Protocol implementation with session management
+- **A2A Bridge** - Agent-to-Agent protocol for external agent federation and discovery
 - **Skills Registry** - Automatic discovery and loading of SKILL.md files from multiple directories
 
 ### Agent Orchestration
@@ -96,6 +98,15 @@ Whether you're building autonomous coding assistants, orchestrating multi-agent 
 - **Endpoint**: `POST /api/acp` (JSON-RPC), `GET /api/acp?sessionId=x` (SSE)
 - **Methods**: initialize, session/new, session/prompt, session/cancel, session/load, skills/list, skills/load, tools/call
 
+### A2A (Agent-to-Agent Protocol)
+- **SDK**: `@a2a-js/sdk` - Agent2Agent protocol for external federation
+- **Endpoints**: 
+  - `GET /api/a2a/card` - Agent card discovery
+  - `GET /api/a2a/sessions` - List active backend sessions
+  - `POST /api/a2a/rpc` - JSON-RPC bridge to backend sessions
+  - `GET /api/a2a/rpc?sessionId=x` - SSE stream for session events
+- **Methods**: initialize, method_list, list_agents, create_agent, delegate_task, message_agent, session/*
+
 ### Skills (OpenCode Compatible)
 - Discovers SKILL.md files from `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`
 - Dynamic loading via ACP slash commands or REST API
@@ -153,6 +164,22 @@ http://localhost:3000/api/acp
 
 Supports session management, prompts, skill loading, and tool calls.
 
+#### A2A Client Connection
+
+A2A-compatible agents can discover and connect to Routa sessions:
+```
+# Discover Routa agent
+http://localhost:3000/api/a2a/card
+
+# List active sessions
+http://localhost:3000/api/a2a/sessions
+
+# Connect via JSON-RPC
+http://localhost:3000/api/a2a/rpc
+```
+
+Enables external agents to interact with backend sessions and coordination tools.
+
 ### Example Workflows
 
 #### 1. Create and Delegate a Task
@@ -181,6 +208,40 @@ const subscription = await tools.subscribeToEvents({
   agentId: "agent-123",
   eventTypes: ["TASK_ASSIGNED", "TASK_COMPLETED", "MESSAGE_SENT"]
 });
+```
+
+#### 3. Use A2A Protocol for External Agent Communication
+
+```bash
+# Discover Routa as an A2A agent
+curl http://localhost:3000/api/a2a/card
+
+# List active backend sessions
+curl http://localhost:3000/api/a2a/sessions
+
+# Call coordination methods via A2A JSON-RPC
+curl -X POST http://localhost:3000/api/a2a/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "list_agents",
+    "params": {"workspaceId": "default"}
+  }'
+
+# Create an agent via A2A
+curl -X POST http://localhost:3000/api/a2a/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "create_agent",
+    "params": {
+      "name": "external-crafter",
+      "role": "CRAFTER",
+      "workspaceId": "default"
+    }
+  }'
 ```
 
 ## 📚 Documentation
@@ -215,6 +276,10 @@ Routa JS provides 12 coordination tools accessible via MCP:
 | `/api/mcp` | POST | MCP JSON-RPC message handling |
 | `/api/acp` | GET | ACP SSE stream with session support |
 | `/api/acp` | POST | ACP JSON-RPC message handling |
+| `/api/a2a/card` | GET | A2A agent card for discovery |
+| `/api/a2a/sessions` | GET | List active A2A-accessible sessions |
+| `/api/a2a/rpc` | POST | A2A JSON-RPC bridge |
+| `/api/a2a/rpc` | GET | A2A SSE stream for session events |
 | `/api/agents` | GET/POST | REST API for agent management |
 | `/api/skills` | GET/POST | REST API for skill management |
 | `/api/sessions` | GET | Session management |
