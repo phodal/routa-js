@@ -5,6 +5,8 @@
  * making them compatible with serverless platforms.
  */
 
+import { isServerless as platformIsServerless } from "@/core/platform";
+
 export interface ApiBasedProvider {
   id: string;
   name: string;
@@ -18,15 +20,12 @@ export interface ApiBasedProvider {
 }
 
 /**
- * Check if we're running in a serverless environment
+ * Check if we're running in a serverless environment.
+ * Delegates to the platform abstraction layer for consistent detection
+ * across Web, Tauri, and Electron platforms.
  */
 export function isServerlessEnvironment(): boolean {
-  return !!(
-    process.env.VERCEL ||
-    process.env.AWS_LAMBDA_FUNCTION_NAME ||
-    process.env.NETLIFY ||
-    process.env.FUNCTION_NAME // Google Cloud Functions
-  );
+  return platformIsServerless();
 }
 
 /**
