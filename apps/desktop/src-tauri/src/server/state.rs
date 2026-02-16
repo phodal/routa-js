@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::server::acp::AcpManager;
 use crate::server::db::Database;
+use crate::server::events::EventBus;
 use crate::server::skills::SkillRegistry;
 use crate::server::store::{
     AgentStore, ConversationStore, NoteStore, TaskStore, WorkspaceStore,
@@ -19,6 +20,7 @@ pub struct AppStateInner {
     pub conversation_store: ConversationStore,
     pub skill_registry: SkillRegistry,
     pub acp_manager: AcpManager,
+    pub event_bus: EventBus,
 }
 
 pub type AppState = Arc<AppStateInner>;
@@ -33,6 +35,7 @@ impl AppStateInner {
             conversation_store: ConversationStore::new(db.clone()),
             skill_registry: SkillRegistry::new(),
             acp_manager: AcpManager::new(),
+            event_bus: EventBus::new(),
             db,
         }
     }
