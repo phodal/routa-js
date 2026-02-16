@@ -201,22 +201,17 @@ async function handleA2aMethod(
     };
   }
 
-  // Session-specific methods require sessionId
-  if (!sessionId) {
-    throw new Error("Session ID required for this method");
-  }
-
-  const session = sessionStore.getSession(sessionId);
-  if (!session) {
-    throw new Error(`Session ${sessionId} not found`);
-  }
-
   // Route to appropriate handler based on method prefix
   if (method.startsWith("session/")) {
+    // Session methods require sessionId
+    if (!sessionId) {
+      throw new Error("Session ID required for session methods");
+    }
     return handleSessionMethod(method, params, sessionId, sessionStore);
   }
 
   if (method.startsWith("list_") || method.startsWith("create_") || method.startsWith("delegate_") || method.startsWith("message_")) {
+    // Coordination methods don't require sessionId (use default workspace)
     return handleCoordinationMethod(method, params, system);
   }
 
