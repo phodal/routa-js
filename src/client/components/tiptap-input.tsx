@@ -309,6 +309,7 @@ interface TiptapInputProps {
   repoSkills?: SkillSummary[];
   providers?: ProviderItem[];
   selectedProvider: string;
+  onProviderChange?: (provider: string) => void;
   sessions?: SessionItem[];
   activeSessionMode?: string;
   repoSelection: RepoSelection | null;
@@ -326,12 +327,15 @@ export function TiptapInput({
   repoSkills = [],
   providers = [],
   selectedProvider,
+  onProviderChange,
   agentRole,
   sessions = [],
   activeSessionMode,
   repoSelection,
   onRepoChange,
 }: TiptapInputProps) {
+  const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
+  const providerDropdownRef = useRef<HTMLDivElement>(null);
   const [claudeMode, setClaudeMode] = useState<"acceptEdits" | "plan">("acceptEdits");
   const [opencodeMode, setOpencodeMode] = useState<"build" | "plan">("build");
 
@@ -568,9 +572,25 @@ export function TiptapInput({
   // Keep ref updated so EnterToSend and external send button always call latest
   handleSendRef.current = handleSend;
 
+  // Close provider dropdown on click outside
+  useEffect(() => {
+    if (!providerDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (providerDropdownRef.current && !providerDropdownRef.current.contains(e.target as Node)) {
+        setProviderDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [providerDropdownOpen]);
+
   useEffect(() => {
     if (editor) editor.setEditable(!disabled);
   }, [editor, disabled]);
+
+  const selectedProviderInfo = providers.find((p) => p.id === selectedProvider);
+  const availableProviders = providers.filter((p) => p.status === "available");
+  const unavailableProviders = providers.filter((p) => p.status !== "available");
 
   return (
     <div className="flex-1 flex flex-col gap-1.5">
@@ -584,13 +604,93 @@ export function TiptapInput({
 
         {/* Bottom toolbar */}
         <div className="flex items-center gap-2 mt-1.5 -mb-0.5">
-          {/* Repo picker (replaces old Clone button) */}
+          {/* Repo picker */}
           <RepoPicker
             value={repoSelection}
             onChange={onRepoChange}
           />
 
-          {/* Mode toggles for selected providers (hidden in ROUTA mode – coordinator uses bypassPermissions) */}
+          {/* Provider dropdown */}
+          <div className="relative" ref={providerDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setProviderDropdownOpen((v) => !v)}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors"
+              title="Select provider"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedProviderInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
+              <span className="text-gray-700 dark:text-gray-300 font-medium max-w-[100px] truncate">
+                {selectedProviderInfo?.name ?? selectedProvider}
+              </span>
+              <svg className={`w-3 h-3 text-gray-400 transition-transform ${providerDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {providerDropdownOpen && (
+              <div className="absolute bottom-full left-0 mb-1 w-64 max-h-72 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-lg z-50">
+                {availableProviders.length > 0 && (
+                  <div className="py-1">
+                    <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                      Available
+                    </div>
+                    {availableProviders.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          onProviderChange?.(p.id);
+                          setProviderDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
+                          p.id === selectedProvider
+                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        <span className="font-medium truncate">{p.name}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate ml-auto">{p.command}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {unavailableProviders.length > 0 && (
+                  <div className="py-1 border-t border-gray-100 dark:border-gray-800">
+                    <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                      Not Installed
+                    </div>
+                    {unavailableProviders.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          onProviderChange?.(p.id);
+                          setProviderDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
+                          p.id === selectedProvider
+                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                        <span className="font-medium truncate">{p.name}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate ml-auto">{p.command}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {providers.length === 0 && (
+                  <div className="px-3 py-3 text-xs text-gray-400 text-center">
+                    Connecting...
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Mode toggles for selected providers (hidden in ROUTA mode) */}
           {agentRole !== "ROUTA" && selectedProvider === "claude" && (
             <div className="flex items-center gap-1">
               <ModeChip
@@ -622,7 +722,7 @@ export function TiptapInput({
 
           {/* Hints + send */}
           <span className="text-[10px] text-gray-300 dark:text-gray-600 ml-auto mr-1">
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">@</kbd> provider/session
+            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">@</kbd> mention
             <span className="mx-1.5">&middot;</span>
             <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">/</kbd> skill
           </span>

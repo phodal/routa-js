@@ -22,6 +22,7 @@ import { getAcpProcessManager } from "@/core/acp/processer";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
 import { getStandardPresets, getPresetById, resolveCommand } from "@/core/acp/acp-presets";
 import { which } from "@/core/acp/utils";
+import { fetchRegistry, detectPlatformTarget } from "@/core/acp/acp-registry";
 import { ensureMcpForProvider } from "@/core/acp/mcp-setup";
 import { v4 as uuidv4 } from "uuid";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
@@ -401,14 +402,24 @@ export async function POST(request: NextRequest) {
     // ── Extension methods ──────────────────────────────────────────────
 
     // _providers/list - List available ACP agent presets with install status
+    // Merges static presets with dynamically-loaded ACP Registry agents.
     if (method === "_providers/list") {
       const allPresets = [...getStandardPresets()];
       const claudePreset = getPresetById("claude");
       if (claudePreset) allPresets.push(claudePreset);
 
-      // Check which commands are installed in parallel
-      const providers = await Promise.all(
-        allPresets.map(async (p) => {
+      type ProviderEntry = {
+        id: string;
+        name: string;
+        description: string;
+        command: string;
+        status: "available" | "unavailable";
+        source: "static" | "registry";
+      };
+
+      // Check which static preset commands are installed in parallel
+      const staticProviders: ProviderEntry[] = await Promise.all(
+        allPresets.map(async (p): Promise<ProviderEntry> => {
           const cmd = resolveCommand(p);
           const resolved = await which(cmd);
           return {
@@ -416,10 +427,58 @@ export async function POST(request: NextRequest) {
             name: p.name,
             description: p.description,
             command: p.command,
-            status: resolved ? ("available" as const) : ("unavailable" as const),
+            status: resolved ? "available" : "unavailable",
+            source: "static",
           };
         })
       );
+
+      // Merge registry agents that aren't already covered by static presets
+      const staticIds = new Set(staticProviders.map((p) => p.id));
+      try {
+        const registry = await fetchRegistry();
+        const npxPath = await which("npx");
+        const uvxPath = await which("uv");
+        const platform = detectPlatformTarget();
+
+        for (const agent of registry.agents) {
+          if (staticIds.has(agent.id)) continue;
+
+          const dist = agent.distribution;
+          let command = "";
+          let status: "available" | "unavailable" = "unavailable";
+
+          if (dist.npx && npxPath) {
+            command = `npx ${dist.npx.package}`;
+            status = "available";
+          } else if (dist.uvx && uvxPath) {
+            command = `uvx ${dist.uvx.package}`;
+            status = "available";
+          } else if (dist.binary && platform && dist.binary[platform]) {
+            command = dist.binary[platform]!.cmd ?? agent.id;
+            status = "unavailable"; // binary needs install first
+          } else if (dist.npx) {
+            command = `npx ${dist.npx.package}`;
+            status = "unavailable";
+          } else if (dist.uvx) {
+            command = `uvx ${dist.uvx.package}`;
+            status = "unavailable";
+          }
+
+          staticProviders.push({
+            id: agent.id,
+            name: agent.name,
+            description: agent.description,
+            command,
+            status,
+            source: "registry",
+          });
+        }
+      } catch (err) {
+        console.warn("[ACP Route] Failed to fetch registry for providers:", err);
+      }
+
+      const providers = staticProviders;
 
       // In serverless environments, add OpenCode SDK as a provider option
       if (isServerlessEnvironment()) {
@@ -431,7 +490,8 @@ export async function POST(request: NextRequest) {
             ? "Connect to remote OpenCode server (configured)"
             : "Connect to remote OpenCode server (set OPENCODE_SERVER_URL)",
           command: "sdk",
-          status: sdkConfigured ? ("available" as const) : ("unavailable" as const),
+          status: sdkConfigured ? "available" : "unavailable",
+          source: "static",
         });
       }
 

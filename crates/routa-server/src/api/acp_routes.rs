@@ -54,10 +54,12 @@ async fn acp_rpc(
             use crate::shell_env;
 
             let presets = acp::get_presets();
+            let mut static_ids = std::collections::HashSet::new();
 
             let mut providers: Vec<serde_json::Value> = Vec::new();
             for preset in &presets {
                 let installed = shell_env::which(&preset.command).is_some();
+                static_ids.insert(preset.name.clone());
 
                 providers.push(serde_json::json!({
                     "id": preset.name,
@@ -65,7 +67,68 @@ async fn acp_rpc(
                     "description": preset.description,
                     "command": preset.command,
                     "status": if installed { "available" } else { "unavailable" },
+                    "source": "static",
                 }));
+            }
+
+            // Merge registry agents that aren't already covered by static presets
+            let npx_available = shell_env::which("npx").is_some();
+            let uvx_available = shell_env::which("uv").is_some();
+
+            if let Ok(response) = reqwest::get(
+                "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json",
+            ).await {
+                if let Ok(registry) = response.json::<serde_json::Value>().await {
+                    if let Some(agents) = registry.get("agents").and_then(|a| a.as_array()) {
+                        for agent in agents {
+                            let agent_id = agent.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                            if agent_id.is_empty() || static_ids.contains(agent_id) {
+                                continue;
+                            }
+
+                            let name = agent.get("name").and_then(|v| v.as_str()).unwrap_or(agent_id);
+                            let desc = agent.get("description").and_then(|v| v.as_str()).unwrap_or("");
+                            let dist = agent.get("distribution");
+
+                            let (command, status) = if let Some(dist) = dist {
+                                if dist.get("npx").is_some() && npx_available {
+                                    let pkg = dist.get("npx")
+                                        .and_then(|v| v.get("package"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or(agent_id);
+                                    (format!("npx {}", pkg), "available")
+                                } else if dist.get("uvx").is_some() && uvx_available {
+                                    let pkg = dist.get("uvx")
+                                        .and_then(|v| v.get("package"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or(agent_id);
+                                    (format!("uvx {}", pkg), "available")
+                                } else if dist.get("binary").is_some() {
+                                    (agent_id.to_string(), "unavailable")
+                                } else if dist.get("npx").is_some() {
+                                    let pkg = dist.get("npx")
+                                        .and_then(|v| v.get("package"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or(agent_id);
+                                    (format!("npx {}", pkg), "unavailable")
+                                } else {
+                                    (agent_id.to_string(), "unavailable")
+                                }
+                            } else {
+                                (agent_id.to_string(), "unavailable")
+                            };
+
+                            providers.push(serde_json::json!({
+                                "id": agent_id,
+                                "name": name,
+                                "description": desc,
+                                "command": command,
+                                "status": status,
+                                "source": "registry",
+                            }));
+                        }
+                    }
+                }
             }
 
             // Sort: available first

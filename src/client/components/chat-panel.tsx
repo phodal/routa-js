@@ -580,7 +580,7 @@ export function ChatPanel({
               placeholder={
                 connected
                   ? activeSessionId
-                    ? "Type a message... @ provider/session, / skill, Enter to send"
+                    ? "Type a message... @ mention, / skill, Enter to send"
                     : "Type a message to auto-create a session..."
                   : "Connect first..."
               }
@@ -590,6 +590,7 @@ export function ChatPanel({
               repoSkills={repoSkills}
               providers={acp.providers}
               selectedProvider={acp.selectedProvider}
+              onProviderChange={acp.setProvider}
               sessions={sessions}
               activeSessionMode={activeSessionId ? sessionModeById[activeSessionId] : undefined}
               repoSelection={repoSelection}

@@ -660,38 +660,41 @@ export default function HomePage() {
       <div className="flex-1 flex min-h-0">
         {/* ─── Left Sidebar ──────────────────────────────────────── */}
         <aside className="w-[300px] shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#13151d] flex flex-col overflow-hidden">
-          {/* Provider + New Session */}
+          {/* Provider summary + New Session */}
           <div className="p-3 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Provider
-              </label>
-              {acp.providers.length > 0 && (
-                <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                  {acp.providers.filter((p) => p.status === "available").length}/{acp.providers.length} installed
-                </span>
-              )}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Provider
+                </label>
+                {acp.providers.length > 0 && (
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                    {acp.providers.filter((p) => p.status === "available").length}/{acp.providers.length} available
+                  </span>
+                )}
+              </div>
+              <a
+                href="/settings/agents"
+                className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Manage
+              </a>
             </div>
 
-            {/* Provider list */}
-            <ProviderList
-              providers={acp.providers}
-              selectedProvider={acp.selectedProvider}
-              onSelect={acp.setProvider}
-            />
-
-            {/* Serverless limitation warning */}
-            {acp.providers.length > 0 && acp.providers.filter((p) => p.status === "available").length === 0 && (
-              <div className="mt-2 px-2.5 py-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                <div className="flex items-start gap-1.5">
-                  <span className="text-amber-600 dark:text-amber-400 text-xs">⚠️</span>
-                  <div className="flex-1 text-[10px] text-amber-700 dark:text-amber-300 leading-relaxed">
-                    <p className="font-medium mb-1">CLI tools unavailable on Vercel</p>
-                    <p className="text-amber-600 dark:text-amber-400">
-                      Serverless platforms cannot run CLI processes.
-                      Deploy to a VPS or use API-based providers instead.
-                    </p>
-                  </div>
+            {/* Current provider indicator */}
+            {acp.selectedProvider && (
+              <div className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    acp.providers.find((p) => p.id === acp.selectedProvider)?.status === "available"
+                      ? "bg-green-500" : "bg-gray-400"
+                  }`} />
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    {acp.providers.find((p) => p.id === acp.selectedProvider)?.name ?? acp.selectedProvider}
+                  </span>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto">
+                    Use dropdown in input to switch
+                  </span>
                 </div>
               </div>
             )}
@@ -699,7 +702,7 @@ export default function HomePage() {
             <button
               onClick={() => handleCreateSession(acp.selectedProvider)}
               disabled={acp.providers.length === 0 || !acp.selectedProvider}
-              className="mt-2 w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               + New Session
             </button>
@@ -823,107 +826,7 @@ export default function HomePage() {
   );
 }
 
-// ─── Provider List Component ──────────────────────────────────────────
-
-function ProviderList({
-  providers,
-  selectedProvider,
-  onSelect,
-}: {
-  providers: Array<{ id: string; name: string; command?: string; status?: string }>;
-  selectedProvider: string;
-  onSelect: (id: string) => void;
-}) {
-  const [showUnavailable, setShowUnavailable] = useState(false);
-
-  if (providers.length === 0) {
-    return (
-      <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] px-3 py-3 text-xs text-gray-400 text-center">
-        Connecting...
-      </div>
-    );
-  }
-
-  const available = providers.filter((p) => p.status === "available");
-  const unavailable = providers.filter((p) => p.status !== "available");
-
-  const renderProvider = (p: (typeof providers)[0]) => {
-    const isAvailable = p.status === "available";
-    const isSelected = p.id === selectedProvider;
-    return (
-      <button
-        key={p.id}
-        type="button"
-        onClick={() => onSelect(p.id)}
-        className={`w-full text-left px-2.5 py-1.5 flex items-center gap-2 transition-colors ${
-          isSelected
-            ? "bg-blue-50 dark:bg-blue-900/20"
-            : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-        } ${!isAvailable ? "opacity-50" : ""}`}
-      >
-        {/* Status dot */}
-        <span
-          className={`shrink-0 w-1.5 h-1.5 rounded-full ${
-            isAvailable ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
-          }`}
-        />
-        {/* Name + command */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={`text-xs font-medium truncate ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-gray-900 dark:text-gray-100"}`}>
-              {p.name}
-            </span>
-            <span className="text-[9px] text-gray-400 dark:text-gray-500 font-mono truncate">
-              {p.command}
-            </span>
-          </div>
-        </div>
-        {/* Status badge */}
-        <span
-          className={`shrink-0 px-1.5 py-0.5 text-[9px] font-medium rounded ${
-            isAvailable
-              ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-              : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
-          }`}
-        >
-          {isAvailable ? "Ready" : "Not found"}
-        </span>
-      </button>
-    );
-  };
-
-  return (
-    <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] divide-y divide-gray-50 dark:divide-gray-800">
-      {/* Available providers - always visible */}
-      {available.map(renderProvider)}
-
-      {/* Unavailable providers - collapsible */}
-      {unavailable.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setShowUnavailable((v) => !v)}
-            className="w-full px-2.5 py-1.5 flex items-center justify-between text-[10px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-          >
-            <span>
-              {unavailable.length} unavailable
-            </span>
-            <svg
-              className={`w-3 h-3 transition-transform duration-150 ${showUnavailable ? "rotate-180" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {showUnavailable && unavailable.map(renderProvider)}
-        </>
-      )}
-    </div>
-  );
-}
+// (ProviderList removed - provider selection now in the input dropdown)
 
 function ProtocolBadge({
   name,
