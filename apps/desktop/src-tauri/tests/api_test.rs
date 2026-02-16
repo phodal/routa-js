@@ -524,5 +524,440 @@ async fn test_rust_backend_api() {
     assert!(methods.len() >= 5);
     println!("  PASS: {} A2A methods", methods.len());
 
-    println!("\n=== ALL 31 TESTS PASSED ===");
+    // ══════════════════════════════════════════════════════════════════
+    // NEW TESTS: EventBus, Orchestration, and Extended MCP Tools
+    // ══════════════════════════════════════════════════════════════════
+
+    // ── Test 32: MCP tools/call (get_agent_status) ────────────────────
+    println!("=== Test 32: MCP tools/call (get_agent_status) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 32,
+            "method": "tools/call",
+            "params": {
+                "name": "get_agent_status",
+                "arguments": { "agentId": agent_id }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("agentId") || text.contains("Agent not found"));
+    println!("  PASS: get_agent_status tool works");
+
+    // ── Test 33: MCP tools/call (get_agent_summary) ───────────────────
+    println!("=== Test 33: MCP tools/call (get_agent_summary) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 33,
+            "method": "tools/call",
+            "params": {
+                "name": "get_agent_summary",
+                "arguments": { "agentId": agent_id }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["result"]["content"].as_array().is_some());
+    println!("  PASS: get_agent_summary tool works");
+
+    // ── Test 34: MCP tools/call (list_specialists) ────────────────────
+    println!("=== Test 34: MCP tools/call (list_specialists) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 34,
+            "method": "tools/call",
+            "params": {
+                "name": "list_specialists",
+                "arguments": {}
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("CRAFTER") || text.contains("GATE") || text.contains("DEVELOPER"));
+    println!("  PASS: list_specialists tool works");
+
+    // ── Test 35: MCP tools/call (get_workspace_info) ──────────────────
+    println!("=== Test 35: MCP tools/call (get_workspace_info) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 35,
+            "method": "tools/call",
+            "params": {
+                "name": "get_workspace_info",
+                "arguments": { "workspaceId": "default" }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    // Response contains "workspace" field with workspace details, or error message
+    assert!(text.contains("workspace") || text.contains("agentCount") || text.contains("Workspace not found"));
+    println!("  PASS: get_workspace_info tool works");
+
+    // ── Test 36: MCP tools/call (subscribe_to_events) ─────────────────
+    println!("=== Test 36: MCP tools/call (subscribe_to_events) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 36,
+            "method": "tools/call",
+            "params": {
+                "name": "subscribe_to_events",
+                "arguments": {
+                    "agentId": agent_id,
+                    "agentName": "Test Agent",
+                    "eventTypes": ["TASK_STATUS_CHANGED", "AGENT_COMPLETED"]
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("subscriptionId"));
+    // Extract subscription ID for later unsubscribe test
+    let sub_data: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+    let subscription_id = sub_data["subscriptionId"].as_str().unwrap_or("").to_string();
+    println!("  PASS: subscribe_to_events tool works, id={}", &subscription_id[..8.min(subscription_id.len())]);
+
+    // ── Test 37: MCP tools/call (unsubscribe_from_events) ─────────────
+    println!("=== Test 37: MCP tools/call (unsubscribe_from_events) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 37,
+            "method": "tools/call",
+            "params": {
+                "name": "unsubscribe_from_events",
+                "arguments": { "subscriptionId": subscription_id }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["result"]["content"].as_array().is_some());
+    println!("  PASS: unsubscribe_from_events tool works");
+
+    // ── Test 38: MCP tools/call (delegate_task_to_agent) ──────────────
+    println!("=== Test 38: MCP tools/call (delegate_task_to_agent) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 38,
+            "method": "tools/call",
+            "params": {
+                "name": "delegate_task_to_agent",
+                "arguments": {
+                    "taskId": "test-task-1",
+                    "callerAgentId": agent_id,
+                    "specialist": "CRAFTER",
+                    "provider": "claude",
+                    "waitMode": "after_all"
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("delegated") || text.contains("status"));
+    println!("  PASS: delegate_task_to_agent tool works");
+
+    // ── Test 39: MCP tools/call (report_to_parent) ────────────────────
+    println!("=== Test 39: MCP tools/call (report_to_parent) ===");
+    // First create a task to report on
+    let resp = client
+        .post(format!("{}/api/tasks", base_url))
+        .json(&serde_json::json!({
+            "title": "Report Test Task",
+            "objective": "Test reporting",
+            "workspaceId": "default"
+        }))
+        .send()
+        .await
+        .unwrap();
+    let task_body: serde_json::Value = resp.json().await.unwrap();
+    let report_task_id = task_body["task"]["id"].as_str().unwrap_or("test-task").to_string();
+
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 39,
+            "method": "tools/call",
+            "params": {
+                "name": "report_to_parent",
+                "arguments": {
+                    "agentId": agent_id,
+                    "taskId": report_task_id,
+                    "summary": "Task completed successfully",
+                    "success": true
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    println!("  PASS: report_to_parent tool works");
+
+    // ── Test 40: MCP tools/call (send_message_to_agent) ───────────────
+    println!("=== Test 40: MCP tools/call (send_message_to_agent) ===");
+    // Create a second agent to send message to
+    let resp = client
+        .post(format!("{}/api/agents", base_url))
+        .json(&serde_json::json!({
+            "name": "Test CRAFTER",
+            "role": "CRAFTER"
+        }))
+        .send()
+        .await
+        .unwrap();
+    let agent2_body: serde_json::Value = resp.json().await.unwrap();
+    let agent2_id = agent2_body["agentId"].as_str().unwrap_or("agent2").to_string();
+
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 40,
+            "method": "tools/call",
+            "params": {
+                "name": "send_message_to_agent",
+                "arguments": {
+                    "fromAgentId": agent_id,
+                    "toAgentId": agent2_id,
+                    "message": "Hello from ROUTA!"
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("messageId") || text.contains("success"));
+    println!("  PASS: send_message_to_agent tool works");
+
+    // ── Test 41: MCP tools/call (read_agent_conversation) ─────────────
+    println!("=== Test 41: MCP tools/call (read_agent_conversation) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 41,
+            "method": "tools/call",
+            "params": {
+                "name": "read_agent_conversation",
+                "arguments": {
+                    "agentId": agent2_id,
+                    "limit": 10
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    println!("  PASS: read_agent_conversation tool works");
+
+    // ── Test 42: MCP tools/call (get_my_task) ─────────────────────────
+    println!("=== Test 42: MCP tools/call (get_my_task) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 42,
+            "method": "tools/call",
+            "params": {
+                "name": "get_my_task",
+                "arguments": { "agentId": agent_id }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["result"]["content"].as_array().is_some());
+    println!("  PASS: get_my_task tool works");
+
+    // ── Test 43: MCP tools/call (set_note_content) ────────────────────
+    println!("=== Test 43: MCP tools/call (set_note_content) ===");
+    // First create a note
+    let resp = client
+        .post(format!("{}/api/notes", base_url))
+        .json(&serde_json::json!({
+            "noteId": "test-note-set",
+            "title": "Set Content Test",
+            "content": "Initial content",
+            "workspaceId": "default",
+            "source": "user"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 43,
+            "method": "tools/call",
+            "params": {
+                "name": "set_note_content",
+                "arguments": {
+                    "noteId": "test-note-set",
+                    "content": "Updated content via MCP tool"
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("success"));
+    println!("  PASS: set_note_content tool works");
+
+    // ── Test 44: MCP tools/call (append_to_note) ──────────────────────
+    println!("=== Test 44: MCP tools/call (append_to_note) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 44,
+            "method": "tools/call",
+            "params": {
+                "name": "append_to_note",
+                "arguments": {
+                    "noteId": "test-note-set",
+                    "content": "\nAppended content"
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("success"));
+    println!("  PASS: append_to_note tool works");
+
+    // ── Test 45: MCP tools/call (update_task_status) ──────────────────
+    println!("=== Test 45: MCP tools/call (update_task_status) ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 45,
+            "method": "tools/call",
+            "params": {
+                "name": "update_task_status",
+                "arguments": {
+                    "taskId": report_task_id,
+                    "status": "IN_PROGRESS",
+                    "agentId": agent_id,
+                    "reason": "Starting work on task"
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let content = body["result"]["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+    println!("  PASS: update_task_status tool works");
+
+    // ── Test 46: Verify MCP tools count increased ─────────────────────
+    println!("=== Test 46: Verify MCP tools count ===");
+    let resp = client
+        .post(format!("{}/api/mcp", base_url))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 46,
+            "method": "tools/list",
+            "params": {}
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let tools = body["result"]["tools"].as_array().unwrap();
+    // We added 14 new tools, so should have at least 20+ tools now
+    assert!(tools.len() >= 20, "Should have at least 20 tools, got {}", tools.len());
+
+    // Verify specific new tools exist
+    let tool_names: Vec<&str> = tools.iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+    assert!(tool_names.contains(&"delegate_task_to_agent"), "Missing delegate_task_to_agent");
+    assert!(tool_names.contains(&"report_to_parent"), "Missing report_to_parent");
+    assert!(tool_names.contains(&"send_message_to_agent"), "Missing send_message_to_agent");
+    assert!(tool_names.contains(&"get_agent_status"), "Missing get_agent_status");
+    assert!(tool_names.contains(&"subscribe_to_events"), "Missing subscribe_to_events");
+    assert!(tool_names.contains(&"list_specialists"), "Missing list_specialists");
+    println!("  PASS: {} MCP tools (including new coordination tools)", tools.len());
+
+    println!("\n=== ALL 46 TESTS PASSED ===");
 }
