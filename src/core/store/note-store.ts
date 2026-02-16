@@ -8,8 +8,8 @@
 import { Note, NoteType, createSpecNote, SPEC_NOTE_ID } from "../models/note";
 
 export interface NoteStore {
-  /** Save or update a note */
-  save(note: Note): Promise<void>;
+  /** Save or update a note. Source indicates who made the change (for SSE broadcasts). */
+  save(note: Note, source?: "agent" | "user" | "system"): Promise<void>;
   /** Get a note by ID */
   get(noteId: string, workspaceId: string): Promise<Note | undefined>;
   /** List all notes in a workspace */
@@ -32,7 +32,7 @@ export class InMemoryNoteStore implements NoteStore {
     return `${workspaceId}:${noteId}`;
   }
 
-  async save(note: Note): Promise<void> {
+  async save(note: Note, _source?: "agent" | "user" | "system"): Promise<void> {
     this.notes.set(this.key(note.id, note.workspaceId), { ...note });
   }
 

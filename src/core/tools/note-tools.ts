@@ -13,7 +13,6 @@ import { createNote, SPEC_NOTE_ID } from "../models/note";
 import { createTask as createTaskModel, TaskStatus } from "../models/task";
 import { extractTaskBlocks } from "../orchestration/task-block-parser";
 import { ToolResult, successResult, errorResult } from "./tool-result";
-import { CRDTNoteStore } from "../notes/crdt-note-store";
 
 export class NoteTools {
   constructor(
@@ -309,11 +308,7 @@ export class NoteTools {
     note: { id: string; title: string; content: string; workspaceId: string; metadata: Record<string, unknown>; createdAt: Date; updatedAt: Date },
     source: "agent" | "user" | "system"
   ): Promise<void> {
-    if (this.noteStore instanceof CRDTNoteStore) {
-      await (this.noteStore as CRDTNoteStore).save(note as import("../models/note").Note, source);
-    } else {
-      await this.noteStore.save(note as import("../models/note").Note);
-    }
+    await this.noteStore.save(note as import("../models/note").Note, source);
   }
 
   // ─── Delete Note ──────────────────────────────────────────────────────

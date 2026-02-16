@@ -9,7 +9,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import { createNote } from "@/core/models/note";
-import { CRDTNoteStore } from "@/core/notes/crdt-note-store";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -62,12 +61,7 @@ export async function POST(request: NextRequest) {
       if (metadata) Object.assign(existing.metadata, metadata);
       existing.updatedAt = new Date();
 
-      // Use CRDT-aware save if available
-      if (store instanceof CRDTNoteStore) {
-        await store.save(existing, source);
-      } else {
-        await store.save(existing);
-      }
+      await store.save(existing, source);
 
       return NextResponse.json({ note: serializeNote(existing) });
     }
@@ -85,11 +79,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  if (store instanceof CRDTNoteStore) {
-    await store.save(note, source);
-  } else {
-    await store.save(note);
-  }
+  await store.save(note, source);
 
   return NextResponse.json({ note: serializeNote(note) }, { status: 201 });
 }
