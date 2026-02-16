@@ -4,6 +4,9 @@ const isStaticBuild = process.env.ROUTA_BUILD_STATIC === "1";
 const isDesktopServerBuild = process.env.ROUTA_DESKTOP_SERVER_BUILD === "1";
 const isDesktopStandaloneBuild = process.env.ROUTA_DESKTOP_STANDALONE === "1";
 
+// When set, proxy API requests to the Rust backend server (desktop mode without Node.js backend)
+const rustBackendUrl = process.env.ROUTA_RUST_BACKEND_URL;
+
 const nextConfig: NextConfig = {
   typescript: {
     tsconfigPath: isDesktopServerBuild ? "tsconfig.desktop.json" : "tsconfig.json",
@@ -29,6 +32,24 @@ const nextConfig: NextConfig = {
     ? {
         output: "export",
         images: { unoptimized: true },
+      }
+    : {}),
+  // Proxy /api/* to Rust backend when ROUTA_RUST_BACKEND_URL is set.
+  // Uses beforeFiles to override local Next.js API routes.
+  ...(rustBackendUrl
+    ? {
+        async rewrites() {
+          return {
+            beforeFiles: [
+              {
+                source: "/api/:path*",
+                destination: `${rustBackendUrl}/api/:path*`,
+              },
+            ],
+            afterFiles: [],
+            fallback: [],
+          };
+        },
       }
     : {}),
 };

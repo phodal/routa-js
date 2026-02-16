@@ -24,3 +24,23 @@ tauri-plugin-os = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
+
+# ── Rust Backend (replacing Node.js) ──────────────────────────────
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+rmcp = { version = "0.15", features = ["server", "transport-streamable-http-server", "schemars"] }
+schemars = "1"
+agent-client-protocol = "0.9"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+glob = "0.3"
+tokio-stream = "0.1"
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }

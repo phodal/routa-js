@@ -6,6 +6,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::Manager;
 
+pub mod server;
+
 /// Custom Tauri commands exposed to the frontend via `invoke`.
 /// These bridge the gap between the web frontend and native capabilities.
 
@@ -50,8 +52,6 @@ fn detect_repo_root() -> Option<PathBuf> {
         }
     }
 
-    // During local desktop development/build this points to:
-    // <repo>/apps/desktop/src-tauri
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let candidate = manifest_dir.join("../../..");
     if candidate.join("package.json").exists() {
@@ -145,8 +145,6 @@ fn start_embedded_next_server(
         ));
     }
 
-    // Determine a writable path for the SQLite database.
-    // Prefer ROUTA_DB_PATH env, otherwise use <app_data_dir>/routa.db.
     let db_path = std::env::var("ROUTA_DB_PATH").unwrap_or_else(|_| {
         let data_dir = app
             .path()
@@ -189,6 +187,51 @@ fn start_embedded_next_server(
     Ok(child)
 }
 
+/// Resolve the SQLite database path for the desktop app.
+fn resolve_db_path(app: &tauri::AppHandle) -> String {
+    std::env::var("ROUTA_DB_PATH").unwrap_or_else(|_| {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".routa"));
+        std::fs::create_dir_all(&data_dir).ok();
+        data_dir
+            .join("routa.db")
+            .to_string_lossy()
+            .to_string()
+    })
+}
+
+/// Start the embedded Rust backend server (replaces Node.js).
+fn start_rust_server(app: &tauri::AppHandle, host: &str, port: u16) -> Result<(), String> {
+    let db_path = resolve_db_path(app);
+    let host = host.to_string();
+
+    println!("[rust-server] Starting embedded Rust backend server");
+    println!("[rust-server] Database path: {}", db_path);
+    println!("[rust-server] Listening on {}:{}", host, port);
+
+    let config = server::ServerConfig {
+        host,
+        port,
+        db_path,
+    };
+
+    // Start the server in the Tauri async runtime
+    tauri::async_runtime::spawn(async move {
+        match server::start_server(config).await {
+            Ok(addr) => {
+                println!("[rust-server] Server started on {}", addr);
+            }
+            Err(e) => {
+                eprintln!("[rust-server] Failed to start server: {}", e);
+            }
+        }
+    });
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -212,9 +255,20 @@ pub fn run() {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
+
+            // Configurable API mode:
+            // - rust (default): start embedded Rust server (no Node.js needed).
+            // - embedded: start packaged standalone Next server (legacy Node.js mode).
+            // - external: connect to existing server at ROUTA_DESKTOP_API_URL.
+            // - off: use embedded static UI only.
+            let api_mode = env_or_default("ROUTA_DESKTOP_API_MODE", "rust");
+            let api_host = env_or_default("ROUTA_DESKTOP_API_HOST", "127.0.0.1");
+            let port = api_port();
+            let api_url = std::env::var("ROUTA_DESKTOP_API_URL")
+                .unwrap_or_else(|_| format!("http://{}:{}", api_host, port));
+
             #[cfg(not(debug_assertions))]
             {
-                // Allow explicitly enabling DevTools in release builds for diagnostics.
                 let force_debug =
                     std::env::var("ROUTA_TAURI_DEBUG").ok().as_deref() == Some("1");
                 if force_debug {
@@ -222,25 +276,46 @@ pub fn run() {
                         window.open_devtools();
                     }
                 }
+            }
 
-                // Configurable API mode:
-                // - embedded (default): start packaged standalone Next server.
-                // - external: do not spawn, connect to existing ROUTA_DESKTOP_API_URL/HOST:PORT.
-                // - off: use embedded static UI only.
-                let api_mode = env_or_default("ROUTA_DESKTOP_API_MODE", "embedded");
-                let api_host = env_or_default("ROUTA_DESKTOP_API_HOST", "127.0.0.1");
-                let port = api_port();
-                let api_url = std::env::var("ROUTA_DESKTOP_API_URL")
-                    .unwrap_or_else(|_| format!("http://{}:{}", api_host, port));
-
-                if api_mode != "off" {
+            match api_mode.as_str() {
+                "off" => {
+                    println!("[desktop-server] API mode is off, using embedded static UI only");
+                }
+                "rust" => {
+                    // New: Start embedded Rust server (no Node.js dependency!)
+                    match start_rust_server(&app.handle(), &api_host, port) {
+                        Ok(()) => {
+                            // Wait for the Rust server to become ready
+                            if wait_for_port(&api_host, port, 5) {
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let js =
+                                        format!("window.location.replace('{}');", api_url);
+                                    let _ = window.eval(&js);
+                                    println!(
+                                        "[rust-server] Webview navigated to {}",
+                                        api_url
+                                    );
+                                }
+                            } else {
+                                eprintln!(
+                                    "[rust-server] Timed out waiting for server. Falling back to static UI."
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[rust-server] {}", e);
+                        }
+                    }
+                }
+                "embedded" => {
+                    // Legacy: start Node.js server
                     let mut ready = wait_for_port(&api_host, port, 1);
-                    if !ready && api_mode == "embedded" {
+                    if !ready {
                         match start_embedded_next_server(&app.handle(), &api_host, port) {
                             Ok(_child) => {}
                             Err(err) => {
                                 eprintln!("[desktop-server] {}", err);
-                                // Dev fallback: running app from repository workspace.
                                 match start_local_next_server(&api_host, port) {
                                     Ok(_child) => {}
                                     Err(dev_err) => {
@@ -250,8 +325,11 @@ pub fn run() {
                             }
                         }
                         ready = wait_for_port(&api_host, port, 25);
-                    } else if ready {
-                        println!("[desktop-server] Reusing existing local server on {}", api_url);
+                    } else {
+                        println!(
+                            "[desktop-server] Reusing existing local server on {}",
+                            api_url
+                        );
                     }
 
                     if ready {
@@ -266,10 +344,32 @@ pub fn run() {
                             api_url
                         );
                     }
-                } else {
-                    println!("[desktop-server] API mode is off, using embedded static UI only");
+                }
+                "external" => {
+                    if wait_for_port(&api_host, port, 5) {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let js = format!("window.location.replace('{}');", api_url);
+                            let _ = window.eval(&js);
+                            println!(
+                                "[desktop-server] Webview navigated to external {}",
+                                api_url
+                            );
+                        }
+                    } else {
+                        eprintln!(
+                            "[desktop-server] External server not reachable at {}",
+                            api_url
+                        );
+                    }
+                }
+                _ => {
+                    eprintln!(
+                        "[desktop-server] Unknown API mode '{}', falling back to static UI",
+                        api_mode
+                    );
                 }
             }
+
             Ok(())
         })
         .run(tauri::generate_context!())
