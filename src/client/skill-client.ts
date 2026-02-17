@@ -15,6 +15,8 @@
 export interface SkillSummary {
   name: string;
   description: string;
+  /** Short label for UI display (from metadata.short-description) */
+  shortDescription?: string;
   license?: string;
   compatibility?: string;
   /** "local" for installed skills, "repo" for repo-discovered skills */

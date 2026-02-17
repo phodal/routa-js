@@ -141,16 +141,23 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
                   )}
                 </div>
                 <div className="mt-0.5 ml-[18px] text-[10px] text-gray-400 dark:text-gray-500 truncate">
-                  {skill.description}
+                  {skill.shortDescription || skill.description}
                 </div>
               </button>
 
               {/* Expanded skill content */}
               {expandedSkill === skill.name && loadedSkill?.name === skill.name && (
-                <div className="mx-2.5 mb-2 p-2 rounded-md bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
-                  <div className="text-[10px] font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed">
-                    {loadedSkill.content}
+                <div className="mx-2.5 mb-2 p-2 rounded-md bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 space-y-1.5">
+                  {/* Full description (always shown when expanded) */}
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                    {loadedSkill.description}
                   </div>
+                  {/* Instructions preview */}
+                  {loadedSkill.content && (
+                    <div className="text-[10px] font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed border-t border-gray-100 dark:border-gray-700 pt-1.5">
+                      {loadedSkill.content}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

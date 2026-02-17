@@ -2,11 +2,42 @@
 //!
 //! Discovers SKILL.md files from well-known directories on the filesystem,
 //! matching the TypeScript implementation's behavior.
+//!
+//! SKILL.md files use YAML frontmatter for metadata:
+//! ```markdown
+//! ---
+//! name: skill-name
+//! description: What this skill does.
+//! metadata:
+//!   short-description: Brief label
+//! ---
+//!
+//! Full instructions for the agent...
+//! ```
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::RwLock;
+
+/// YAML frontmatter parsed from a SKILL.md file.
+#[derive(Debug, Deserialize)]
+struct SkillFrontmatter {
+    name: String,
+    description: String,
+    #[serde(default)]
+    license: Option<String>,
+    #[serde(default)]
+    compatibility: Option<String>,
+    #[serde(default)]
+    metadata: SkillFrontmatterMetadata,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct SkillFrontmatterMetadata {
+    #[serde(default, rename = "short-description")]
+    short_description: Option<String>,
+}
 
 /// A discovered skill definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,10 +45,14 @@ use std::sync::RwLock;
 pub struct SkillDefinition {
     pub name: String,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_description: Option<String>,
     pub content: String,
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compatibility: Option<String>,
     #[serde(default)]
     pub metadata: HashMap<String, String>,
 }
@@ -93,8 +128,21 @@ impl SkillRegistry {
     }
 }
 
-/// Recursively discover SKILL.md files in a directory.
+/// Recursively discover SKILL.md files in a directory (max 2 levels deep).
 fn discover_skills_in_dir(dir: &Path, out: &mut HashMap<String, SkillDefinition>) {
+    discover_skills_recursive(dir, out, 0, 2);
+}
+
+fn discover_skills_recursive(
+    dir: &Path,
+    out: &mut HashMap<String, SkillDefinition>,
+    depth: usize,
+    max_depth: usize,
+) {
+    if depth > max_depth {
+        return;
+    }
+
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(_) => return,
@@ -103,15 +151,14 @@ fn discover_skills_in_dir(dir: &Path, out: &mut HashMap<String, SkillDefinition>
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            // Look for SKILL.md in the subdirectory
             let skill_file = path.join(SKILL_FILENAME);
             if skill_file.is_file() {
                 if let Some(skill) = parse_skill_file(&skill_file) {
                     out.insert(skill.name.clone(), skill);
                 }
             }
-            // Recurse one level deeper
-            discover_skills_in_dir(&path, out);
+            // Recurse deeper (handles .system subdirs, nested structures)
+            discover_skills_recursive(&path, out, depth + 1, max_depth);
         } else if path.file_name().map(|f| f == SKILL_FILENAME).unwrap_or(false) {
             if let Some(skill) = parse_skill_file(&path) {
                 out.insert(skill.name.clone(), skill);
@@ -120,21 +167,75 @@ fn discover_skills_in_dir(dir: &Path, out: &mut HashMap<String, SkillDefinition>
     }
 }
 
-/// Parse a SKILL.md file into a SkillDefinition.
-fn parse_skill_file(path: &Path) -> Option<SkillDefinition> {
-    let content = std::fs::read_to_string(path).ok()?;
+/// Extract YAML frontmatter from between `---` delimiters.
+fn extract_frontmatter(contents: &str) -> Option<(String, String)> {
+    let mut lines = contents.lines();
+    if !matches!(lines.next(), Some(line) if line.trim() == "---") {
+        return None;
+    }
 
-    // Extract skill name from the directory name or the first heading
+    let mut frontmatter_lines: Vec<&str> = Vec::new();
+    let mut body_start = false;
+    let mut body_lines: Vec<&str> = Vec::new();
+
+    for line in lines {
+        if !body_start {
+            if line.trim() == "---" {
+                body_start = true;
+            } else {
+                frontmatter_lines.push(line);
+            }
+        } else {
+            body_lines.push(line);
+        }
+    }
+
+    if frontmatter_lines.is_empty() || !body_start {
+        return None;
+    }
+
+    Some((frontmatter_lines.join("\n"), body_lines.join("\n")))
+}
+
+/// Parse a SKILL.md file into a SkillDefinition.
+///
+/// Supports two formats:
+/// 1. YAML frontmatter (preferred): `---\nname: ...\ndescription: ...\n---\n<body>`
+/// 2. Legacy fallback: directory name as name, first paragraph as description
+fn parse_skill_file(path: &Path) -> Option<SkillDefinition> {
+    let raw = std::fs::read_to_string(path).ok()?;
+
+    // Try YAML frontmatter first
+    if let Some((frontmatter_str, body)) = extract_frontmatter(&raw) {
+        if let Ok(fm) = serde_yaml::from_str::<SkillFrontmatter>(&frontmatter_str) {
+            let short_desc = fm
+                .metadata
+                .short_description
+                .filter(|s| !s.is_empty());
+
+            return Some(SkillDefinition {
+                name: fm.name,
+                description: fm.description,
+                short_description: short_desc,
+                content: body.trim().to_string(),
+                source: path.to_string_lossy().to_string(),
+                license: fm.license,
+                compatibility: fm.compatibility,
+                metadata: HashMap::new(),
+            });
+        }
+    }
+
+    // Fallback: extract name from directory, description from first paragraph
     let name = path
         .parent()
         .and_then(|p| p.file_name())
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    // Extract description from the first paragraph after the heading
-    let description = content
+    let description = raw
         .lines()
-        .skip_while(|l| l.starts_with('#') || l.trim().is_empty())
+        .skip_while(|l| l.starts_with('#') || l.starts_with("---") || l.trim().is_empty())
         .take_while(|l| !l.trim().is_empty())
         .collect::<Vec<_>>()
         .join(" ");
@@ -146,9 +247,11 @@ fn parse_skill_file(path: &Path) -> Option<SkillDefinition> {
         } else {
             description
         },
-        content,
+        short_description: None,
+        content: raw,
         source: path.to_string_lossy().to_string(),
         license: None,
+        compatibility: None,
         metadata: HashMap::new(),
     })
 }

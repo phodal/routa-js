@@ -238,6 +238,7 @@ export function createRoutaAcpAgent(
             return {
               name: skill.name,
               description: skill.description,
+              shortDescription: skill.shortDescription,
               content: skill.content,
             };
           }

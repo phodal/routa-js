@@ -22,6 +22,7 @@ import { getServerBridge } from "@/core/platform";
 export interface SkillDefinition {
   name: string;
   description: string;
+  shortDescription?: string;
   content: string;
   license?: string;
   compatibility?: string;
@@ -35,12 +36,16 @@ const SKILL_SEARCH_DIRS = [
   ".opencode/skills",
   ".claude/skills",
   ".agents/skills",
+  ".codex/skills",
+  ".cursor/skills",
 ];
 
 const GLOBAL_SKILL_DIRS = [
   ".config/opencode/skills",
   ".claude/skills",
   ".agents/skills",
+  ".codex/skills",
+  ".cursor/skills",
 ];
 
 /**
@@ -216,13 +221,18 @@ export function loadSkillFile(
     return null;
   }
 
+  // Extract short-description from metadata (Codex format)
+  const meta = frontmatter.metadata as Record<string, string> | undefined;
+  const shortDescription = meta?.["short-description"] || undefined;
+
   return {
     name,
     description,
+    shortDescription,
     content: content.trim(),
     license: frontmatter.license as string | undefined,
     compatibility: frontmatter.compatibility as string | undefined,
-    metadata: frontmatter.metadata as Record<string, string> | undefined,
+    metadata: meta,
     source: filePath,
   };
 }

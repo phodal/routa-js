@@ -370,8 +370,34 @@ fn scan_skill_dir(dir: &Path, out: &mut Vec<DiscoveredSkill>) {
     }
 }
 
+/// YAML frontmatter structure for discovered skills.
+#[derive(Debug, serde::Deserialize)]
+struct SkillFrontmatter {
+    name: String,
+    description: String,
+    #[serde(default)]
+    license: Option<String>,
+    #[serde(default)]
+    compatibility: Option<String>,
+}
+
 fn parse_discovered_skill(path: &Path) -> Option<DiscoveredSkill> {
     let content = std::fs::read_to_string(path).ok()?;
+
+    // Try YAML frontmatter first
+    if let Some((fm_str, _body)) = extract_frontmatter_str(&content) {
+        if let Ok(fm) = serde_yaml::from_str::<SkillFrontmatter>(&fm_str) {
+            return Some(DiscoveredSkill {
+                name: fm.name,
+                description: fm.description,
+                source: path.to_string_lossy().to_string(),
+                license: fm.license,
+                compatibility: fm.compatibility,
+            });
+        }
+    }
+
+    // Fallback: directory name + first paragraph
     let name = path
         .parent()
         .and_then(|p| p.file_name())
@@ -380,7 +406,7 @@ fn parse_discovered_skill(path: &Path) -> Option<DiscoveredSkill> {
 
     let description = content
         .lines()
-        .skip_while(|l| l.starts_with('#') || l.trim().is_empty())
+        .skip_while(|l| l.starts_with('#') || l.starts_with("---") || l.trim().is_empty())
         .take_while(|l| !l.trim().is_empty())
         .collect::<Vec<_>>()
         .join(" ");
@@ -396,6 +422,36 @@ fn parse_discovered_skill(path: &Path) -> Option<DiscoveredSkill> {
         license: None,
         compatibility: None,
     })
+}
+
+/// Extract YAML frontmatter from between `---` delimiters.
+fn extract_frontmatter_str(contents: &str) -> Option<(String, String)> {
+    let mut lines = contents.lines();
+    if !matches!(lines.next(), Some(line) if line.trim() == "---") {
+        return None;
+    }
+
+    let mut frontmatter_lines: Vec<&str> = Vec::new();
+    let mut body_start = false;
+    let mut body_lines: Vec<&str> = Vec::new();
+
+    for line in lines {
+        if !body_start {
+            if line.trim() == "---" {
+                body_start = true;
+            } else {
+                frontmatter_lines.push(line);
+            }
+        } else {
+            body_lines.push(line);
+        }
+    }
+
+    if frontmatter_lines.is_empty() || !body_start {
+        return None;
+    }
+
+    Some((frontmatter_lines.join("\n"), body_lines.join("\n")))
 }
 
 /// Recursively copy a directory, skipping .git and node_modules.

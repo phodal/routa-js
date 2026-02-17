@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
     skills: skills.map((s) => ({
       name: s.name,
       description: s.description,
+      shortDescription: s.shortDescription,
       license: s.license,
       compatibility: s.compatibility,
     })),

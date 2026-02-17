@@ -56,10 +56,11 @@ export class SkillRegistry {
   /**
    * List skill summaries (name + description only, for client discovery)
    */
-  listSkillSummaries(): Array<{ name: string; description: string }> {
+  listSkillSummaries(): Array<{ name: string; description: string; shortDescription?: string }> {
     return this.listSkills().map((s) => ({
       name: s.name,
       description: s.description,
+      shortDescription: s.shortDescription,
     }));
   }
 
