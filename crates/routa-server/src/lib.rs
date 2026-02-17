@@ -56,6 +56,32 @@ impl Default for ServerConfig {
     }
 }
 
+/// Create a shared `AppState` from a database path.
+///
+/// This is useful when you need to share the state between the HTTP server
+/// and other consumers (e.g. Tauri IPC commands, JSON-RPC router).
+pub async fn create_app_state(db_path: &str) -> Result<AppState, String> {
+    let db = Database::open(db_path)
+        .map_err(|e| format!("Failed to open database: {}", e))?;
+
+    let state: AppState = Arc::new(AppStateInner::new(db));
+
+    // Ensure default workspace exists
+    state
+        .workspace_store
+        .ensure_default()
+        .await
+        .map_err(|e| format!("Failed to initialize default workspace: {}", e))?;
+
+    // Discover skills
+    let cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| ".".to_string());
+    state.skill_registry.reload(&cwd);
+
+    Ok(state)
+}
+
 /// Start the embedded Rust backend server.
 ///
 /// Returns the actual address the server is listening on.
@@ -79,26 +105,19 @@ pub async fn start_server(config: ServerConfig) -> Result<SocketAddr, String> {
         config.port
     );
 
-    // Open database
-    let db = Database::open(&config.db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let state = create_app_state(&config.db_path).await?;
 
-    // Build shared state
-    let state: AppState = Arc::new(AppStateInner::new(db));
+    start_server_with_state(config, state).await
+}
 
-    // Ensure default workspace exists
-    state
-        .workspace_store
-        .ensure_default()
-        .await
-        .map_err(|e| format!("Failed to initialize default workspace: {}", e))?;
-
-    // Discover skills
-    let cwd = std::env::current_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| ".".to_string());
-    state.skill_registry.reload(&cwd);
-
+/// Start the HTTP server with a pre-built `AppState`.
+///
+/// This variant is useful when you want to share the state with other
+/// consumers (e.g. a Tauri IPC command that routes JSON-RPC calls directly).
+pub async fn start_server_with_state(
+    config: ServerConfig,
+    state: AppState,
+) -> Result<SocketAddr, String> {
     // Build router
     let cors = CorsLayer::new()
         .allow_origin(Any)

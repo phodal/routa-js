@@ -15,6 +15,55 @@ use routa_server::acp::{
     AcpBinaryManager, AcpInstallationState, AcpPaths, AcpRegistry, DistributionType,
     InstalledAgentInfo,
 };
+use routa_server::rpc::RpcRouter;
+use routa_server::state::AppState;
+
+// ─── Shared RPC State ─────────────────────────────────────────────────────
+
+/// Wrapper around `AppState` that can be lazily initialized.
+/// Stored as Tauri managed state so the `rpc_call` command can access
+/// the same AppState that the HTTP server uses.
+#[derive(Clone)]
+pub struct RpcState {
+    inner: Arc<RwLock<Option<AppState>>>,
+}
+
+impl RpcState {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    async fn set(&self, state: AppState) {
+        let mut guard = self.inner.write().await;
+        *guard = Some(state);
+    }
+
+    async fn get(&self) -> Option<AppState> {
+        self.inner.read().await.clone()
+    }
+}
+
+/// JSON-RPC 2.0 call via Tauri IPC — bypasses HTTP entirely.
+///
+/// The frontend sends a JSON-RPC request object and receives the response
+/// directly through the Tauri command channel.
+#[tauri::command]
+async fn rpc_call(
+    state: State<'_, RpcState>,
+    request: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let app_state = state
+        .get()
+        .await
+        .ok_or_else(|| "Server not initialized yet".to_string())?;
+
+    let router = RpcRouter::new(app_state);
+    Ok(router.handle_value(request).await)
+}
+
+// ─── Custom Tauri Commands ────────────────────────────────────────────────
 
 /// Custom Tauri commands exposed to the frontend via `invoke`.
 /// These bridge the gap between the web frontend and native capabilities.
@@ -469,6 +518,9 @@ fn resolve_static_dir(app: &tauri::AppHandle) -> Option<String> {
 }
 
 /// Start the embedded Rust backend server (replaces Node.js).
+///
+/// Creates a shared `AppState` that is used by both the HTTP server and
+/// the `rpc_call` Tauri command, enabling direct JSON-RPC calls without HTTP.
 fn start_rust_server(app: &tauri::AppHandle, host: &str, port: u16) -> Result<(), String> {
     let db_path = resolve_db_path(app);
     let static_dir = resolve_static_dir(app);
@@ -482,6 +534,9 @@ fn start_rust_server(app: &tauri::AppHandle, host: &str, port: u16) -> Result<()
     );
     println!("[rust-server] Listening on {}:{}", host, port);
 
+    let rpc_state: RpcState = app.state::<RpcState>().inner().clone();
+    let db_path_clone = db_path.clone();
+
     let config = server::ServerConfig {
         host,
         port,
@@ -491,7 +546,21 @@ fn start_rust_server(app: &tauri::AppHandle, host: &str, port: u16) -> Result<()
 
     // Start the server in the Tauri async runtime
     tauri::async_runtime::spawn(async move {
-        match server::start_server(config).await {
+        // Create the shared AppState first
+        let app_state = match server::create_app_state(&db_path_clone).await {
+            Ok(state) => state,
+            Err(e) => {
+                eprintln!("[rust-server] Failed to create app state: {}", e);
+                return;
+            }
+        };
+
+        // Share the state with the RPC command handler
+        rpc_state.set(app_state.clone()).await;
+        println!("[rust-server] AppState shared with JSON-RPC handler");
+
+        // Start the HTTP server with the same state
+        match server::start_server_with_state(config, app_state).await {
             Ok(addr) => {
                 println!("[rust-server] Server started on {}", addr);
             }
@@ -515,12 +584,14 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .manage(AcpState::new())
+        .manage(RpcState::new())
         .invoke_handler(tauri::generate_handler![
             get_env,
             get_cwd,
             get_home_dir,
             is_git_repo,
             log_frontend,
+            rpc_call,
             fetch_acp_registry,
             get_installed_agents,
             install_acp_agent,

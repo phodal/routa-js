@@ -3,59 +3,35 @@
 /**
  * AgentPanel - displays and manages agents in the workspace.
  * Accepts a refreshKey prop to trigger external refresh (e.g., after session changes).
+ *
+ * Uses JSON-RPC via `useAgentsRpc` — routes through Tauri IPC in desktop
+ * mode or HTTP `/api/rpc` in web mode.
  */
 
-import { useState, useEffect, useCallback } from "react";
-
-interface AgentInfo {
-  id: string;
-  name: string;
-  role: string;
-  status: string;
-  parentId?: string;
-}
+import { useState, useEffect } from "react";
+import { useAgentsRpc } from "../hooks/use-agents-rpc";
 
 interface AgentPanelProps {
   refreshKey?: number;
 }
 
 export function AgentPanel({ refreshKey }: AgentPanelProps) {
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { agents, loading, fetchAgents, createAgent: createAgentRpc } =
+    useAgentsRpc();
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentRole, setNewAgentRole] = useState("CRAFTER");
 
-  const fetchAgents = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/agents", { cache: "no-store" });
-      const data = await res.json();
-      setAgents(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to fetch agents:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Fetch on mount and when refreshKey changes
+  // Refresh when refreshKey changes
   useEffect(() => {
-    fetchAgents();
-  }, [fetchAgents, refreshKey]);
+    if (refreshKey !== undefined) {
+      fetchAgents();
+    }
+  }, [refreshKey, fetchAgents]);
 
   const createAgent = async () => {
     if (!newAgentName.trim()) return;
-    try {
-      await fetch("/api/agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newAgentName, role: newAgentRole }),
-      });
-      setNewAgentName("");
-      fetchAgents();
-    } catch (err) {
-      console.error("Failed to create agent:", err);
-    }
+    await createAgentRpc({ name: newAgentName, role: newAgentRole });
+    setNewAgentName("");
   };
 
   const roleColor: Record<string, string> = {
