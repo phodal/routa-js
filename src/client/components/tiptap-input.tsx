@@ -336,6 +336,8 @@ export function TiptapInput({
 }: TiptapInputProps) {
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
+  const providerBtnRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
   const [claudeMode, setClaudeMode] = useState<"acceptEdits" | "plan">("acceptEdits");
   const [opencodeMode, setOpencodeMode] = useState<"build" | "plan">("build");
 
@@ -611,15 +613,22 @@ export function TiptapInput({
           />
 
           {/* Provider dropdown */}
-          <div className="relative" ref={providerDropdownRef}>
+          <div ref={providerDropdownRef}>
             <button
+              ref={providerBtnRef}
               type="button"
-              onClick={() => setProviderDropdownOpen((v) => !v)}
+              onClick={() => {
+                if (!providerDropdownOpen && providerBtnRef.current) {
+                  const rect = providerBtnRef.current.getBoundingClientRect();
+                  setDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
+                }
+                setProviderDropdownOpen((v) => !v);
+              }}
               className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors"
               title="Select provider"
             >
               <span className={`w-1.5 h-1.5 rounded-full ${selectedProviderInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className="text-gray-700 dark:text-gray-300 font-medium max-w-[100px] truncate">
+              <span className="text-gray-700 dark:text-gray-300 font-medium max-w-[120px] truncate">
                 {selectedProviderInfo?.name ?? selectedProvider}
               </span>
               <svg className={`w-3 h-3 text-gray-400 transition-transform ${providerDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -627,12 +636,15 @@ export function TiptapInput({
               </svg>
             </button>
 
-            {providerDropdownOpen && (
-              <div className="absolute bottom-full left-0 mb-1 w-64 max-h-72 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-lg z-50">
+            {providerDropdownOpen && dropdownPos && (
+              <div
+                className="fixed w-72 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999]"
+                style={{ left: dropdownPos.left, bottom: dropdownPos.bottom }}
+              >
                 {availableProviders.length > 0 && (
                   <div className="py-1">
                     <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      Available
+                      Available ({availableProviders.length})
                     </div>
                     {availableProviders.map((p) => (
                       <button
@@ -649,8 +661,8 @@ export function TiptapInput({
                         }`}
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                        <span className="font-medium truncate">{p.name}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate ml-auto">{p.command}</span>
+                        <span className="font-medium truncate flex-1">{p.name}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
                       </button>
                     ))}
                   </div>
@@ -658,7 +670,7 @@ export function TiptapInput({
                 {unavailableProviders.length > 0 && (
                   <div className="py-1 border-t border-gray-100 dark:border-gray-800">
                     <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      Not Installed
+                      Not Installed ({unavailableProviders.length})
                     </div>
                     {unavailableProviders.map((p) => (
                       <button
@@ -675,8 +687,8 @@ export function TiptapInput({
                         }`}
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-                        <span className="font-medium truncate">{p.name}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate ml-auto">{p.command}</span>
+                        <span className="font-medium truncate flex-1">{p.name}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
                       </button>
                     ))}
                   </div>
