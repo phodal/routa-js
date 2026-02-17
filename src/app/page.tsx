@@ -16,6 +16,7 @@ import { ChatPanel } from "@/client/components/chat-panel";
 import { SessionPanel } from "@/client/components/session-panel";
 import { TaskPanel, type CrafterAgent, type CrafterMessage } from "@/client/components/task-panel";
 import { CollaborativeTaskEditor } from "@/client/components/collaborative-task-editor";
+import { AgentInstallPanel } from "@/client/components/agent-install-panel";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useSkills } from "@/client/hooks/use-skills";
 import { useNotes } from "@/client/hooks/use-notes";
@@ -52,6 +53,7 @@ export default function HomePage() {
 
   // ── Mobile sidebar toggle ──────────────────────────────────────────
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
 
   // ── CRAFTERs view state ──────────────────────────────────────────────
   const [crafterAgents, setCrafterAgents] = useState<CrafterAgent[]>([]);
@@ -779,15 +781,15 @@ export default function HomePage() {
 
           {/* Bottom actions */}
           <div className="p-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
-            <a
-              href="/settings/agents"
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+            <button
+              onClick={() => setShowAgentInstallPopup(true)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
               Install Agents
-            </a>
+            </button>
             <a
               href="/settings/agents"
               className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -897,6 +899,35 @@ export default function HomePage() {
       {/* ─── Resize overlay (prevents iframe/content interference) ─── */}
       {(isResizing || isLeftResizing) && (
         <div className="fixed inset-0 z-50 cursor-col-resize" />
+      )}
+
+      {/* ─── Agent Install Popup ─────────────────────────────────────── */}
+      {showAgentInstallPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowAgentInstallPopup(false)}
+          />
+          <div className="relative w-full max-w-5xl h-[80vh] bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+            <div className="h-11 px-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                Install Agents
+              </div>
+              <button
+                onClick={() => setShowAgentInstallPopup(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                title="Close"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="h-[calc(80vh-44px)]">
+              <AgentInstallPanel />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── Agent Toast ──────────────────────────────────────────── */}
