@@ -11,9 +11,9 @@
  *   - Cloning skills from GitHub repos (e.g. vercel-labs/agent-skills)
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useSkills, type UseSkillsState, type UseSkillsActions } from "../hooks/use-skills";
-import type { CatalogSkill } from "../skill-client";
+import type { SkillsShSkill } from "../skill-client";
 
 interface SkillPanelProps {
   /** Pass a shared useSkills() instance to keep sidebar and chat in sync */
@@ -33,7 +33,7 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
     loadSkill,
     reloadFromDisk,
     cloneFromGithub,
-    browseCatalog,
+    searchCatalog,
     installFromCatalog,
     catalogSkills,
     catalogLoading,
@@ -190,7 +190,7 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
           catalogSkills={catalogSkills}
           catalogLoading={catalogLoading}
           catalogInstalling={catalogInstalling}
-          browseCatalog={browseCatalog}
+          searchCatalog={searchCatalog}
           installFromCatalog={installFromCatalog}
         />
       )}
@@ -214,16 +214,12 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
 
 // ─── Skill Catalog Modal ────────────────────────────────────────────────
 
-interface CatalogSource {
-  label: string;
-  repo: string;
-  path: string;
+function formatInstalls(count: number): string {
+  if (!count || count <= 0) return "";
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(count);
 }
-
-const CATALOG_SOURCES: CatalogSource[] = [
-  { label: "Curated", repo: "openai/skills", path: "skills/.curated" },
-  { label: "Experimental", repo: "openai/skills", path: "skills/.experimental" },
-];
 
 function SkillCatalogModal({
   onClose,
@@ -231,64 +227,82 @@ function SkillCatalogModal({
   catalogSkills,
   catalogLoading,
   catalogInstalling,
-  browseCatalog,
+  searchCatalog,
   installFromCatalog,
 }: {
   onClose: () => void;
   onInstalled: () => void;
-  catalogSkills: CatalogSkill[];
+  catalogSkills: SkillsShSkill[];
   catalogLoading: boolean;
   catalogInstalling: boolean;
-  browseCatalog: (repo?: string, path?: string) => Promise<unknown>;
-  installFromCatalog: (skills: string[], repo?: string, path?: string) => Promise<unknown>;
+  searchCatalog: (query: string) => Promise<SkillsShSkill[]>;
+  installFromCatalog: (skills: Array<{ name: string; source: string }>) => Promise<unknown>;
 }) {
-  const [activeSource, setActiveSource] = useState<CatalogSource>(CATALOG_SOURCES[0]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Map<string, { name: string; source: string }>>(new Map());
   const [installResult, setInstallResult] = useState<{
     installed: string[];
     errors: string[];
   } | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleBrowse = useCallback(
-    async (source: CatalogSource) => {
-      setActiveSource(source);
-      setSelected(new Set());
+  // Auto-focus search input
+  useEffect(() => {
+    inputRef.current?.focus();
+    // Load trending on mount (empty query returns popular skills)
+    searchCatalog("");
+  }, [searchCatalog]);
+
+  const handleSearch = useCallback(
+    (value: string) => {
+      setQuery(value);
       setInstallResult(null);
-      setLoaded(true);
-      await browseCatalog(source.repo, source.path);
+
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      const debounceMs = Math.max(150, 350 - value.length * 50);
+      debounceRef.current = setTimeout(() => {
+        searchCatalog(value);
+      }, debounceMs);
     },
-    [browseCatalog]
+    [searchCatalog]
   );
 
   const handleInstall = useCallback(async () => {
     if (selected.size === 0) return;
-    const result = (await installFromCatalog(
-      Array.from(selected),
-      activeSource.repo,
-      activeSource.path
-    )) as { installed: string[]; errors: string[] } | null;
+    const skills = Array.from(selected.values());
+    const result = (await installFromCatalog(skills)) as {
+      installed: string[];
+      errors: string[];
+    } | null;
 
     if (result) {
       setInstallResult(result);
-      setSelected(new Set());
+      setSelected(new Map());
       if (result.installed.length > 0) {
         onInstalled();
       }
     }
-  }, [selected, activeSource, installFromCatalog, onInstalled]);
+  }, [selected, installFromCatalog, onInstalled]);
 
-  const toggleSkill = useCallback((name: string) => {
+  const toggleSkill = useCallback((skill: SkillsShSkill) => {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
+      const next = new Map(prev);
+      const key = `${skill.source}/${skill.name}`;
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(name);
+        next.set(key, { name: skill.name, source: skill.source });
       }
       return next;
     });
   }, []);
+
+  const isSelected = useCallback(
+    (skill: SkillsShSkill) => selected.has(`${skill.source}/${skill.name}`),
+    [selected]
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -311,12 +325,20 @@ function SkillCatalogModal({
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
               />
             </svg>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Skill Catalog
             </h3>
+            <a
+              href="https://skills.sh"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-amber-500 dark:hover:text-amber-400 transition-colors font-mono"
+            >
+              skills.sh
+            </a>
           </div>
           <button
             onClick={onClose}
@@ -328,93 +350,93 @@ function SkillCatalogModal({
           </button>
         </div>
 
-        {/* Source tabs */}
-        <div className="px-5 pt-3 flex items-center gap-1">
-          {CATALOG_SOURCES.map((source) => (
-            <button
-              key={source.path}
-              onClick={() => handleBrowse(source)}
-              className={`px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
-                activeSource.path === source.path && loaded
-                  ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
-                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-              }`}
+        {/* Search input */}
+        <div className="px-5 pt-3">
+          <div className="flex items-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#161922] overflow-hidden">
+            <svg
+              className="w-3.5 h-3.5 ml-3 text-gray-400 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
             >
-              {source.label}
-            </button>
-          ))}
-          <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 font-mono">
-            {activeSource.repo}
-          </span>
-        </div>
-
-        {/* Body */}
-        <div className="p-5">
-          {!loaded ? (
-            <div className="text-center py-8">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Browse skills from the{" "}
-                <a
-                  href="https://github.com/openai/skills"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
-                >
-                  openai/skills
-                </a>{" "}
-                catalog.
-              </p>
-              <button
-                onClick={() => handleBrowse(activeSource)}
-                className="px-4 py-2 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md transition-colors"
-              >
-                Browse Catalog
-              </button>
-            </div>
-          ) : catalogLoading ? (
-            <div className="text-center py-8">
-              <svg className="w-5 h-5 animate-spin mx-auto text-amber-500 mb-2" fill="none" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => handleSearch(e.target.value)}
+              placeholder="Search skills... (e.g. react, supabase, testing)"
+              className="flex-1 px-2.5 py-2.5 bg-transparent text-xs text-gray-900 dark:text-gray-100 placeholder:text-gray-400 outline-none"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onClose();
+              }}
+            />
+            {catalogLoading && (
+              <svg className="w-3.5 h-3.5 mr-3 animate-spin text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <div className="text-xs text-gray-400">Loading catalog...</div>
-            </div>
-          ) : catalogSkills.length === 0 ? (
-            <div className="text-center py-8 text-xs text-gray-400">
-              No skills found in this catalog path.
+            )}
+          </div>
+        </div>
+
+        {/* Results */}
+        <div className="p-5 pt-3">
+          {catalogSkills.length === 0 && !catalogLoading ? (
+            <div className="text-center py-6 text-xs text-gray-400 dark:text-gray-500">
+              {query.length > 0
+                ? "No skills found. Try a different search term."
+                : "Type to search the skills.sh catalog."}
             </div>
           ) : (
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {catalogSkills.map((skill) => (
-                <label
-                  key={skill.name}
-                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors ${
-                    skill.installed
-                      ? "bg-green-50/50 dark:bg-green-900/10 text-gray-400 dark:text-gray-500"
-                      : selected.has(skill.name)
-                        ? "bg-amber-50 dark:bg-amber-900/20"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={skill.installed || selected.has(skill.name)}
-                    disabled={skill.installed}
-                    onChange={() => toggleSkill(skill.name)}
-                    className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-amber-600 focus:ring-amber-500 disabled:opacity-50"
-                  />
-                  <span className={`text-xs font-mono ${
-                    skill.installed ? "text-gray-400 dark:text-gray-500" : "text-gray-700 dark:text-gray-300"
-                  }`}>
-                    {skill.name}
-                  </span>
-                  {skill.installed && (
-                    <span className="ml-auto px-1.5 py-0.5 text-[9px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded">
-                      installed
-                    </span>
-                  )}
-                </label>
-              ))}
+            <div className="space-y-0.5 max-h-72 overflow-y-auto">
+              {catalogSkills.map((skill) => {
+                const skillKey = `${skill.source}/${skill.name}`;
+                return (
+                  <label
+                    key={skillKey}
+                    className={`flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-colors ${
+                      skill.installed
+                        ? "bg-green-50/50 dark:bg-green-900/10 opacity-60"
+                        : isSelected(skill)
+                          ? "bg-amber-50 dark:bg-amber-900/20"
+                          : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={skill.installed || isSelected(skill)}
+                      disabled={skill.installed}
+                      onChange={() => toggleSkill(skill)}
+                      className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-amber-600 focus:ring-amber-500 disabled:opacity-50 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-medium truncate ${
+                          skill.installed ? "text-gray-400" : "text-gray-800 dark:text-gray-200"
+                        }`}>
+                          {skill.name}
+                        </span>
+                        {skill.installed && (
+                          <span className="shrink-0 px-1 py-0.5 text-[8px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded">
+                            installed
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                        {skill.source}
+                      </div>
+                    </div>
+                    {skill.installs > 0 && (
+                      <span className="shrink-0 text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                        {formatInstalls(skill.installs)}
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
             </div>
           )}
 
@@ -454,10 +476,9 @@ function SkillCatalogModal({
         {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
           <div className="text-[10px] text-gray-400 dark:text-gray-500">
-            {loaded && catalogSkills.length > 0 && (
+            {catalogSkills.length > 0 && (
               <>
-                {catalogSkills.length} skills &middot;{" "}
-                {catalogSkills.filter((s) => s.installed).length} installed
+                {catalogSkills.length} results
                 {selected.size > 0 && ` · ${selected.size} selected`}
               </>
             )}

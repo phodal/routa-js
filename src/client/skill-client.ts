@@ -40,17 +40,37 @@ export interface CloneSkillsResult {
   error?: string;
 }
 
-export interface CatalogSkill {
+/** A skill from the skills.sh search catalog */
+export interface SkillsShSkill {
+  name: string;
+  slug: string;
+  source: string;
+  installs: number;
+  installed: boolean;
+}
+
+/** A skill from a GitHub directory catalog */
+export interface GithubCatalogSkill {
   name: string;
   installed: boolean;
 }
 
-export interface CatalogListResult {
-  skills: CatalogSkill[];
+export interface SkillsShSearchResult {
+  type: "skillssh";
+  skills: SkillsShSkill[];
+  query: string;
+  count: number;
+}
+
+export interface GithubCatalogResult {
+  type: "github";
+  skills: GithubCatalogSkill[];
   repo: string;
   path: string;
   ref: string;
 }
+
+export type CatalogResult = SkillsShSearchResult | GithubCatalogResult;
 
 export interface CatalogInstallResult {
   success: boolean;
@@ -168,18 +188,30 @@ export class SkillClient {
   }
 
   /**
-   * Browse a remote skill catalog (e.g. openai/skills).
-   * Uses the GitHub Contents API for lightweight listing.
+   * Search skills from skills.sh catalog.
    */
-  async listCatalog(
+  async searchSkillsSh(query: string, limit: number = 30): Promise<SkillsShSearchResult> {
+    const params = new URLSearchParams({ type: "skillssh", q: query, limit: String(limit) });
+    const response = await fetch(`${this.baseUrl}/api/skills/catalog?${params}`);
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Failed to search skills.sh: HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Browse a GitHub directory catalog (e.g. openai/skills).
+   */
+  async listGithubCatalog(
     repo: string = "openai/skills",
     catalogPath: string = "skills/.curated",
     ref: string = "main"
-  ): Promise<CatalogListResult> {
-    const params = new URLSearchParams({ repo, path: catalogPath, ref });
-    const response = await fetch(
-      `${this.baseUrl}/api/skills/catalog?${params}`
-    );
+  ): Promise<GithubCatalogResult> {
+    const params = new URLSearchParams({ type: "github", repo, path: catalogPath, ref });
+    const response = await fetch(`${this.baseUrl}/api/skills/catalog?${params}`);
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -190,10 +222,31 @@ export class SkillClient {
   }
 
   /**
-   * Install specific skills from a remote catalog.
-   * Downloads only the required skill directories.
+   * Install skills from skills.sh search results.
+   * Each skill has its own source repo.
    */
-  async installFromCatalog(
+  async installFromSkillsSh(
+    skills: Array<{ name: string; source: string }>
+  ): Promise<CatalogInstallResult> {
+    const response = await fetch(`${this.baseUrl}/api/skills/catalog`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "skillssh", skills }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to install from skills.sh");
+    }
+
+    this.cache.clear();
+    return data as CatalogInstallResult;
+  }
+
+  /**
+   * Install skills from a GitHub directory catalog.
+   */
+  async installFromGithubCatalog(
     skills: string[],
     repo: string = "openai/skills",
     catalogPath: string = "skills/.curated",
@@ -202,16 +255,14 @@ export class SkillClient {
     const response = await fetch(`${this.baseUrl}/api/skills/catalog`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repo, path: catalogPath, ref, skills }),
+      body: JSON.stringify({ type: "github", repo, path: catalogPath, ref, skills }),
     });
 
     const data = await response.json();
-
     if (!response.ok) {
       throw new Error(data.error || "Failed to install from catalog");
     }
 
-    // Clear cache since new skills were installed
     this.cache.clear();
     return data as CatalogInstallResult;
   }

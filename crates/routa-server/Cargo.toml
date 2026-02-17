@@ -44,6 +44,9 @@ tempfile = "3"
 # Home directory
 dirs = "5"
 
+# URL encoding
+urlencoding = "2"
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
