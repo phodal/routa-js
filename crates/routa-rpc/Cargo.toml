@@ -1,0 +1,14 @@
+[package]
+name = "routa-rpc"
+version = "0.1.0"
+description = "Transport-agnostic JSON-RPC 2.0 layer for Routa.js — enables JS bindgen"
+authors = ["phodal"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "routa_rpc"
+path = "src/lib.rs"
+
+[dependencies]
+routa-server = { path = "../routa-server" }

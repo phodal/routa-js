@@ -18,6 +18,7 @@ pub mod git;
 pub mod mcp;
 pub mod models;
 pub mod orchestration;
+pub mod rpc;
 pub mod shell_env;
 pub mod skills;
 pub mod state;
