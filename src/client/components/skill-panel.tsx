@@ -1,16 +1,19 @@
 "use client";
 
 /**
- * SkillPanel - Sidebar skill list with upload and clone modals
+ * SkillPanel - Sidebar skill list with upload, clone, and catalog modals
  *
  * Skills are prompt sets that help the AI choose strategies.
  * Supports:
+ *   - Browsing remote skill catalogs (e.g. openai/skills)
+ *   - Installing individual skills from catalogs
  *   - Uploading zip files to the skills directory
  *   - Cloning skills from GitHub repos (e.g. vercel-labs/agent-skills)
  */
 
 import { useState, useRef, useCallback } from "react";
 import { useSkills, type UseSkillsState, type UseSkillsActions } from "../hooks/use-skills";
+import type { CatalogSkill } from "../skill-client";
 
 interface SkillPanelProps {
   /** Pass a shared useSkills() instance to keep sidebar and chat in sync */
@@ -30,9 +33,16 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
     loadSkill,
     reloadFromDisk,
     cloneFromGithub,
+    browseCatalog,
+    installFromCatalog,
+    catalogSkills,
+    catalogLoading,
+    catalogInstalling,
+    clearCatalog,
   } = hook;
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
+  const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
 
   const handleSkillClick = useCallback(
@@ -69,6 +79,13 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCatalogModal(true)}
+            className="text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
+            title="Browse skill catalog"
+          >
+            Catalog
+          </button>
           <button
             onClick={() => setShowCloneModal(true)}
             className="text-[11px] text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 transition-colors"
@@ -165,6 +182,19 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
         )}
       </div>
 
+      {/* Catalog Modal */}
+      {showCatalogModal && (
+        <SkillCatalogModal
+          onClose={() => { setShowCatalogModal(false); clearCatalog(); }}
+          onInstalled={reloadFromDisk}
+          catalogSkills={catalogSkills}
+          catalogLoading={catalogLoading}
+          catalogInstalling={catalogInstalling}
+          browseCatalog={browseCatalog}
+          installFromCatalog={installFromCatalog}
+        />
+      )}
+
       {/* Clone Modal */}
       {showCloneModal && (
         <SkillCloneModal
@@ -178,6 +208,289 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
       {showUploadModal && (
         <SkillUploadModal onClose={() => setShowUploadModal(false)} onUploaded={reloadFromDisk} />
       )}
+    </div>
+  );
+}
+
+// ─── Skill Catalog Modal ────────────────────────────────────────────────
+
+interface CatalogSource {
+  label: string;
+  repo: string;
+  path: string;
+}
+
+const CATALOG_SOURCES: CatalogSource[] = [
+  { label: "Curated", repo: "openai/skills", path: "skills/.curated" },
+  { label: "Experimental", repo: "openai/skills", path: "skills/.experimental" },
+];
+
+function SkillCatalogModal({
+  onClose,
+  onInstalled,
+  catalogSkills,
+  catalogLoading,
+  catalogInstalling,
+  browseCatalog,
+  installFromCatalog,
+}: {
+  onClose: () => void;
+  onInstalled: () => void;
+  catalogSkills: CatalogSkill[];
+  catalogLoading: boolean;
+  catalogInstalling: boolean;
+  browseCatalog: (repo?: string, path?: string) => Promise<unknown>;
+  installFromCatalog: (skills: string[], repo?: string, path?: string) => Promise<unknown>;
+}) {
+  const [activeSource, setActiveSource] = useState<CatalogSource>(CATALOG_SOURCES[0]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [installResult, setInstallResult] = useState<{
+    installed: string[];
+    errors: string[];
+  } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const handleBrowse = useCallback(
+    async (source: CatalogSource) => {
+      setActiveSource(source);
+      setSelected(new Set());
+      setInstallResult(null);
+      setLoaded(true);
+      await browseCatalog(source.repo, source.path);
+    },
+    [browseCatalog]
+  );
+
+  const handleInstall = useCallback(async () => {
+    if (selected.size === 0) return;
+    const result = (await installFromCatalog(
+      Array.from(selected),
+      activeSource.repo,
+      activeSource.path
+    )) as { installed: string[]; errors: string[] } | null;
+
+    if (result) {
+      setInstallResult(result);
+      setSelected(new Set());
+      if (result.installed.length > 0) {
+        onInstalled();
+      }
+    }
+  }, [selected, activeSource, installFromCatalog, onInstalled]);
+
+  const toggleSkill = useCallback((name: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <div className="relative w-full max-w-lg mx-4 bg-white dark:bg-[#1e2130] rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg
+              className="w-4 h-4 text-amber-600 dark:text-amber-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
+            </svg>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Skill Catalog
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Source tabs */}
+        <div className="px-5 pt-3 flex items-center gap-1">
+          {CATALOG_SOURCES.map((source) => (
+            <button
+              key={source.path}
+              onClick={() => handleBrowse(source)}
+              className={`px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
+                activeSource.path === source.path && loaded
+                  ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+              }`}
+            >
+              {source.label}
+            </button>
+          ))}
+          <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+            {activeSource.repo}
+          </span>
+        </div>
+
+        {/* Body */}
+        <div className="p-5">
+          {!loaded ? (
+            <div className="text-center py-8">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Browse skills from the{" "}
+                <a
+                  href="https://github.com/openai/skills"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline"
+                >
+                  openai/skills
+                </a>{" "}
+                catalog.
+              </p>
+              <button
+                onClick={() => handleBrowse(activeSource)}
+                className="px-4 py-2 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md transition-colors"
+              >
+                Browse Catalog
+              </button>
+            </div>
+          ) : catalogLoading ? (
+            <div className="text-center py-8">
+              <svg className="w-5 h-5 animate-spin mx-auto text-amber-500 mb-2" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <div className="text-xs text-gray-400">Loading catalog...</div>
+            </div>
+          ) : catalogSkills.length === 0 ? (
+            <div className="text-center py-8 text-xs text-gray-400">
+              No skills found in this catalog path.
+            </div>
+          ) : (
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {catalogSkills.map((skill) => (
+                <label
+                  key={skill.name}
+                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors ${
+                    skill.installed
+                      ? "bg-green-50/50 dark:bg-green-900/10 text-gray-400 dark:text-gray-500"
+                      : selected.has(skill.name)
+                        ? "bg-amber-50 dark:bg-amber-900/20"
+                        : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={skill.installed || selected.has(skill.name)}
+                    disabled={skill.installed}
+                    onChange={() => toggleSkill(skill.name)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-amber-600 focus:ring-amber-500 disabled:opacity-50"
+                  />
+                  <span className={`text-xs font-mono ${
+                    skill.installed ? "text-gray-400 dark:text-gray-500" : "text-gray-700 dark:text-gray-300"
+                  }`}>
+                    {skill.name}
+                  </span>
+                  {skill.installed && (
+                    <span className="ml-auto px-1.5 py-0.5 text-[9px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded">
+                      installed
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+          )}
+
+          {/* Install result */}
+          {installResult && (
+            <div className="mt-3 space-y-2">
+              {installResult.installed.length > 0 && (
+                <div className="rounded-md bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/50 px-3 py-2">
+                  <div className="text-xs text-green-700 dark:text-green-400 font-medium mb-1">
+                    Installed {installResult.installed.length} skill{installResult.installed.length !== 1 ? "s" : ""}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {installResult.installed.map((name) => (
+                      <span
+                        key={name}
+                        className="px-1.5 py-0.5 text-[10px] font-mono text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded"
+                      >
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {installResult.errors.length > 0 && (
+                <div className="rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/50 px-3 py-2">
+                  {installResult.errors.map((err, i) => (
+                    <div key={i} className="text-xs text-red-600 dark:text-red-400">
+                      {err}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+          <div className="text-[10px] text-gray-400 dark:text-gray-500">
+            {loaded && catalogSkills.length > 0 && (
+              <>
+                {catalogSkills.length} skills &middot;{" "}
+                {catalogSkills.filter((s) => s.installed).length} installed
+                {selected.size > 0 && ` · ${selected.size} selected`}
+              </>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 rounded-md transition-colors"
+            >
+              Close
+            </button>
+            {selected.size > 0 && (
+              <button
+                onClick={handleInstall}
+                disabled={catalogInstalling}
+                className="px-4 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                {catalogInstalling ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Installing...
+                  </>
+                ) : (
+                  <>Install {selected.size} skill{selected.size !== 1 ? "s" : ""}</>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

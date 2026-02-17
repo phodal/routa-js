@@ -17,6 +17,9 @@ import {
   SkillSummary,
   SkillContent,
   CloneSkillsResult,
+  CatalogSkill,
+  CatalogListResult,
+  CatalogInstallResult,
 } from "../skill-client";
 import {
   desktopStaticApiError,
@@ -32,6 +35,10 @@ export interface UseSkillsState {
   loading: boolean;
   cloning: boolean;
   error: string | null;
+  /** Remote catalog browsing state */
+  catalogSkills: CatalogSkill[];
+  catalogLoading: boolean;
+  catalogInstalling: boolean;
 }
 
 export interface UseSkillsActions {
@@ -44,6 +51,11 @@ export interface UseSkillsActions {
   clearRepoSkills: () => void;
   /** All skills merged: local + repo (with source tag) */
   allSkills: SkillSummary[];
+  /** Browse a remote catalog */
+  browseCatalog: (repo?: string, catalogPath?: string) => Promise<CatalogListResult | null>;
+  /** Install skills from a catalog */
+  installFromCatalog: (skills: string[], repo?: string, catalogPath?: string) => Promise<CatalogInstallResult | null>;
+  clearCatalog: () => void;
 }
 
 export function useSkills(
@@ -57,6 +69,9 @@ export function useSkills(
     loading: false,
     cloning: false,
     error: null,
+    catalogSkills: [],
+    catalogLoading: false,
+    catalogInstalling: false,
   });
 
   const refresh = useCallback(async () => {
@@ -174,6 +189,69 @@ export function useSkills(
     setState((s) => ({ ...s, repoSkills: [] }));
   }, []);
 
+  const browseCatalog = useCallback(async (repo?: string, catalogPath?: string) => {
+    try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("Skills Catalog");
+      }
+      setState((s) => ({ ...s, catalogLoading: true, error: null }));
+      const result = await clientRef.current.listCatalog(repo, catalogPath);
+      setState((s) => ({ ...s, catalogSkills: result.skills, catalogLoading: false }));
+      return result;
+    } catch (err) {
+      logRuntime("warn", "useSkills.browseCatalog", "Failed to browse catalog", err);
+      setState((s) => ({
+        ...s,
+        catalogLoading: false,
+        error: toErrorMessage(err) || "Failed to browse catalog",
+      }));
+      return null;
+    }
+  }, []);
+
+  const installFromCatalog = useCallback(async (
+    skills: string[],
+    repo?: string,
+    catalogPath?: string
+  ) => {
+    try {
+      if (isDesktopStaticRuntime()) {
+        throw desktopStaticApiError("Skills Catalog");
+      }
+      setState((s) => ({ ...s, catalogInstalling: true, error: null }));
+      const result = await clientRef.current.installFromCatalog(skills, repo, catalogPath);
+
+      if (result.installed.length > 0) {
+        // Refresh local skills list
+        const localSkills = await clientRef.current.list();
+        setState((s) => ({
+          ...s,
+          skills: localSkills,
+          catalogInstalling: false,
+          catalogSkills: s.catalogSkills.map((cs) =>
+            result.installed.includes(cs.name) ? { ...cs, installed: true } : cs
+          ),
+        }));
+      } else {
+        setState((s) => ({ ...s, catalogInstalling: false }));
+      }
+
+      return result;
+    } catch (err) {
+      logRuntime("error", "useSkills.installFromCatalog", "Failed to install from catalog", err);
+      setState((s) => ({
+        ...s,
+        catalogInstalling: false,
+        error: toErrorMessage(err) || "Failed to install from catalog",
+      }));
+      return null;
+    }
+  }, []);
+
+  const clearCatalog = useCallback(() => {
+    setState((s) => ({ ...s, catalogSkills: [], error: null }));
+  }, []);
+
   // Auto-load on mount
   useEffect(() => {
     refresh();
@@ -207,5 +285,8 @@ export function useSkills(
     cloneFromGithub,
     loadRepoSkills,
     clearRepoSkills,
+    browseCatalog,
+    installFromCatalog,
+    clearCatalog,
   };
 }

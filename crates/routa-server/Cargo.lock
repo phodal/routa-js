@@ -1869,11 +1869,13 @@ dependencies = [
  "axum",
  "axum-extra",
  "chrono",
+ "dirs",
  "regex",
  "reqwest",
  "routa-core",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-stream",
  "tower",
@@ -1881,6 +1883,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "zip",
 ]
 
 [[package]]

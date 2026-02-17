@@ -12,6 +12,7 @@ pub mod notes;
 pub mod rpc;
 pub mod sessions;
 pub mod skills;
+pub mod skills_catalog;
 pub mod skills_clone;
 pub mod skills_upload;
 pub mod tasks;
@@ -30,6 +31,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/tasks", tasks::router())
         .nest("/api/workspaces", workspaces::router())
         .nest("/api/skills", skills::router())
+        .nest("/api/skills/catalog", skills_catalog::router())
         .nest("/api/skills/clone", skills_clone::router())
         .nest("/api/skills/upload", skills_upload::router())
         .nest("/api/sessions", sessions::router())

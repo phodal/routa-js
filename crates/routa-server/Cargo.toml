@@ -37,6 +37,13 @@ chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json"] }
 regex = "1"
 
+# Archive extraction (for skill catalog install)
+zip = "2"
+tempfile = "3"
+
+# Home directory
+dirs = "5"
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -40,6 +40,25 @@ export interface CloneSkillsResult {
   error?: string;
 }
 
+export interface CatalogSkill {
+  name: string;
+  installed: boolean;
+}
+
+export interface CatalogListResult {
+  skills: CatalogSkill[];
+  repo: string;
+  path: string;
+  ref: string;
+}
+
+export interface CatalogInstallResult {
+  success: boolean;
+  installed: string[];
+  errors: string[];
+  dest: string;
+}
+
 export class SkillClient {
   private baseUrl: string;
   private cache = new Map<string, SkillContent>();
@@ -146,6 +165,55 @@ export class SkillClient {
       ...s,
       source: "repo" as const,
     }));
+  }
+
+  /**
+   * Browse a remote skill catalog (e.g. openai/skills).
+   * Uses the GitHub Contents API for lightweight listing.
+   */
+  async listCatalog(
+    repo: string = "openai/skills",
+    catalogPath: string = "skills/.curated",
+    ref: string = "main"
+  ): Promise<CatalogListResult> {
+    const params = new URLSearchParams({ repo, path: catalogPath, ref });
+    const response = await fetch(
+      `${this.baseUrl}/api/skills/catalog?${params}`
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Failed to list catalog: HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Install specific skills from a remote catalog.
+   * Downloads only the required skill directories.
+   */
+  async installFromCatalog(
+    skills: string[],
+    repo: string = "openai/skills",
+    catalogPath: string = "skills/.curated",
+    ref: string = "main"
+  ): Promise<CatalogInstallResult> {
+    const response = await fetch(`${this.baseUrl}/api/skills/catalog`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo, path: catalogPath, ref, skills }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to install from catalog");
+    }
+
+    // Clear cache since new skills were installed
+    this.cache.clear();
+    return data as CatalogInstallResult;
   }
 
   /**
