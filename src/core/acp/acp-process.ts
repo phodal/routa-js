@@ -224,10 +224,18 @@ export class AcpProcess {
         return new Promise((resolve, reject) => {
             const id = ++this.requestId;
 
-            const defaultTimeout =
-                method === "initialize" || method === "session/new"
-                    ? 10000 // 10s for init requests
-                    : 30000; // 30s for normal requests
+            // Determine timeout based on method and distribution type
+            // npx/uvx agents may need longer timeout for first-time package download
+            const isNpxOrUvx = this._config.command === "npx" || this._config.command === "uvx";
+            const isInitRequest = method === "initialize" || method === "session/new";
+
+            let defaultTimeout: number;
+            if (isInitRequest) {
+                // npx/uvx may need to download packages on first run
+                defaultTimeout = isNpxOrUvx ? 120000 : 10000; // 2 min for npx/uvx, 10s for others
+            } else {
+                defaultTimeout = 30000; // 30s for normal requests
+            }
 
             const timeout = setTimeout(() => {
                 this.pendingRequests.delete(id);

@@ -30,6 +30,8 @@ pub struct AcpProcess {
     alive: Arc<AtomicBool>,
     notification_tx: NotificationSender,
     display_name: String,
+    /// The command used to spawn this process (e.g., "npx", "uvx", "opencode")
+    command: String,
     _reader_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -231,6 +233,7 @@ impl AcpProcess {
             alive,
             notification_tx,
             display_name: display_name.to_string(),
+            command: command.to_string(),
             _reader_handle: reader_handle,
         })
     }
@@ -276,8 +279,17 @@ impl AcpProcess {
                 .map_err(|e| format!("Flush {}: {}", method, e))?;
         }
 
+        // Determine timeout based on method and command type
+        // npx/uvx agents may need longer timeout for first-time package download
+        let is_npx_or_uvx = self.command == "npx" || self.command == "uvx";
         let default_timeout = match method {
-            "initialize" | "session/new" => 15_000,
+            "initialize" | "session/new" => {
+                if is_npx_or_uvx {
+                    120_000 // 2 min for npx/uvx (may need to download packages)
+                } else {
+                    15_000 // 15s for others
+                }
+            }
             "session/prompt" => 300_000, // 5 min
             _ => 30_000,
         };

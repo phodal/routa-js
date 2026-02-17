@@ -287,25 +287,104 @@ async function selectDistributionType(
 
 async function installNpxAgent(agent: RegistryAgent): Promise<InstallResult> {
   const npxDist = agent.distribution.npx!;
-  // For npx, we don't actually install - the agent runs via npx on demand
-  // We just validate that the package exists
-  console.log(`[AcpInstaller] Agent ${agent.id} configured for npx: ${npxDist.package}`);
-  return {
-    success: true,
-    agentId: agent.id,
-    distributionType: "npx",
-  };
+  console.log(`[AcpInstaller] Pre-downloading npx package: ${npxDist.package}`);
+
+  // Pre-download the package by running npx with --yes flag
+  // This ensures the package is cached for faster startup later
+  return new Promise((resolve) => {
+    const args = ["-y", npxDist.package, "--help"];
+    console.log(`[AcpInstaller] Running: npx ${args.join(" ")}`);
+
+    const proc = spawn("npx", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120000, // 2 minute timeout for download
+    });
+
+    let stderr = "";
+    proc.stderr?.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on("close", (code) => {
+      // Even if --help fails, the package should be downloaded
+      // Some packages don't support --help, so we don't check exit code strictly
+      if (code === 0 || stderr.includes("npm warn exec")) {
+        console.log(`[AcpInstaller] Agent ${agent.id} pre-downloaded via npx: ${npxDist.package}`);
+        resolve({
+          success: true,
+          agentId: agent.id,
+          distributionType: "npx",
+        });
+      } else {
+        console.warn(`[AcpInstaller] npx pre-download may have issues (code=${code}): ${stderr}`);
+        // Still mark as success - the actual run will show the real error
+        resolve({
+          success: true,
+          agentId: agent.id,
+          distributionType: "npx",
+        });
+      }
+    });
+
+    proc.on("error", (err) => {
+      console.error(`[AcpInstaller] npx pre-download failed:`, err);
+      resolve({
+        success: false,
+        agentId: agent.id,
+        distributionType: "npx",
+        error: `Failed to pre-download package: ${err.message}`,
+      });
+    });
+  });
 }
 
 async function installUvxAgent(agent: RegistryAgent): Promise<InstallResult> {
   const uvxDist = agent.distribution.uvx!;
-  // For uvx, we don't actually install - the agent runs via uvx on demand
-  console.log(`[AcpInstaller] Agent ${agent.id} configured for uvx: ${uvxDist.package}`);
-  return {
-    success: true,
-    agentId: agent.id,
-    distributionType: "uvx",
-  };
+  console.log(`[AcpInstaller] Pre-downloading uvx package: ${uvxDist.package}`);
+
+  // Pre-download the package by running uvx with --help flag
+  return new Promise((resolve) => {
+    const args = [uvxDist.package, "--help"];
+    console.log(`[AcpInstaller] Running: uvx ${args.join(" ")}`);
+
+    const proc = spawn("uvx", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120000, // 2 minute timeout for download
+    });
+
+    let stderr = "";
+    proc.stderr?.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on("close", (code) => {
+      if (code === 0 || stderr.includes("Resolved")) {
+        console.log(`[AcpInstaller] Agent ${agent.id} pre-downloaded via uvx: ${uvxDist.package}`);
+        resolve({
+          success: true,
+          agentId: agent.id,
+          distributionType: "uvx",
+        });
+      } else {
+        console.warn(`[AcpInstaller] uvx pre-download may have issues (code=${code}): ${stderr}`);
+        resolve({
+          success: true,
+          agentId: agent.id,
+          distributionType: "uvx",
+        });
+      }
+    });
+
+    proc.on("error", (err) => {
+      console.error(`[AcpInstaller] uvx pre-download failed:`, err);
+      resolve({
+        success: false,
+        agentId: agent.id,
+        distributionType: "uvx",
+        error: `Failed to pre-download package: ${err.message}`,
+      });
+    });
+  });
 }
 
 async function installBinaryAgent(agent: RegistryAgent): Promise<InstallResult> {
