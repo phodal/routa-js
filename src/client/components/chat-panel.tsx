@@ -403,6 +403,40 @@ export function ChatPanel({
             break;
           }
 
+          case "process_output": {
+            // ACP agent process output (stderr/stdout)
+            // Display in a dedicated process output terminal
+            const processData = update.data as string | undefined;
+            const processSource = update.source as string | undefined;
+            const processDisplayName = update.displayName as string | undefined;
+            if (processData) {
+              const processTermId = `process-${sid}`;
+              const idx = arr.findIndex(
+                (m) => m.role === "terminal" && m.terminalId === processTermId
+              );
+              if (idx >= 0) {
+                arr[idx] = {
+                  ...arr[idx],
+                  content: arr[idx].content + processData,
+                };
+              } else {
+                // Create new process output terminal
+                arr.push({
+                  id: processTermId,
+                  role: "terminal",
+                  content: processData,
+                  timestamp: new Date(),
+                  terminalId: processTermId,
+                  terminalCommand: processDisplayName ?? "Agent Process",
+                  terminalArgs: processSource ? [processSource] : undefined,
+                  terminalExited: false,
+                  terminalExitCode: null,
+                });
+              }
+            }
+            break;
+          }
+
           case "available_commands_update":
           case "config_option_update":
           case "session_info_update":

@@ -9,6 +9,10 @@ use tauri::menu::{Menu, MenuItem, Submenu};
 use tauri::{Manager, State};
 use tokio::sync::RwLock;
 
+// PTY module for interactive terminal support
+mod pty;
+pub use pty::{PtyState, pty_create, pty_write, pty_read, pty_resize, pty_kill, pty_list};
+
 // Re-export routa_server for external use
 pub use routa_server as server;
 use routa_server::acp::{
@@ -585,6 +589,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .manage(AcpState::new())
         .manage(RpcState::new())
+        .manage(PtyState::new())
         .invoke_handler(tauri::generate_handler![
             get_env,
             get_cwd,
@@ -597,6 +602,13 @@ pub fn run() {
             install_acp_agent,
             uninstall_acp_agent,
             check_agent_update,
+            // PTY commands for interactive terminal support
+            pty_create,
+            pty_write,
+            pty_read,
+            pty_resize,
+            pty_kill,
+            pty_list,
         ])
         .setup(|app| {
             // ─── Build Application Menu ─────────────────────────────────────

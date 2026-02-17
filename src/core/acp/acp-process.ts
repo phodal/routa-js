@@ -160,6 +160,21 @@ export class AcpProcess {
             const text = chunk.toString("utf-8").trim();
             if (text) {
                 console.error(`[AcpProcess:${displayName} stderr] ${text}`);
+                // Forward stderr to frontend as process_output notification
+                // This allows xterm.js to display agent process output
+                this.onNotification({
+                    jsonrpc: "2.0",
+                    method: "session/update",
+                    params: {
+                        sessionId: this._sessionId ?? "pending",
+                        update: {
+                            sessionUpdate: "process_output",
+                            source: "stderr",
+                            data: text + "\n",
+                            displayName,
+                        },
+                    },
+                });
             }
         });
 

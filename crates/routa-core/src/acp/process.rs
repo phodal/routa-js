@@ -95,15 +95,32 @@ impl AcpProcess {
 
         let name = display_name.to_string();
 
-        // Log stderr in background
+        // Log stderr in background and forward to frontend as process_output
         if let Some(stderr) = stderr {
             let name_clone = name.clone();
+            let ntx_stderr = notification_tx.clone();
+            let our_sid_stderr = our_session_id.to_string();
             tokio::spawn(async move {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     if !line.trim().is_empty() {
                         tracing::debug!("[AcpProcess:{} stderr] {}", name_clone, line);
+                        // Forward stderr to frontend as process_output notification
+                        let notification = serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "method": "session/update",
+                            "params": {
+                                "sessionId": our_sid_stderr,
+                                "update": {
+                                    "sessionUpdate": "process_output",
+                                    "source": "stderr",
+                                    "data": format!("{}\n", line),
+                                    "displayName": name_clone,
+                                }
+                            }
+                        });
+                        let _ = ntx_stderr.send(notification);
                     }
                 }
             });
