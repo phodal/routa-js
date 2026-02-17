@@ -291,6 +291,8 @@ interface ProviderItem {
   description: string;
   command: string;
   status?: "available" | "unavailable";
+  /** Source of the provider: "static" for builtin, "registry" for ACP registry */
+  source?: "static" | "registry";
 }
 
 interface SessionItem {

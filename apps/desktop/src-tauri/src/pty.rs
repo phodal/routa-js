@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::sync::Arc;
 use tauri::async_runtime::Mutex as AsyncMutex;
-use tauri::{AppHandle, Emitter, State};
+use tauri::State;
 
 /// A single PTY session with its reader/writer handles.
 pub struct PtySession {
