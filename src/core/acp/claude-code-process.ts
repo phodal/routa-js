@@ -170,6 +170,7 @@ export class ClaudeCodeProcess {
         const cmd = [command, "-p"];
         cmd.push("--output-format", "stream-json");
         cmd.push("--input-format", "stream-json");
+        cmd.push("--include-partial-messages"); // Enable streaming of partial message chunks
         cmd.push("--verbose");
 
         // Default to bypassPermissions so ALL tools (including MCP tools) are auto-approved.
@@ -403,7 +404,6 @@ export class ClaudeCodeProcess {
             case "system": {
                 if (msg.subtype === "init" && msg.session_id) {
                     this._sessionId = msg.session_id;
-                    console.log(`[ClaudeCode] Initialized (session=${this._sessionId})`);
                 }
                 break;
             }
@@ -489,7 +489,7 @@ export class ClaudeCodeProcess {
             }
 
             default:
-                console.log(`[ClaudeCode] Unknown message type: ${msg.type}`);
+                // Unknown message type - ignore silently
                 break;
         }
     }
