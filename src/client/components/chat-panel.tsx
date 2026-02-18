@@ -14,6 +14,7 @@ import {
   useCallback,
   type ReactElement,
 } from "react";
+import { v4 as uuidv4 } from "uuid";
 import type { AcpSessionNotification } from "../acp-client";
 import type { UseAcpActions, UseAcpState } from "../hooks/use-acp";
 import { TiptapInput, type InputContext } from "./tiptap-input";
@@ -195,7 +196,7 @@ export function ChatPanel({
             streamingThoughtIdRef.current[sid] = null;
             let msgId = streamingMsgIdRef.current[sid];
             if (!msgId) {
-              msgId = crypto.randomUUID();
+              msgId = uuidv4();
               streamingMsgIdRef.current[sid] = msgId;
             }
             const idx = arr.findIndex((m) => m.id === msgId);
@@ -212,7 +213,7 @@ export function ChatPanel({
             if (!text) break;
             let thoughtId = streamingThoughtIdRef.current[sid];
             if (!thoughtId) {
-              thoughtId = crypto.randomUUID();
+              thoughtId = uuidv4();
               streamingThoughtIdRef.current[sid] = thoughtId;
             }
             const idx = arr.findIndex((m) => m.id === thoughtId);
@@ -242,7 +243,7 @@ export function ChatPanel({
               }
             }
             arr.push({
-              id: toolCallId ?? crypto.randomUUID(),
+              id: toolCallId ?? uuidv4(),
               role: "tool",
               content: contentParts.join("\n\n") || title,
               timestamp: new Date(),
@@ -284,7 +285,7 @@ export function ChatPanel({
                 };
               } else {
                 arr.push({
-                  id: crypto.randomUUID(),
+                  id: uuidv4(),
                   role: "tool",
                   content: outputParts.join("\n") || `Tool ${status ?? "update"}`,
                   timestamp: new Date(),
@@ -301,7 +302,7 @@ export function ChatPanel({
             const planText = entries
               ? entries.map((e) => `[${e.status ?? "pending"}] ${e.content}${e.priority ? ` (${e.priority})` : ""}`).join("\n")
               : typeof update.plan === "string" ? update.plan : JSON.stringify(update, null, 2);
-            arr.push({ id: crypto.randomUUID(), role: "plan", content: planText, timestamp: new Date(), planEntries: entries });
+            arr.push({ id: uuidv4(), role: "plan", content: planText, timestamp: new Date(), planEntries: entries });
             break;
           }
 
@@ -311,7 +312,7 @@ export function ChatPanel({
             const cost = update.cost as { amount: number; currency: string } | null | undefined;
             const usageIdx = arr.findIndex((m) => m.role === "info" && m.usageUsed !== undefined);
             const usageMsg: ChatMessage = {
-              id: usageIdx >= 0 ? arr[usageIdx].id : crypto.randomUUID(),
+              id: usageIdx >= 0 ? arr[usageIdx].id : uuidv4(),
               role: "info",
               content: "",
               timestamp: new Date(),
@@ -507,7 +508,7 @@ export function ChatPanel({
       if (context.mode) displayParts.push(`#${context.mode}`);
       if (context.skill) displayParts.push(`/${context.skill}`);
       const prefix = displayParts.length ? displayParts.join(" ") + " " : "";
-      arr.push({ id: crypto.randomUUID(), role: "user", content: prefix + text, timestamp: new Date() });
+      arr.push({ id: uuidv4(), role: "user", content: prefix + text, timestamp: new Date() });
       next[sid] = arr;
       return next;
     });
