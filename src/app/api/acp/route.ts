@@ -243,13 +243,18 @@ export async function POST(request: NextRequest) {
 
       const manager = getAcpProcessManager();
 
-      // Extract prompt text
-      const promptBlocks = p.prompt as Array<{ type: string; text?: string }> | undefined;
-      let promptText =
-        promptBlocks
-          ?.filter((b) => b.type === "text")
+      // Extract prompt text - handle both string and array formats
+      const rawPrompt = p.prompt;
+      let promptText = "";
+      if (typeof rawPrompt === "string") {
+        promptText = rawPrompt;
+      } else if (Array.isArray(rawPrompt)) {
+        const promptBlocks = rawPrompt as Array<{ type: string; text?: string }>;
+        promptText = promptBlocks
+          .filter((b) => b.type === "text")
           .map((b) => b.text ?? "")
-          .join("\n") ?? "";
+          .join("\n");
+      }
 
       // Check if this is a ROUTA coordinator session - inject coordinator context
       const orchestrator = getRoutaOrchestrator();
