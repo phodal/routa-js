@@ -22,7 +22,7 @@
 
 ## Overview
 
-**Routa.js** orchestrates AI agents to collaborate on complex development tasks through specialized roles and real-time coordination. Instead of a single AI handling everything, Routa enables multiple agents to work together—one plans, another implements, and a third verifies—creating a more robust and scalable development workflow.
+**Routa** orchestrates AI agents to collaborate on complex development tasks through specialized roles and real-time coordination. Instead of a single AI handling everything, Routa enables multiple agents to work together—one plans, another implements, and a third verifies—creating a more robust and scalable development workflow.
 
 ### What It Does
 
