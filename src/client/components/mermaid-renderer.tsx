@@ -3,7 +3,6 @@
 /**
  * MermaidRenderer - React component for rendering mermaid diagrams.
  *
- * Inspired by intent-0.2.4's MermaidRenderer.svelte:
  *   - Renders mermaid code into SVG
  *   - Supports fullscreen expansion
  *   - Auto-updates on theme change

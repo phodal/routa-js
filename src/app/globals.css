@@ -222,7 +222,6 @@ body {
 }
 
 /* ─── MarkdownViewer Styles ──────────────────────────────────────────── */
-/* Based on intent-0.2.4's MarkdownViewer.svelte styles */
 
 .markdown-viewer {
   position: relative;

@@ -3,7 +3,6 @@
 /**
  * MarkdownViewer - Read-only tiptap markdown renderer.
  *
- * Inspired by intent-0.2.4's MarkdownViewer.svelte:
  *   - Uses `marked` to convert markdown → HTML
  *   - Uses tiptap `Editor` (read-only) for interactive rendering
  *   - Supports task lists, code blocks with syntax highlighting, tables, etc.

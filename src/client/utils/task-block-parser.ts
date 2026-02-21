@@ -2,7 +2,6 @@
  * Task Block Parser
  *
  * Parses `@@@task` / `@@@tasks` blocks from Routa agent responses.
- * Based on intent-0.2.4's task-block-parser.ts pattern.
  *
  * Format:
  * ```
