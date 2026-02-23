@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Routa - Multi-Agent Coordination",
+        "title": "Routa - Multi-Agent Coordination Platform for AI Development",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

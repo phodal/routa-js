@@ -2,6 +2,7 @@
   "name": "routa-js",
   "version": "0.1.0",
   "private": true,
+  "description": "Routa.js - Multi-Agent Coordination Platform for AI Development",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
