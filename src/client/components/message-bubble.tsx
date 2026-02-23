@@ -1,6 +1,7 @@
 import {useState} from "react";
 import {TerminalBubble} from "@/client/components/terminal/terminal-bubble";
 import {ChatMessage, PlanEntry} from "@/client/components/chat-panel";
+import {MarkdownViewer} from "@/client/components/markdown/markdown-viewer";
 
 export function MessageBubble({message}: { message: ChatMessage }) {
     const {role} = message;
