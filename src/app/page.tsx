@@ -10,18 +10,19 @@
  *   - Right sidebar (resizable): Task panel / CRAFTERs view
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { SkillPanel } from "@/client/components/skill-panel";
-import { ChatPanel } from "@/client/components/chat-panel";
-import { SessionPanel } from "@/client/components/session-panel";
-import { TaskPanel, type CrafterAgent, type CrafterMessage } from "@/client/components/task-panel";
-import { CollaborativeTaskEditor } from "@/client/components/collaborative-task-editor";
-import { AgentInstallPanel } from "@/client/components/agent-install-panel";
-import { useAcp } from "@/client/hooks/use-acp";
-import { useSkills } from "@/client/hooks/use-skills";
-import { useNotes } from "@/client/hooks/use-notes";
-import type { RepoSelection } from "@/client/components/repo-picker";
-import type { ParsedTask } from "@/client/utils/task-block-parser";
+import {useCallback, useEffect, useRef, useState} from "react";
+import {SkillPanel} from "@/client/components/skill-panel";
+import {ChatPanel} from "@/client/components/chat-panel";
+import {SessionPanel} from "@/client/components/session-panel";
+import {type CrafterAgent, TaskPanel} from "@/client/components/task-panel";
+import {CollaborativeTaskEditor} from "@/client/components/collaborative-task-editor";
+import {AgentInstallPanel} from "@/client/components/agent-install-panel";
+import {useAcp} from "@/client/hooks/use-acp";
+import {useSkills} from "@/client/hooks/use-skills";
+import {useNotes} from "@/client/hooks/use-notes";
+import type {RepoSelection} from "@/client/components/repo-picker";
+import type {ParsedTask} from "@/client/utils/task-block-parser";
+import {ProtocolBadge} from "@/app/protocol-badge";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -715,26 +716,6 @@ export default function HomePage() {
         >
           MCP Tools
         </a>
-
-        {/* Connection status (compact) */}
-        <button
-          onClick={async () => {
-            if (acp.connected) {
-              acp.disconnect();
-            } else {
-              await acp.connect();
-            }
-          }}
-          title={acp.connected ? "Connected - click to disconnect" : "Disconnected - click to connect"}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-            acp.connected
-              ? "text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
-              : "text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
-        >
-          <span className={`w-2 h-2 rounded-full ${acp.connected ? "bg-green-500" : "bg-gray-400"}`} />
-          <span className="hidden sm:inline">{acp.connected ? "Connected" : "Disconnected"}</span>
-        </button>
       </header>
 
       {/* ─── Main Area ────────────────────────────────────────────── */}
@@ -991,26 +972,6 @@ export default function HomePage() {
           ROUTA mode: Coordinator will plan, delegate to CRAFTER agents, and verify with GATE.
         </div>
       )}
-    </div>
-  );
-}
-
-// (ProviderList removed - provider selection now in the input dropdown)
-
-function ProtocolBadge({
-  name,
-  endpoint,
-}: {
-  name: string;
-  endpoint: string;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-50 dark:bg-[#1e2130] text-[11px] font-medium text-gray-500 dark:text-gray-400">
-      <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-      {name}
-      <span className="text-gray-400 dark:text-gray-500 font-mono text-[10px]">
-        {endpoint}
-      </span>
     </div>
   );
 }
