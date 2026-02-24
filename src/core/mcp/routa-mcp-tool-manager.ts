@@ -225,9 +225,13 @@ export class RoutaMcpToolManager {
       "delegate_task_to_agent",
       `Delegate a task to a new agent by spawning a real agent process. This is the primary way to delegate work.
 Use specialist="CRAFTER" for implementation tasks and specialist="GATE" for verification tasks.
-The agent will start working immediately and you'll be notified when it completes.`,
+The agent will start working immediately and you'll be notified when it completes.
+
+IMPORTANT: The taskId parameter must be a UUID returned by create_task (e.g., "dda97509-b414-4c50-9835-73a1ec2f...").
+Do NOT use task names or @@@task identifiers. First call create_task to create the task and get a UUID, then use that UUID here.
+You can also use convert_task_blocks to convert @@@task blocks into tasks, or list_tasks to see existing tasks with their UUIDs.`,
       {
-        taskId: z.string().describe("ID of the task to delegate (from create_task)"),
+        taskId: z.string().describe("UUID of the task to delegate (MUST be a UUID from create_task, NOT a task name)"),
         callerAgentId: z.string().describe("Your agent ID (the coordinator's agent ID)"),
         callerSessionId: z.string().optional().describe("Your session ID (if known)"),
         specialist: z.enum(["CRAFTER", "GATE", "DEVELOPER", "crafter", "gate", "developer"]).describe("Specialist type: CRAFTER for implementation, GATE for verification, DEVELOPER for solo plan+implement"),
@@ -324,11 +328,12 @@ The agent will start working immediately and you'll be notified when it complete
   private registerDelegateTask(server: McpServer) {
     server.tool(
       "delegate_task",
-      "Assign a task to an agent and activate it. The agent will begin working on the task.",
+      `Assign a task to an existing agent and activate it. The agent will begin working on the task.
+Note: taskId must be a UUID from create_task, not a task name.`,
       {
-        agentId: z.string().describe("ID of the agent to delegate to"),
-        taskId: z.string().describe("ID of the task to delegate"),
-        callerAgentId: z.string().describe("ID of the calling agent"),
+        agentId: z.string().describe("UUID of the agent to delegate to"),
+        taskId: z.string().describe("UUID of the task to delegate (from create_task, NOT a task name)"),
+        callerAgentId: z.string().describe("UUID of the calling agent"),
       },
       async (params) => {
         const result = await this.tools.delegate(params);

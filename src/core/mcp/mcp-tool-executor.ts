@@ -359,11 +359,11 @@ export function getMcpToolDefinitions(toolMode: ToolMode = "essential") {
     },
     {
       name: "delegate_task_to_agent",
-      description: "Delegate a task to a new agent by spawning a real process. Use specialist='CRAFTER' for implementation, specialist='GATE' for verification, specialist='DEVELOPER' for solo plan+implement.",
+      description: "Delegate a task to a new agent by spawning a real process. Use specialist='CRAFTER' for implementation, specialist='GATE' for verification, specialist='DEVELOPER' for solo plan+implement. IMPORTANT: taskId must be a UUID from create_task (e.g., 'dda97509-b414-4c50-9835-73a1ec2f...'), NOT a task name. First call create_task to create the task and get a UUID.",
       inputSchema: {
         type: "object",
         properties: {
-          taskId: { type: "string", description: "Task ID to delegate" },
+          taskId: { type: "string", description: "UUID of the task to delegate (MUST be a UUID from create_task, NOT a task name)" },
           callerAgentId: { type: "string", description: "Your agent ID" },
           callerSessionId: { type: "string", description: "Your session ID (optional)" },
           specialist: { type: "string", enum: ["CRAFTER", "GATE", "DEVELOPER", "crafter", "gate", "developer"], description: "Agent type to create" },

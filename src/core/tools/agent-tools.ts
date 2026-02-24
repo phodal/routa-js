@@ -224,7 +224,15 @@ export class AgentTools {
 
     const task = await this.taskStore.get(taskId);
     if (!task) {
-      return errorResult(`Task not found: ${taskId}`);
+      // Check if the taskId looks like a name instead of a UUID
+      const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId);
+      const hint = looksLikeUuid
+        ? `Use list_tasks to see available tasks, or create_task to create a new one.`
+        : `The taskId "${taskId}" looks like a task name, not a UUID. ` +
+          `You must use the UUID returned by create_task. ` +
+          `First call create_task to create tasks, then use the returned taskId (UUID format). ` +
+          `Or use list_tasks to see existing tasks.`;
+      return errorResult(`Task not found: ${taskId}. ${hint}`);
     }
 
     // Assign and activate
