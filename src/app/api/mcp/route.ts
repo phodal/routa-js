@@ -36,18 +36,27 @@ const DEFAULT_WORKSPACE_ID = "default";
 /**
  * Create a new MCP session: transport + MCP server + tool registrations.
  * Returns the transport so it can handle the current request.
+ *
+ * @param enableStatelessMode - If true, uses stateless session ID ("mcp-stateless")
+ *                              for clients that don't follow full MCP protocol
  */
-async function createSession(): Promise<WebStandardStreamableHTTPServerTransport> {
+async function createSession(
+  enableStatelessMode = false,
+): Promise<WebStandardStreamableHTTPServerTransport> {
+  const sessionId = enableStatelessMode
+    ? "mcp-stateless"
+    : crypto.randomUUID();
+
   const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
+    sessionIdGenerator: () => sessionId,
     // Return plain JSON responses instead of SSE streams.
     // This is critical for compatibility with Claude Code and other MCP clients
     // that may not send Accept: text/event-stream header (causing 406 errors).
     enableJsonResponse: true,
-    onsessioninitialized: (sessionId: string) => {
-      sessions.set(sessionId, { transport });
+    onsessioninitialized: (sid: string) => {
+      sessions.set(sid, { transport });
       console.log(
-        `[MCP Route] Session created: ${sessionId} (active: ${sessions.size})`,
+        `[MCP Route] Session created: ${sid} (active: ${sessions.size})`,
       );
     },
   });
@@ -150,9 +159,10 @@ export async function POST(request: NextRequest) {
     const accept = request.headers.get("accept");
     const clonedReq = request.clone();
     let method = "unknown";
+    let requestBody: { method?: string; id?: unknown; params?: Record<string, unknown> } | null = null;
     try {
-      const body = await clonedReq.json();
-      method = body.method || "unknown";
+      requestBody = await clonedReq.json();
+      method = requestBody?.method || "unknown";
     } catch {
       // body may not be JSON
     }
@@ -169,6 +179,42 @@ export async function POST(request: NextRequest) {
 
     const transport = await getOrCreateSession(patchedRequest);
     const response = await transport.handleRequest(patchedRequest);
+
+    // Check if the SDK returned "Server not initialized" error
+    // and handle it by providing a helpful message
+    if (response.status === 400) {
+      const responseClone = response.clone();
+      try {
+        const errorBody = await responseClone.json();
+        if (errorBody?.error?.code === -32000 &&
+            errorBody?.error?.message?.includes("not initialized")) {
+          console.log(
+            `[MCP Route] Server not initialized error - client needs to send initialize first`,
+          );
+          // Return a more descriptive error
+          return withCorsHeaders(
+            Response.json(
+              {
+                jsonrpc: "2.0",
+                id: requestBody?.id ?? null,
+                error: {
+                  code: -32000,
+                  message:
+                    "MCP session not initialized. Send an 'initialize' request first with protocolVersion and clientInfo.",
+                },
+              },
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+          );
+        }
+      } catch {
+        // Not JSON, return original response
+      }
+    }
+
     console.log(
       `[MCP Route] Response: ${response.status} ${response.headers.get("content-type")}`,
     );
