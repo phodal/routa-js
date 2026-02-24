@@ -148,7 +148,7 @@ function createSuggestionDropdown(triggerChar?: string) {
       popup = document.createElement("div");
       popup.className = "suggestion-popup";
       popup.style.cssText = `
-        position: fixed; z-index: 100; min-width: 220px; max-width: 360px;
+        position: fixed; z-index: 100; min-width: 280px; max-width: 480px;
         max-height: 240px; overflow-y: auto; padding: 4px;
         background: #1e2130; color: #e5e7eb; border: 1px solid #374151;
         border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
