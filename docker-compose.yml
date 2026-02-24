@@ -21,10 +21,16 @@ services:
       # SQLite mode (default) — no external DB required
       ROUTA_DB_DRIVER: ${ROUTA_DB_DRIVER:-sqlite}
       ROUTA_DB_PATH: /app/data/routa.db
-      # Uncomment (or set in .env) to switch to Postgres:
-      # DATABASE_URL: ${DATABASE_URL}
+      # Set DATABASE_URL (and ROUTA_DB_DRIVER=postgres) in .env to use Postgres.
+      # Example for the bundled postgres service:
+      #   DATABASE_URL=postgresql://routa:routa_secret@postgres:5432/routa
+      DATABASE_URL: ${DATABASE_URL:-}
     volumes:
       - routa_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false  # only enforced when the postgres profile is active
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]

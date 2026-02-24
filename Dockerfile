@@ -22,8 +22,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build in standalone mode so the output is self-contained.
-# `build:docker` sets ROUTA_DESKTOP_STANDALONE=1 which enables `output: "standalone"` in next.config.ts.
+# Build in standalone mode and compile SQLite chunk modules for runtime use.
+# `build:docker` sets ROUTA_DESKTOP_STANDALONE=1 (output: standalone) and then
+# runs scripts/build-docker.mjs to esbuild the SQLite TS sources into the
+# standalone chunks directory so ROUTA_DB_DRIVER=sqlite works at runtime.
 RUN npm run build:docker
 
 # ── Stage 3: production runner ────────────────────────────────────────────
