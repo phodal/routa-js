@@ -6,6 +6,7 @@
 //!
 //! This process translates Claude's output into ACP-compatible `session/update`
 //! notifications so the existing renderer works without changes.
+//! Agent message notifications are traced to JSONL files for attribution tracking.
 
 use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
@@ -13,10 +14,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tokio::sync::{broadcast, Mutex, oneshot};
+
+use crate::trace::{
+    TraceRecord, TraceWriter, TraceEventType, Contributor, TraceConversation,
+};
 
 // ─── Claude Protocol Types ──────────────────────────────────────────────
 
@@ -234,10 +239,13 @@ impl ClaudeCodeProcess {
         let state = self.state.clone();
         let prompt_complete_tx = self.prompt_complete_tx.clone();
         let display_name = self.config.display_name.clone();
+        let cwd_clone = self.config.cwd.clone();
 
         tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
+            // Buffer for accumulating agent message text for tracing
+            let mut agent_msg_buffer = String::new();
 
             while let Ok(Some(line)) = lines.next_line().await {
                 let line = clear_ansi(&line.trim().to_string());
@@ -250,6 +258,49 @@ impl ClaudeCodeProcess {
 
                 match serde_json::from_str::<ClaudeOutputMessage>(&line) {
                     Ok(msg) => {
+                        // ── Trace: capture agent message text ──────────────
+                        // Capture from assistant message content
+                        if let Some(ref message) = msg.message {
+                            for item in &message.content {
+                                if item.content_type == "text" {
+                                    if let Some(ref text) = item.text {
+                                        agent_msg_buffer.push_str(text);
+                                    }
+                                }
+                            }
+                        }
+                        // Capture from stream_event text_delta
+                        if msg.msg_type == "stream_event" {
+                            if let Some(ref event) = msg.event {
+                                if event.event_type == "content_block_delta" {
+                                    if let Some(ref delta) = event.delta {
+                                        if delta.delta_type == "text_delta" {
+                                            if let Some(ref text) = delta.text {
+                                                agent_msg_buffer.push_str(text);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Trace when buffer reaches 50+ chars (lower threshold for shorter responses)
+                        if agent_msg_buffer.len() >= 50 {
+                            if let Some(sid) = session_id.lock().await.clone() {
+                                let record = TraceRecord::new(
+                                    sid,
+                                    TraceEventType::AgentMessage,
+                                    Contributor::new("claude", None),
+                                ).with_conversation(TraceConversation {
+                                    turn: None,
+                                    role: Some("assistant".to_string()),
+                                    content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                                });
+                                let writer = TraceWriter::new(&cwd_clone);
+                                let _ = writer.append_safe(&record).await;
+                            }
+                            agent_msg_buffer.clear();
+                        }
+
                         handle_claude_message(
                             msg,
                             &session_id,
@@ -261,6 +312,23 @@ impl ClaudeCodeProcess {
                     Err(e) => {
                         tracing::debug!("[ClaudeCode:{}] Failed to parse: {} - {}", display_name, e, &line[..line.len().min(100)]);
                     }
+                }
+            }
+
+            // Flush any remaining buffered agent message content
+            if !agent_msg_buffer.is_empty() {
+                if let Some(sid) = session_id.lock().await.clone() {
+                    let record = TraceRecord::new(
+                        sid,
+                        TraceEventType::AgentMessage,
+                        Contributor::new("claude", None),
+                    ).with_conversation(TraceConversation {
+                        turn: None,
+                        role: Some("assistant".to_string()),
+                        content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                    });
+                    let writer = TraceWriter::new(&cwd_clone);
+                    let _ = writer.append_safe(&record).await;
                 }
             }
 

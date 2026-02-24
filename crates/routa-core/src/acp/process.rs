@@ -8,6 +8,7 @@
 //!   5. `kill()`               — terminate the process
 //!
 //! Agent→client requests (permissions, fs, terminal) are handled in the background reader.
+//! Agent message notifications are traced to JSONL files for attribution tracking.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -17,6 +18,10 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::{broadcast, Mutex, oneshot};
+
+use crate::trace::{
+    TraceRecord, TraceWriter, TraceEventType, Contributor, TraceConversation,
+};
 
 /// Callback type for session/update notifications from the agent.
 pub type NotificationSender = broadcast::Sender<serde_json::Value>;
@@ -133,10 +138,14 @@ impl AcpProcess {
         let stdin_clone = stdin.clone();
         let name_clone = name.clone();
         let our_sid = our_session_id.to_string();
+        let cwd_clone = cwd.to_string();
+        let provider_clone = display_name.to_string();
 
         let reader_handle = tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
+            // Buffer for accumulating agent message chunks
+            let mut agent_msg_buffer = String::new();
 
             while let Ok(Some(line)) = lines.next_line().await {
                 let line = line.trim().to_string();
@@ -212,13 +221,45 @@ impl AcpProcess {
                     // Notification (no id) — forward to SSE
                     // Rewrite the agent's sessionId to our session ID so the
                     // frontend SSE stream can match on the correct session.
-                    let mut rewritten = msg;
+                    let mut rewritten = msg.clone();
                     if let Some(params) = rewritten.get_mut("params") {
                         if params.get("sessionId").is_some() {
                             params["sessionId"] =
                                 serde_json::Value::String(our_sid.clone());
                         }
                     }
+
+                    // ── Trace: agent_message - accumulate chunks ────────────────
+                    if let Some(params) = msg.get("params") {
+                        if let Some(update) = params.get("update") {
+                            let session_update = update.get("sessionUpdate")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            if session_update == "agent_message_chunk" || session_update == "agent_message" {
+                                let text = update.get("content")
+                                    .and_then(|c| c.get("text"))
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("");
+                                agent_msg_buffer.push_str(text);
+                                // Trace when buffer reaches 50+ chars (lower threshold for shorter responses)
+                                if agent_msg_buffer.len() >= 50 {
+                                    let record = TraceRecord::new(
+                                        &our_sid,
+                                        TraceEventType::AgentMessage,
+                                        Contributor::new(&provider_clone, None),
+                                    ).with_conversation(TraceConversation {
+                                        turn: None,
+                                        role: Some("assistant".to_string()),
+                                        content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                                    });
+                                    let writer = TraceWriter::new(&cwd_clone);
+                                    let _ = writer.append_safe(&record).await;
+                                    agent_msg_buffer.clear();
+                                }
+                            }
+                        }
+                    }
+
                     let _ = ntx.send(rewritten);
                 } else {
                     tracing::debug!(
@@ -227,6 +268,21 @@ impl AcpProcess {
                         &line[..line.len().min(200)]
                     );
                 }
+            }
+
+            // Flush any remaining buffered agent message content
+            if !agent_msg_buffer.is_empty() {
+                let record = TraceRecord::new(
+                    &our_sid,
+                    TraceEventType::AgentMessage,
+                    Contributor::new(&provider_clone, None),
+                ).with_conversation(TraceConversation {
+                    turn: None,
+                    role: Some("assistant".to_string()),
+                    content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                });
+                let writer = TraceWriter::new(&cwd_clone);
+                let _ = writer.append_safe(&record).await;
             }
 
             alive_clone.store(false, Ordering::SeqCst);

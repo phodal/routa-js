@@ -32,6 +32,13 @@ import { getRoutaSystem } from "@/core/routa-system";
 import { AgentRole } from "@/core/models/agent";
 import { buildCoordinatorPrompt, getSpecialistByRole } from "@/core/orchestration/specialist-prompts";
 import { AcpError } from "@/core/acp/acp-process";
+import {
+  createTraceRecord,
+  withWorkspaceId,
+  withMetadata,
+  withConversation,
+  recordTrace,
+} from "@/core/trace";
 
 export const dynamic = "force-dynamic";
 
@@ -238,6 +245,19 @@ export async function POST(request: NextRequest) {
         `[ACP Route] Session created: ${sessionId} (provider: ${provider}, agent session: ${acpSessionId}, role: ${role ?? "CRAFTER"})`
       );
 
+      // ── Trace: session_start ────────────────────────────────────────
+      const sessionStartTrace = withMetadata(
+        withMetadata(
+          withWorkspaceId(
+            createTraceRecord(sessionId, "session_start", { provider }),
+            "default"
+          ),
+          "cwd", cwd
+        ),
+        "role", role ?? "CRAFTER"
+      );
+      recordTrace(cwd, sessionStartTrace);
+
       return jsonrpcResponse(id ?? null, {
         sessionId,
         provider,
@@ -301,6 +321,17 @@ export async function POST(request: NextRequest) {
       const store = getHttpSessionStore();
       store.pushUserMessage(sessionId, promptText);
 
+      // ── Trace: user_message ─────────────────────────────────────────
+      const sessionRecord = store.getSession(sessionId);
+      const userMsgTrace = withConversation(
+        createTraceRecord(sessionId, "user_message", { provider: sessionRecord?.provider }),
+        {
+          role: "user",
+          contentPreview: promptText.slice(0, 200),
+        }
+      );
+      recordTrace(sessionRecord?.cwd ?? process.cwd(), userMsgTrace);
+
       // ── Claude Code session ─────────────────────────────────────────
       if (manager.isClaudeSession(sessionId)) {
         const claudeProc = manager.getClaudeProcess(sessionId);
@@ -320,8 +351,11 @@ export async function POST(request: NextRequest) {
 
         try {
           const result = await claudeProc.prompt(sessionId, promptText);
+          // Flush any remaining buffered agent chunks for tracing
+          store.flushAgentBuffer(sessionId);
           return jsonrpcResponse(id ?? null, result);
         } catch (err) {
+          store.flushAgentBuffer(sessionId); // Flush even on error
           return jsonrpcResponse(id ?? null, null, {
             code: -32000,
             message: err instanceof Error ? err.message : "Claude Code prompt failed",
@@ -351,8 +385,11 @@ export async function POST(request: NextRequest) {
       try {
         // Forward to agent (responses stream via session/update → SSE)
         const result = await proc.prompt(acpSessionId, promptText);
+        // Flush any remaining buffered agent chunks for tracing
+        store.flushAgentBuffer(sessionId);
         return jsonrpcResponse(id ?? null, result);
       } catch (err) {
+        store.flushAgentBuffer(sessionId); // Flush even on error
         return jsonrpcResponse(id ?? null, null, {
           code: -32000,
           message: err instanceof Error ? err.message : "Prompt failed",

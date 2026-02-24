@@ -10,6 +10,12 @@
  * - Consolidates consecutive agent_message_chunk notifications for efficient storage
  */
 
+import {
+  createTraceRecord,
+  withConversation,
+  recordTrace,
+} from "@/core/trace";
+
 export interface RoutaSessionRecord {
   sessionId: string;
   /** User-editable display name */
@@ -94,6 +100,8 @@ class HttpSessionStore {
   private pendingNotifications = new Map<string, SessionUpdateNotification[]>();
   /** Store all notifications per session for history replay */
   private messageHistory = new Map<string, SessionUpdateNotification[]>();
+  /** Buffer for accumulating agent message chunks before tracing */
+  private agentMessageBuffer = new Map<string, string>();
 
   upsertSession(record: RoutaSessionRecord) {
     this.sessions.set(record.sessionId, record);
@@ -111,11 +119,33 @@ class HttpSessionStore {
   }
 
   deleteSession(sessionId: string): boolean {
+    this.flushAgentBuffer(sessionId); // Trace any remaining buffered content
     this.messageHistory.delete(sessionId);
     this.pendingNotifications.delete(sessionId);
+    this.agentMessageBuffer.delete(sessionId);
     // Detach SSE if connected
     this.sseControllers.delete(sessionId);
     return this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Flush and trace any remaining buffered agent message content.
+   * Call this when a prompt completes or session ends.
+   */
+  flushAgentBuffer(sessionId: string): void {
+    const accumulated = this.agentMessageBuffer.get(sessionId);
+    if (accumulated && accumulated.length > 0) {
+      const sessionRecord = this.sessions.get(sessionId);
+      const agentTrace = withConversation(
+        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider }),
+        {
+          role: "assistant",
+          contentPreview: accumulated.slice(0, 200),
+        }
+      );
+      recordTrace(sessionRecord?.cwd ?? process.cwd(), agentTrace);
+      this.agentMessageBuffer.set(sessionId, "");
+    }
   }
 
   renameSession(sessionId: string, name: string): boolean {
@@ -181,6 +211,44 @@ class HttpSessionStore {
     const history = this.messageHistory.get(sessionId) ?? [];
     history.push(notification);
     this.messageHistory.set(sessionId, history);
+
+    // ── Trace: agent_message - accumulate chunks and trace periodically ──
+    const update = notification.update as Record<string, unknown> | undefined;
+    const sessionUpdate = update?.sessionUpdate;
+    if (sessionUpdate === "agent_message_chunk") {
+      const content = update?.content as { type?: string; text?: string } | undefined;
+      const text = content?.text ?? "";
+      // Accumulate chunks in buffer
+      const existing = this.agentMessageBuffer.get(sessionId) ?? "";
+      const accumulated = existing + text;
+      this.agentMessageBuffer.set(sessionId, accumulated);
+      // Trace when buffer reaches 100+ chars (captures meaningful segments)
+      if (accumulated.length >= 100) {
+        const sessionRecord = this.sessions.get(sessionId);
+        const agentTrace = withConversation(
+          createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider }),
+          {
+            role: "assistant",
+            contentPreview: accumulated.slice(0, 200),
+          }
+        );
+        recordTrace(sessionRecord?.cwd ?? process.cwd(), agentTrace);
+        this.agentMessageBuffer.set(sessionId, ""); // Reset buffer
+      }
+    } else if (sessionUpdate === "agent_message") {
+      // Full message (non-streaming) - trace immediately
+      const content = update?.content as { type?: string; text?: string } | undefined;
+      const text = content?.text ?? "";
+      const sessionRecord = this.sessions.get(sessionId);
+      const agentTrace = withConversation(
+        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider }),
+        {
+          role: "assistant",
+          contentPreview: text.slice(0, 200),
+        }
+      );
+      recordTrace(sessionRecord?.cwd ?? process.cwd(), agentTrace);
+    }
 
     const controller = this.sseControllers.get(sessionId);
 
