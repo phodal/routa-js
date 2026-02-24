@@ -455,14 +455,32 @@ export class ClaudeCodeProcess {
                         const toolName = this.toolUseNames.get(toolId) ?? "unknown";
                         const isErr = c.is_error === true;
                         const output = extractToolResultText(c);
+                        const mappedKind = mapClaudeToolName(toolName);
+                        const rawInput = this.toolUseInputs.get(toolId) ?? {};
+
+                        // For delegate_task_to_agent, use "delegated" status instead of "completed"
+                        // The task is still running asynchronously, and will be updated via task_completion
+                        let status: string = isErr ? "failed" : "completed";
+                        let delegatedTaskId: string | undefined;
+
+                        if (mappedKind === "task" && !isErr) {
+                            // Check if this is a delegation tool (has taskId in input)
+                            const taskId = rawInput.taskId as string | undefined;
+                            if (taskId) {
+                                status = "delegated";
+                                delegatedTaskId = taskId;
+                            }
+                        }
 
                         this.emitSessionUpdate(sid, {
                             sessionUpdate: "tool_call_update",
                             toolCallId: toolId,
                             title: toolName,
-                            status: isErr ? "failed" : "completed",
-                            kind: mapClaudeToolName(toolName),
+                            status,
+                            kind: mappedKind,
                             rawOutput: output,
+                            // Include taskId for matching with task_completion notifications
+                            ...(delegatedTaskId && { delegatedTaskId }),
                         });
                     }
                 }
@@ -577,7 +595,12 @@ function mapClaudeToolName(claudeToolName: string): string {
     if (claudeToolName.startsWith("mcp__")) {
         const parts = claudeToolName.split("__");
         if (parts.length >= 3) {
-            return parts.slice(2).join("__");
+            const toolName = parts.slice(2).join("__");
+            // Map delegate_task_to_agent to "task" for TaskProgressBar
+            if (toolName === "delegate_task_to_agent") {
+                return "task";
+            }
+            return toolName;
         }
     }
 

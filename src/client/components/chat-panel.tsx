@@ -33,6 +33,10 @@ export interface ChatMessage {
   toolKind?: string;
   /** Raw input parameters for tool calls */
   toolRawInput?: Record<string, unknown>;
+  /** Task ID for delegated tasks (delegate_task_to_agent) */
+  delegatedTaskId?: string;
+  /** Completion summary when a delegated task completes */
+  completionSummary?: string;
   planEntries?: PlanEntry[];
   usageUsed?: number;
   usageSize?: number;
@@ -110,11 +114,12 @@ export function ChatPanel({
       .map((msg) => {
         const rawInput = msg.toolRawInput ?? {};
         const description = (rawInput.description as string) ?? "";
-        const subagentType = (rawInput.subagent_type as string) ?? "";
+        const subagentType = (rawInput.subagent_type as string) ?? (rawInput.specialist as string) ?? "";
         // Map toolStatus to TaskInfo status
         let status: TaskInfo["status"] = "pending";
         if (msg.toolStatus === "completed") status = "completed";
         else if (msg.toolStatus === "failed") status = "failed";
+        else if (msg.toolStatus === "delegated") status = "delegated";
         else if (msg.toolStatus === "running" || msg.toolStatus === "in_progress") status = "running";
 
         return {
@@ -123,6 +128,7 @@ export function ChatPanel({
           description,
           subagentType,
           status,
+          completionSummary: msg.completionSummary,
         };
       });
   }, [visibleMessages]);
@@ -443,6 +449,7 @@ export function ChatPanel({
           case "tool_call_update": {
             const toolCallId = update.toolCallId as string | undefined;
             const status = update.status as string | undefined;
+            const delegatedTaskId = update.delegatedTaskId as string | undefined;
             const outputParts: string[] = [];
             if (update.rawOutput) {
               outputParts.push(
@@ -464,6 +471,8 @@ export function ChatPanel({
                   toolStatus: status ?? existing.toolStatus,
                   toolName: (update.title as string) ?? existing.toolName,
                   toolKind: (update.kind as string) ?? existing.toolKind,
+                  // Save delegatedTaskId for matching with task_completion
+                  delegatedTaskId: delegatedTaskId ?? existing.delegatedTaskId,
                   content: outputParts.length
                     ? `${existing.toolName ?? "tool"}\n\nOutput:\n${outputParts.join("\n")}`
                     : existing.content,
@@ -476,6 +485,7 @@ export function ChatPanel({
                   timestamp: new Date(),
                   toolStatus: status ?? "completed",
                   toolCallId,
+                  delegatedTaskId,
                 });
               }
             }
@@ -618,6 +628,32 @@ export function ChatPanel({
                   terminalExited: false,
                   terminalExitCode: null,
                 });
+              }
+            }
+            break;
+          }
+
+          case "task_completion": {
+            // Task completed by a child agent - find the matching tool message and update it
+            const taskId = update.taskId as string | undefined;
+            const completionSummary = update.completionSummary as string | undefined;
+            const taskStatus = update.taskStatus as string | undefined;
+            if (taskId) {
+              const idx = arr.findIndex(
+                (m) => m.role === "tool" && m.delegatedTaskId === taskId
+              );
+              if (idx >= 0) {
+                const existing = arr[idx];
+                // Update the tool message status to "completed" and add summary
+                arr[idx] = {
+                  ...existing,
+                  toolStatus: taskStatus === "COMPLETED" || taskStatus === "completed" ? "completed" : "failed",
+                  completionSummary,
+                  content: completionSummary
+                    ? `${existing.toolName ?? "Task"}\n\n**Completed:**\n${completionSummary}`
+                    : existing.content,
+                };
+                console.log(`[ChatPanel] Updated task ${taskId} status to ${taskStatus}`);
               }
             }
             break;

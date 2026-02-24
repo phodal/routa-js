@@ -15,7 +15,10 @@ export interface TaskInfo {
   title: string;
   description?: string;
   subagentType?: string;
-  status: "pending" | "running" | "completed" | "failed";
+  /** Task status: "pending", "running", "delegated" (async running), "completed", or "failed" */
+  status: "pending" | "running" | "delegated" | "completed" | "failed";
+  /** Completion summary when task finishes */
+  completionSummary?: string;
 }
 
 interface TaskProgressBarProps {
@@ -27,18 +30,23 @@ export function TaskProgressBar({ tasks, className = "" }: TaskProgressBarProps)
   const [expanded, setExpanded] = useState(false);
 
   // Find current running task and calculate progress
-  const { currentTaskIndex, completedCount, runningTask } = useMemo(() => {
+  const { currentTaskIndex, completedCount, runningTask, delegatedCount } = useMemo(() => {
     let runningIdx = -1;
     let completed = 0;
+    let delegated = 0;
     let running: TaskInfo | null = null;
 
     for (let i = 0; i < tasks.length; i++) {
       if (tasks[i].status === "completed") {
         completed++;
       }
-      if (tasks[i].status === "running" && runningIdx === -1) {
+      // "delegated" means async running - treat as running for display
+      if ((tasks[i].status === "running" || tasks[i].status === "delegated") && runningIdx === -1) {
         runningIdx = i;
         running = tasks[i];
+      }
+      if (tasks[i].status === "delegated") {
+        delegated++;
       }
     }
 
@@ -56,6 +64,7 @@ export function TaskProgressBar({ tasks, className = "" }: TaskProgressBarProps)
     return {
       currentTaskIndex: runningIdx >= 0 ? runningIdx + 1 : completed + 1,
       completedCount: completed,
+      delegatedCount: delegated,
       runningTask: running,
     };
   }, [tasks]);
@@ -121,9 +130,10 @@ export function TaskProgressBar({ tasks, className = "" }: TaskProgressBarProps)
 }
 
 function TaskRow({ task, index }: { task: TaskInfo; index: number }) {
-  const statusConfig = {
+  const statusConfig: Record<TaskInfo["status"], { color: string; label: string }> = {
     pending: { color: "bg-gray-400", label: "pending" },
     running: { color: "bg-amber-500 animate-pulse", label: "running" },
+    delegated: { color: "bg-blue-500 animate-pulse", label: "delegated" },
     completed: { color: "bg-green-500", label: "done" },
     failed: { color: "bg-red-500", label: "failed" },
   };
@@ -147,6 +157,12 @@ function TaskRow({ task, index }: { task: TaskInfo; index: number }) {
       <span className="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">
         {label}
       </span>
+      {/* Show completion summary for completed tasks */}
+      {task.status === "completed" && task.completionSummary && (
+        <span className="text-[10px] text-green-600 dark:text-green-400 truncate max-w-[120px]" title={task.completionSummary}>
+          ✓ {task.completionSummary.slice(0, 30)}...
+        </span>
+      )}
     </div>
   );
 }

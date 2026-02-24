@@ -73,6 +73,8 @@ interface ChildAgentRecord {
   taskId: string;
   role: AgentRole;
   provider: string;
+  /** Tool call ID from the parent session's delegate_task_to_agent call (if available) */
+  delegationToolCallId?: string;
 }
 
 /**
@@ -768,6 +770,23 @@ export class RoutaOrchestrator {
           ? `**Report:**\n${task.verificationReport}\n`
           : "") +
         `\nReview the results and decide next steps.`;
+    }
+
+    // Send a task completion notification to update the UI
+    if (this.notificationHandler && !groupId) {
+      const task = await this.system.taskStore.get(taskId);
+      this.notificationHandler(parentSessionId, {
+        sessionId: parentSessionId,
+        update: {
+          sessionUpdate: "task_completion",
+          taskId,
+          taskTitle: task?.title ?? taskId,
+          taskStatus: task?.status ?? "unknown",
+          completionSummary: task?.completionSummary,
+          agentId: record.agentId,
+          agentRole: record.role,
+        },
+      });
     }
 
     // Send the wake-up message as a new prompt to the parent's session
