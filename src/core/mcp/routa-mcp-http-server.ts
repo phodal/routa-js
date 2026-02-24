@@ -41,11 +41,13 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createRoutaMcpServer } from "./routa-mcp-server";
 import { WebSocketServerTransport } from "./ws-server-transport";
+import { ToolMode } from "./routa-mcp-tool-manager";
 
 export class RoutaMcpHttpServer {
   private httpServer: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private _port = 0;
+  private _toolMode: ToolMode = "essential";
   private readonly sessions = new Map<
     string,
     { transport: StreamableHTTPServerTransport }
@@ -55,6 +57,19 @@ export class RoutaMcpHttpServer {
     private readonly workspaceId: string = "default",
     private readonly host: string = "127.0.0.1",
   ) {}
+
+  /**
+   * Set the tool mode for new sessions.
+   * - "essential": 7 core Agent coordination tools (best for weak models)
+   * - "full": All 34 tools
+   */
+  setToolMode(mode: ToolMode): void {
+    this._toolMode = mode;
+  }
+
+  get toolMode(): ToolMode {
+    return this._toolMode;
+  }
 
   // ─── Properties ──────────────────────────────────────────────────────
 
@@ -275,7 +290,10 @@ export class RoutaMcpHttpServer {
           },
         });
 
-        const { server } = createRoutaMcpServer(this.workspaceId);
+        const { server } = createRoutaMcpServer({
+          workspaceId: this.workspaceId,
+          toolMode: this._toolMode,
+        });
         await server.connect(transport);
 
         // For DELETE requests, handle session cleanup
@@ -321,7 +339,10 @@ export class RoutaMcpHttpServer {
       // Each WebSocket connection gets a fresh MCP server
       // (same pattern as Java: mcpWebSocket("/mcp") { RoutaMcpServer.create(...) })
       const transport = new WebSocketServerTransport(ws);
-      const { server } = createRoutaMcpServer(this.workspaceId);
+      const { server } = createRoutaMcpServer({
+        workspaceId: this.workspaceId,
+        toolMode: this._toolMode,
+      });
       await server.connect(transport);
 
       ws.on("close", () => {

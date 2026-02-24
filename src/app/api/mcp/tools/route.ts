@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRoutaMcpServer } from "@/core/mcp/routa-mcp-server";
 import { executeMcpTool, getMcpToolDefinitions } from "@/core/mcp/mcp-tool-executor";
 import { ToolMode } from "@/core/mcp/routa-mcp-tool-manager";
+import { setGlobalToolMode, getGlobalToolMode } from "@/core/mcp/tool-mode-config";
 
 const DEFAULT_WORKSPACE_ID = "default";
 
@@ -9,17 +10,57 @@ const DEFAULT_WORKSPACE_ID = "default";
  * GET /api/mcp/tools - List all MCP tool definitions
  *
  * Query params:
- * - mode: "essential" (default, 7 tools) or "full" (all 34 tools)
+ * - mode: "essential" | "full" | undefined
+ *   - If not specified, returns tools based on the global tool mode
+ *   - If specified, returns tools for that specific mode
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const mode = (searchParams.get("mode") ?? "essential") as ToolMode;
-  const toolMode: ToolMode = mode === "full" ? "full" : "essential";
+  const modeParam = searchParams.get("mode") as ToolMode | null;
+
+  // Use global mode if not explicitly specified
+  const toolMode: ToolMode = modeParam === "full"
+    ? "full"
+    : modeParam === "essential"
+      ? "essential"
+      : getGlobalToolMode();
 
   return NextResponse.json({
     tools: getMcpToolDefinitions(toolMode),
     mode: toolMode,
+    globalMode: getGlobalToolMode(),
   });
+}
+
+/**
+ * PATCH /api/mcp/tools - Set the global tool mode
+ *
+ * Body: { mode: "essential" | "full" }
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const mode = body?.mode as ToolMode;
+
+    if (mode !== "essential" && mode !== "full") {
+      return NextResponse.json(
+        { error: "Invalid mode. Must be 'essential' or 'full'" },
+        { status: 400 }
+      );
+    }
+
+    setGlobalToolMode(mode);
+
+    return NextResponse.json({
+      success: true,
+      mode: getGlobalToolMode(),
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal error" },
+      { status: 500 }
+    );
+  }
 }
 
 /**

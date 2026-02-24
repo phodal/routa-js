@@ -73,10 +73,11 @@ export default function McpToolsPage() {
   /** Tools are now fetched from API with mode param, no client-side filtering needed */
   const filteredTools = tools;
 
-  const loadTools = useCallback(async (mode: "essential" | "full") => {
+  const loadTools = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/mcp/tools?mode=${mode}`, { cache: "no-store" });
+      // Fetch current global mode from server
+      const response = await fetch("/api/mcp/tools", { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`Failed to load tools: ${response.status}`);
       }
@@ -85,6 +86,10 @@ export default function McpToolsPage() {
       setTools(nextTools);
       setLoadError("");
       setSelectedToolName((current) => current || nextTools[0]?.name || "");
+      // Sync local state with server's global mode
+      if (data.globalMode) {
+        setEssentialMode(data.globalMode === "essential");
+      }
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Failed to load tools");
     } finally {
@@ -92,9 +97,32 @@ export default function McpToolsPage() {
     }
   }, []);
 
+  /** Toggle essential mode and sync with server */
+  const handleToggleMode = useCallback(async (checked: boolean) => {
+    setEssentialMode(checked);
+    const newMode = checked ? "essential" : "full";
+
+    try {
+      // Update global mode on server
+      await fetch("/api/mcp/tools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: newMode }),
+      });
+      // Reload tools with new mode
+      const response = await fetch("/api/mcp/tools", { cache: "no-store" });
+      if (response.ok) {
+        const data = await response.json();
+        setTools(Array.isArray(data?.tools) ? data.tools : []);
+      }
+    } catch (error) {
+      console.error("Failed to toggle tool mode:", error);
+    }
+  }, []);
+
   useEffect(() => {
-    loadTools(essentialMode ? "essential" : "full");
-  }, [loadTools, essentialMode]);
+    loadTools();
+  }, [loadTools]);
 
   const handleExecuteTool = async () => {
     if (!selectedTool) return;
@@ -126,7 +154,7 @@ export default function McpToolsPage() {
             <h1 className="text-sm font-semibold text-gray-900 dark:text-gray-100">MCP Tools</h1>
             <button
               type="button"
-              onClick={() => loadTools(essentialMode ? "essential" : "full")}
+              onClick={() => loadTools()}
               disabled={loading}
               className="text-xs text-blue-600 dark:text-blue-400 disabled:opacity-40"
             >
@@ -139,7 +167,7 @@ export default function McpToolsPage() {
               <input
                 type="checkbox"
                 checked={essentialMode}
-                onChange={(e) => setEssentialMode(e.target.checked)}
+                onChange={(e) => handleToggleMode(e.target.checked)}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-purple-500 transition-colors" />

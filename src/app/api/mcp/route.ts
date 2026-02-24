@@ -22,6 +22,7 @@
 import { NextRequest } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createRoutaMcpServer } from "@/core/mcp/routa-mcp-server";
+import { getGlobalToolMode } from "@/core/mcp/tool-mode-config";
 
 // ─── Session management ────────────────────────────────────────────────
 
@@ -61,7 +62,10 @@ async function createSession(
     },
   });
 
-  const { server } = createRoutaMcpServer(DEFAULT_WORKSPACE_ID);
+  const { server } = createRoutaMcpServer({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    toolMode: getGlobalToolMode(),
+  });
   await server.connect(transport);
 
   // Clean up when session is closed
