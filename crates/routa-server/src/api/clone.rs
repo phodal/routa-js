@@ -15,6 +15,72 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/", get(list_repos).post(clone_repo).patch(switch_branch))
 }
 
+/// Parse git clone error output and return a user-friendly message
+fn parse_git_clone_error(stderr: &str, exit_code: Option<i32>) -> String {
+    let stderr_lower = stderr.to_lowercase();
+
+    // Auth errors
+    if stderr_lower.contains("authentication failed")
+        || stderr_lower.contains("could not read username")
+        || stderr_lower.contains("could not read password")
+        || stderr_lower.contains("terminal prompts disabled")
+    {
+        return "Git credentials not configured. Set up a credential manager or use SSH.".to_string();
+    }
+
+    // SSH auth errors
+    if stderr_lower.contains("permission denied (publickey)")
+        || stderr_lower.contains("host key verification failed")
+    {
+        return "SSH key not configured. Set up SSH keys or switch to HTTPS.".to_string();
+    }
+
+    // Repository not found
+    if stderr_lower.contains("repository") && stderr_lower.contains("not found") {
+        return "Repository not found or you don't have access.".to_string();
+    }
+
+    // HTTP errors
+    if stderr_lower.contains("the requested url returned error: 401")
+        || stderr_lower.contains("the requested url returned error: 403")
+    {
+        return "Access denied. Check your credentials or repository permissions.".to_string();
+    }
+
+    if stderr_lower.contains("the requested url returned error: 404") {
+        return "Repository not found. Check the URL and your access permissions.".to_string();
+    }
+
+    // Network errors
+    if stderr_lower.contains("could not resolve host")
+        || stderr_lower.contains("network is unreachable")
+        || stderr_lower.contains("connection refused")
+    {
+        return "Network error. Check your internet connection.".to_string();
+    }
+
+    // SSL/TLS errors
+    if stderr_lower.contains("ssl certificate problem") {
+        return "SSL certificate error. Check your network or proxy settings.".to_string();
+    }
+
+    // If we have stderr content, extract the "fatal:" line
+    if let Some(fatal_line) = stderr.lines().find(|l| l.starts_with("fatal:")) {
+        return format!("Clone failed: {}", fatal_line.trim_start_matches("fatal:").trim());
+    }
+
+    // Fallback: include stderr content if available
+    if !stderr.trim().is_empty() {
+        let first_line = stderr.lines().next().unwrap_or("").trim();
+        if !first_line.is_empty() {
+            return format!("Clone failed: {}", first_line);
+        }
+    }
+
+    // Last resort: just show the exit code
+    format!("Clone failed with exit code {}", exit_code.unwrap_or(-1))
+}
+
 #[derive(Debug, Deserialize)]
 struct CloneRequest {
     url: Option<String>,
