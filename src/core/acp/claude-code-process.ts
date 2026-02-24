@@ -573,6 +573,14 @@ export class ClaudeCodeProcess {
 // ─── Helper Functions ──────────────────────────────────────────────────
 
 function mapClaudeToolName(claudeToolName: string): string {
+    // Handle MCP tool names: mcp__server-name__tool_name -> tool_name
+    if (claudeToolName.startsWith("mcp__")) {
+        const parts = claudeToolName.split("__");
+        if (parts.length >= 3) {
+            return parts.slice(2).join("__");
+        }
+    }
+
     switch (claudeToolName) {
         case "Bash": return "shell";
         case "Read": return "read-file";
@@ -583,17 +591,30 @@ function mapClaudeToolName(claudeToolName: string): string {
         case "WebSearch": return "web-search";
         case "WebFetch": return "web-fetch";
         case "Task": return "task";
+        case "TodoRead": return "todo-read";
+        case "TodoWrite": return "todo-write";
+        case "NotebookRead": return "notebook-read";
+        case "NotebookEdit": return "notebook-edit";
         default: return claudeToolName;
     }
 }
 
 function formatToolTitle(toolName: string, params: Record<string, unknown>): string {
-    switch (toolName) {
+    // Handle MCP tool names: mcp__server-name__tool_name -> tool_name
+    let displayName = toolName;
+    if (toolName.startsWith("mcp__")) {
+        const parts = toolName.split("__");
+        if (parts.length >= 3) {
+            displayName = parts.slice(2).join("__");
+        }
+    }
+
+    switch (displayName) {
         case "Read":
         case "Write":
         case "Edit": {
             const path = (params.file_path ?? params.path ?? "") as string;
-            return `${toolName}: ${path}`;
+            return `${displayName}: ${path}`;
         }
         case "Bash": {
             const cmd = ((params.command as string) ?? "").slice(0, 80);
@@ -610,10 +631,16 @@ function formatToolTitle(toolName: string, params: Record<string, unknown>): str
         case "Glob":
         case "Grep": {
             const pattern = (params.pattern ?? params.glob_pattern ?? "") as string;
-            return `${toolName}: ${pattern}`;
+            return `${displayName}: ${pattern}`;
+        }
+        case "TodoWrite":
+        case "TodoRead": {
+            // Todo tools might have file_path or similar params
+            const todoPath = (params.file_path ?? params.path ?? "") as string;
+            return todoPath ? `${displayName}: ${todoPath}` : displayName;
         }
         default:
-            return toolName;
+            return displayName;
     }
 }
 
