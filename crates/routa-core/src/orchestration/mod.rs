@@ -402,6 +402,7 @@ impl RoutaOrchestrator {
                 cwd.clone(),
                 params.workspace_id.clone(),
                 Some(provider.clone()),
+                Some(specialist_config.role.as_str().to_string()),
             )
             .await;
 

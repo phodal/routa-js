@@ -14,6 +14,7 @@ export interface RoutaSessionRecord {
   workspaceId: string;
   routaAgentId?: string;
   provider?: string;
+  role?: string;
   modeId?: string;
   createdAt: string;
   /** Whether the first prompt has been sent (for coordinator prompt injection) */

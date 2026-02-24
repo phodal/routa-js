@@ -212,6 +212,7 @@ export async function POST(request: NextRequest) {
         workspaceId: "default",
         routaAgentId: routaAgentId ?? acpSessionId,
         provider,
+        role: role ?? "CRAFTER",
         modeId,
         createdAt: new Date().toISOString(),
       });

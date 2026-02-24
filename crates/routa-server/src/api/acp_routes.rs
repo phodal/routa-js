@@ -185,6 +185,7 @@ async fn acp_rpc(
                     cwd,
                     "default".to_string(),
                     provider.clone(),
+                    role.clone(),
                 )
                 .await
             {

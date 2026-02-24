@@ -8,6 +8,8 @@ export interface SessionInfo {
   workspaceId: string;
   routaAgentId?: string;
   provider?: string;
+  role?: string;
+  modeId?: string;
   createdAt: string;
 }
 
@@ -91,13 +93,15 @@ export function SessionPanel({
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium truncate">
-                      {s.routaAgentId
-                        ? `routa-${s.sessionId.slice(0, 8)}`
-                        : s.sessionId.slice(0, 8)}
+                      {s.provider && s.role
+                        ? `${s.provider}-${s.role.toLowerCase()}`
+                        : s.provider
+                          ? `${s.provider}-${s.sessionId.slice(0, 7)}`
+                          : s.sessionId.slice(0, 8)}
                     </div>
-                    {s.provider && (
+                    {s.modeId && (
                       <div className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
-                        {s.provider}
+                        {s.modeId}
                       </div>
                     )}
                   </div>

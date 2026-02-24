@@ -38,6 +38,7 @@ pub struct AcpSessionRecord {
     pub cwd: String,
     pub workspace_id: String,
     pub provider: Option<String>,
+    pub role: Option<String>,
     pub mode_id: Option<String>,
     pub created_at: String,
 }
@@ -100,6 +101,7 @@ impl AcpManager {
         cwd: String,
         workspace_id: String,
         provider: Option<String>,
+        role: Option<String>,
     ) -> Result<(String, String), String> {
         let provider_name = provider.as_deref().unwrap_or("opencode");
         let preset = get_preset_by_id_with_registry(provider_name).await?;
@@ -132,6 +134,7 @@ impl AcpManager {
             cwd,
             workspace_id,
             provider: Some(provider_name.to_string()),
+            role: role.or(Some("CRAFTER".to_string())),
             mode_id: None,
             created_at: chrono::Utc::now().to_rfc3339(),
         };
