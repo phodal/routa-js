@@ -168,10 +168,9 @@ export function SessionPanel({
                     />
                   </form>
                 ) : (
-                  <button
-                    type="button"
+                  <div
                     onClick={() => onSelect(s.sessionId)}
-                    className={`w-full text-left px-2.5 py-2 rounded-md transition-colors ${
+                    className={`w-full text-left px-2.5 py-2 rounded-md transition-colors cursor-pointer ${
                       active
                         ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
                         : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
@@ -203,7 +202,7 @@ export function SessionPanel({
                         </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 )}
 
                 {/* Context menu */}
