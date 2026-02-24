@@ -12,6 +12,9 @@
 //! **Claude Code** uses a different protocol (stream-json) instead of ACP.
 //! The `ClaudeCodeProcess` translates Claude's output into ACP-compatible
 //! `session/update` notifications for frontend compatibility.
+//!
+//! **Agent Trace**: All sessions record trace events to JSONL files for
+//! attribution tracking (which model/session/tool affected which files and when).
 
 pub mod binary_manager;
 pub mod claude_code_process;
@@ -33,6 +36,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, RwLock};
 
 use process::AcpProcess;
+use crate::trace::{
+    Contributor, TraceConversation, TraceEventType, TraceFile, TraceRecord, TraceTool, TraceWriter,
+};
 
 // ─── Session Record ─────────────────────────────────────────────────────
 
@@ -67,6 +73,10 @@ struct ManagedProcess {
     preset_id: String,
     #[allow(dead_code)]
     created_at: String,
+    /// Trace writer for recording agent activities to JSONL
+    trace_writer: TraceWriter,
+    /// Working directory (for contributor context)
+    cwd: String,
 }
 
 // ─── ACP Manager ────────────────────────────────────────────────────────
@@ -168,13 +178,16 @@ impl AcpManager {
             (AgentProcessType::Acp(Arc::new(process)), agent_session_id)
         };
 
+        // Create TraceWriter for this session
+        let trace_writer = TraceWriter::new(&cwd);
+
         // Store everything
         let record = AcpSessionRecord {
             session_id: session_id.clone(),
-            cwd,
-            workspace_id,
+            cwd: cwd.clone(),
+            workspace_id: workspace_id.clone(),
             provider: Some(provider_name.to_string()),
-            role: role.or(Some("CRAFTER".to_string())),
+            role: role.clone().or(Some("CRAFTER".to_string())),
             mode_id: None,
             created_at: chrono::Utc::now().to_rfc3339(),
         };
@@ -191,6 +204,8 @@ impl AcpManager {
                 acp_session_id: acp_session_id.clone(),
                 preset_id: provider_name.to_string(),
                 created_at: chrono::Utc::now().to_rfc3339(),
+                trace_writer: trace_writer.clone(),
+                cwd: cwd.clone(),
             },
         );
 
@@ -198,6 +213,18 @@ impl AcpManager {
             .write()
             .await
             .insert(session_id.clone(), ntx);
+
+        // Record SessionStart trace
+        let trace = TraceRecord::new(
+            &session_id,
+            TraceEventType::SessionStart,
+            Contributor::new(provider_name, None),
+        )
+        .with_workspace_id(&workspace_id)
+        .with_metadata("role", serde_json::json!(role.as_deref().unwrap_or("CRAFTER")))
+        .with_metadata("cwd", serde_json::json!(cwd));
+
+        trace_writer.append_safe(&trace).await;
 
         tracing::info!(
             "[AcpManager] Session {} created (provider: {}, agent session: {})",
@@ -232,6 +259,20 @@ impl AcpManager {
             ));
         }
 
+        // Record UserMessage trace
+        let trace = TraceRecord::new(
+            session_id,
+            TraceEventType::UserMessage,
+            Contributor::new(&managed.preset_id, None),
+        )
+        .with_conversation(TraceConversation {
+            turn: None,
+            role: Some("user".to_string()),
+            content_preview: Some(truncate_content(text, 500)),
+        });
+
+        managed.trace_writer.append_safe(&trace).await;
+
         match &managed.process {
             AgentProcessType::Acp(p) => p.prompt(&managed.acp_session_id, text).await,
             AgentProcessType::Claude(p) => {
@@ -256,6 +297,14 @@ impl AcpManager {
     pub async fn kill_session(&self, session_id: &str) {
         // Kill the process
         if let Some(managed) = self.processes.write().await.remove(session_id) {
+            // Record SessionEnd trace before killing
+            let trace = TraceRecord::new(
+                session_id,
+                TraceEventType::SessionEnd,
+                Contributor::new(&managed.preset_id, None),
+            );
+            managed.trace_writer.append_safe(&trace).await;
+
             match &managed.process {
                 AgentProcessType::Acp(p) => p.kill().await,
                 AgentProcessType::Claude(p) => p.kill().await,
@@ -415,4 +464,15 @@ async fn get_registry_preset(id: &str) -> Result<AcpPreset, String> {
         args,
         description: agent.description,
     })
+}
+
+// ─── Utility Functions ─────────────────────────────────────────────────────
+
+/// Truncate content to a maximum length for storage in traces.
+fn truncate_content(text: &str, max_len: usize) -> String {
+    if text.len() <= max_len {
+        text.to_string()
+    } else {
+        format!("{}...", &text[..max_len.saturating_sub(3)])
+    }
 }

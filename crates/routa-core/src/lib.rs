@@ -27,6 +27,7 @@ pub mod skills;
 pub mod state;
 pub mod store;
 pub mod tools;
+pub mod trace;
 
 // Convenience re-exports
 pub use db::Database;
