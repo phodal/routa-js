@@ -25,7 +25,7 @@ pub async fn create(state: &AppState, name: &str) -> Result<(), String> {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "workspaces.create",
-            "params": { "name": name }
+            "params": { "title": name }
         }))
         .await;
     print_json(&response);
