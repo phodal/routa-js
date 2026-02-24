@@ -326,7 +326,9 @@ export default function HomePage() {
     async (provider: string) => {
       await ensureConnected();
       const cwd = repoSelection?.path ?? undefined;
-      const role = selectedAgent !== "CRAFTER" ? selectedAgent : undefined;
+      // Always pass the selected role - don't skip CRAFTER
+      const role = selectedAgent;
+      console.log(`[handleCreateSession] Creating session: provider=${provider}, role=${role}`);
       const result = await acp.createSession(cwd, provider, undefined, role);
       if (result?.sessionId) {
         setActiveSessionId(result.sessionId);
@@ -349,7 +351,9 @@ export default function HomePage() {
   const ensureSessionForChat = useCallback(async (cwd?: string, provider?: string, modeId?: string): Promise<string | null> => {
     await ensureConnected();
     if (activeSessionId) return activeSessionId;
-    const role = selectedAgent !== "CRAFTER" ? selectedAgent : undefined;
+    // Always pass the selected role
+    const role = selectedAgent;
+    console.log(`[ensureSessionForChat] Creating session: provider=${provider ?? acp.selectedProvider}, role=${role}`);
     const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId, role);
     if (result?.sessionId) {
       setActiveSessionId(result.sessionId);
