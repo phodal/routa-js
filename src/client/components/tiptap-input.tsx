@@ -139,6 +139,20 @@ function createSuggestionDropdown(triggerChar?: string) {
     });
   };
 
+  // Click outside handler
+  let clickOutsideHandler: ((e: MouseEvent) => void) | null = null;
+
+  const cleanup = () => {
+    if (clickOutsideHandler) {
+      document.removeEventListener("mousedown", clickOutsideHandler);
+      clickOutsideHandler = null;
+    }
+    if (popup?.parentNode) {
+      popup.parentNode.removeChild(popup);
+    }
+    popup = null;
+  };
+
   return {
     onStart: (props: any) => {
       currentItems = props.items || [];
@@ -176,6 +190,16 @@ function createSuggestionDropdown(triggerChar?: string) {
           popup.style.top = `${rect.bottom + 4}px`;
         }
       }
+
+      // Add click outside listener (with small delay to avoid immediate close)
+      setTimeout(() => {
+        clickOutsideHandler = (e: MouseEvent) => {
+          if (popup && !popup.contains(e.target as Node)) {
+            cleanup();
+          }
+        };
+        document.addEventListener("mousedown", clickOutsideHandler);
+      }, 100);
     },
     onUpdate: (props: any) => {
       currentItems = props.items || [];
@@ -213,8 +237,7 @@ function createSuggestionDropdown(triggerChar?: string) {
       return false;
     },
     onExit: () => {
-      if (popup?.parentNode) popup.parentNode.removeChild(popup);
-      popup = null;
+      cleanup();
     },
   };
 }

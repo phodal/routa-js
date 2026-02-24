@@ -94,7 +94,7 @@ export function SessionPanel({
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium truncate">
                       {s.provider && s.role
-                        ? `${s.provider}-${s.role.toLowerCase()}`
+                        ? `${s.provider}-${s.role.toLowerCase()}-${s.sessionId.slice(0, 6)}`
                         : s.provider
                           ? `${s.provider}-${s.sessionId.slice(0, 7)}`
                           : s.sessionId.slice(0, 8)}
