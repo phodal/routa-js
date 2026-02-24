@@ -256,8 +256,28 @@ async function handleGithubList(request: NextRequest) {
 
 // ── POST ────────────────────────────────────────────────────────────────
 
+/**
+ * Check if we're running in a serverless environment (Vercel, AWS Lambda, etc.)
+ * where filesystem writes are not persistent.
+ */
+function isServerlessEnvironment(): boolean {
+  return !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // On serverless environments (Vercel), skill installation is not supported
+    // because the filesystem is read-only or ephemeral
+    if (isServerlessEnvironment()) {
+      return NextResponse.json(
+        {
+          error: "Skill installation is not supported on serverless deployments (Vercel). Please use a local or self-hosted instance to install skills.",
+          serverless: true,
+        },
+        { status: 501 } // 501 Not Implemented
+      );
+    }
+
     const body = await request.json();
     const catalogType = body.type || "skillssh";
 
