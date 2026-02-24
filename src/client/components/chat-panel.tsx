@@ -280,6 +280,8 @@ export function ChatPanel({
       setVisibleMessages([]);
       return;
     }
+    // Clear processed message IDs when switching sessions
+    processedMessageIdsRef.current.clear();
     // Load history if not yet loaded
     fetchSessionHistory(activeSessionId);
     setVisibleMessages(messagesBySession[activeSessionId] ?? []);
@@ -641,8 +643,69 @@ export function ChatPanel({
     if (Object.keys(modeUpdates).length > 0) {
       setSessionModeById((prev) => ({ ...prev, ...modeUpdates }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updates]);
+
+  // ── Extract tasks from messages after SSE updates ────────────────────
+  // Track which messages have been checked for tasks to avoid re-processing
+  const processedMessageIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!onTasksDetected || !activeSessionId) return;
+
+    const messages = messagesBySession[activeSessionId];
+    if (!messages || messages.length === 0) return;
+
+    // Check if any NEW assistant message contains task blocks
+    let detectedTasks: ParsedTask[] = [];
+    let hasNewTasksToExtract = false;
+
+    for (const msg of messages) {
+      if (msg.role === "assistant" &&
+          !processedMessageIdsRef.current.has(msg.id) &&
+          hasTaskBlocks(msg.content)) {
+        hasNewTasksToExtract = true;
+        break;
+      }
+    }
+
+    if (!hasNewTasksToExtract) return;
+
+    // Extract tasks and clean message content
+    setMessagesBySession((prev) => {
+      const msgs = prev[activeSessionId];
+      if (!msgs) return prev;
+
+      const arr = [...msgs];
+      let tasksFound = false;
+
+      for (let i = 0; i < arr.length; i++) {
+        const msg = arr[i];
+        if (msg.role === "assistant" &&
+            !processedMessageIdsRef.current.has(msg.id) &&
+            hasTaskBlocks(msg.content)) {
+          const { tasks, cleanedContent } = extractTaskBlocks(msg.content);
+          if (tasks.length > 0) {
+            // Replace the message content with cleaned version (tasks removed)
+            arr[i] = { ...msg, content: cleanedContent };
+            detectedTasks = tasks;
+            tasksFound = true;
+            // Mark this message as processed
+            processedMessageIdsRef.current.add(msg.id);
+          }
+        }
+      }
+
+      if (tasksFound) {
+        return { ...prev, [activeSessionId]: arr };
+      }
+      return prev;
+    });
+
+    // Notify parent about detected tasks
+    if (detectedTasks.length > 0) {
+      onTasksDetected(detectedTasks);
+    }
+  }, [messagesBySession, activeSessionId, onTasksDetected]);
 
   // ── Actions ──────────────────────────────────────────────────────────
 
@@ -711,42 +774,8 @@ export function ChatPanel({
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
 
-    // After prompt completes, check assistant messages for @@@task blocks
-    if (onTasksDetected) {
-      let detectedTasks: ParsedTask[] = [];
-
-      setMessagesBySession((prev) => {
-        const msgs = prev[sid];
-        if (!msgs) return prev;
-
-        const arr = [...msgs];
-        let tasksFound = false;
-
-        for (let i = 0; i < arr.length; i++) {
-          const msg = arr[i];
-          if (msg.role === "assistant" && hasTaskBlocks(msg.content)) {
-            const { tasks, cleanedContent } = extractTaskBlocks(msg.content);
-            if (tasks.length > 0) {
-              // Replace the message content with cleaned version (tasks removed)
-              arr[i] = { ...msg, content: cleanedContent };
-              detectedTasks = tasks;
-              tasksFound = true;
-            }
-          }
-        }
-
-        if (tasksFound) {
-          return { ...prev, [sid]: arr };
-        }
-        return prev;
-      });
-
-      // Call onTasksDetected outside the state updater to avoid setState-during-render
-      if (detectedTasks.length > 0) {
-        onTasksDetected(detectedTasks);
-      }
-    }
-  }, [activeSessionId, onEnsureSession, onSelectSession, prompt, repoSelection, onLoadSkill, acp, onTasksDetected]);
+    // Task extraction is now handled by the useEffect that watches messagesBySession
+  }, [activeSessionId, onEnsureSession, onSelectSession, prompt, repoSelection, onLoadSkill, acp]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
