@@ -2,7 +2,8 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Routa Desktop",
-  "windows": ["main"],
+  "windows": ["*"],
+  "webviews": ["*"],
   "permissions": [
     "core:default",
     "core:window:default",
