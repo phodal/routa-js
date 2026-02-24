@@ -433,7 +433,9 @@ async function handleSkillsShInstall(body: {
       const repoRoot = path.join(tmpDir, topDirs[0].name);
 
       // Search for each skill in common skill directories
+      // Note: "." is for repos where skills are at root level (e.g., mindrally/skills)
       const searchDirs = [
+        ".",
         "skills",
         ".agents/skills",
         ".opencode/skills",
@@ -743,7 +745,8 @@ async function handleSkillsShInstallToDb(body: {
       }
 
       const repoRoot = path.join(tmpDir, topDirs[0].name);
-      const searchDirs = ["skills", ".agents/skills", ".opencode/skills", ".claude/skills", ".codex/skills"];
+      // Note: "." is for repos where skills are at root level (e.g., mindrally/skills)
+      const searchDirs = [".", "skills", ".agents/skills", ".opencode/skills", ".claude/skills", ".codex/skills"];
 
       for (const skillName of skillNames) {
         // Check if already installed
