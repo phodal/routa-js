@@ -280,6 +280,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // ── Store user message in history before sending ────────────────
+      const store = getHttpSessionStore();
+      store.pushUserMessage(sessionId, promptText);
+
       // ── Claude Code session ─────────────────────────────────────────
       if (manager.isClaudeSession(sessionId)) {
         const claudeProc = manager.getClaudeProcess(sessionId);

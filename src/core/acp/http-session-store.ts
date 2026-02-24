@@ -6,6 +6,8 @@
  *
  * - Buffers notifications until SSE connects (avoids losing early updates)
  * - Supports multiple concurrent sessions with independent SSE streams
+ * - Stores user messages for history preservation
+ * - Consolidates consecutive agent_message_chunk notifications for efficient storage
  */
 
 export interface RoutaSessionRecord {
@@ -25,10 +27,65 @@ export interface RoutaSessionRecord {
 
 type Controller = ReadableStreamDefaultController<Uint8Array>;
 
-interface SessionUpdateNotification {
+export interface SessionUpdateNotification {
   sessionId: string;
   update?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+/**
+ * Consolidates consecutive agent_message_chunk notifications into a single message.
+ * This reduces storage overhead from hundreds of small chunks to a single entry.
+ */
+export function consolidateMessageHistory(
+  notifications: SessionUpdateNotification[]
+): SessionUpdateNotification[] {
+  if (notifications.length === 0) return [];
+
+  const result: SessionUpdateNotification[] = [];
+  let currentChunks: string[] = [];
+  let currentSessionId: string | null = null;
+
+  const flushChunks = () => {
+    if (currentChunks.length > 0 && currentSessionId) {
+      // Create a consolidated agent_message notification
+      result.push({
+        sessionId: currentSessionId,
+        update: {
+          sessionUpdate: "agent_message",
+          content: { type: "text", text: currentChunks.join("") },
+        },
+      });
+      currentChunks = [];
+    }
+  };
+
+  for (const notification of notifications) {
+    const update = notification.update as Record<string, unknown> | undefined;
+    const sessionUpdate = update?.sessionUpdate;
+
+    if (sessionUpdate === "agent_message_chunk") {
+      // Accumulate chunks
+      const content = update?.content as { type?: string; text?: string } | undefined;
+      if (content?.text) {
+        if (currentSessionId !== notification.sessionId) {
+          flushChunks();
+          currentSessionId = notification.sessionId;
+        }
+        currentChunks.push(content.text);
+      }
+    } else {
+      // Non-chunk notification - flush any pending chunks first
+      flushChunks();
+      currentSessionId = notification.sessionId;
+      result.push(notification);
+    }
+  }
+
+  // Flush any remaining chunks
+  flushChunks();
+
+  return result;
 }
 
 class HttpSessionStore {
@@ -96,6 +153,23 @@ class HttpSessionStore {
   }
 
   /**
+   * Store a user message in history. This is called when user sends a prompt.
+   * User messages are stored with sessionUpdate: "user_message" for easy identification.
+   */
+  pushUserMessage(sessionId: string, prompt: string) {
+    const notification: SessionUpdateNotification = {
+      sessionId,
+      update: {
+        sessionUpdate: "user_message",
+        content: { type: "text", text: prompt },
+      },
+    };
+    const history = this.messageHistory.get(sessionId) ?? [];
+    history.push(notification);
+    this.messageHistory.set(sessionId, history);
+  }
+
+  /**
    * Push a session/update notification. If SSE isn't connected yet, buffer it.
    *
    * Accepts the raw notification params from opencode (which may have different shapes).
@@ -126,9 +200,19 @@ class HttpSessionStore {
 
   /**
    * Get message history for a session (used when switching sessions).
+   * Returns raw history without consolidation (for streaming playback).
    */
   getHistory(sessionId: string): SessionUpdateNotification[] {
     return this.messageHistory.get(sessionId) ?? [];
+  }
+
+  /**
+   * Get consolidated message history for storage.
+   * Merges consecutive agent_message_chunk notifications into single messages.
+   */
+  getConsolidatedHistory(sessionId: string): SessionUpdateNotification[] {
+    const history = this.messageHistory.get(sessionId) ?? [];
+    return consolidateMessageHistory(history);
   }
 
   /**
