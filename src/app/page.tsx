@@ -860,34 +860,16 @@ export default function HomePage() {
               <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-indigo-400 group-active:bg-indigo-500 transition-colors" />
             </div>
 
-            {/* Panel Mode Toggle */}
-            {hasCollabNotes && (
-              <div className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 flex items-center gap-1">
-                <button
-                  onClick={() => setTaskPanelMode("tasks")}
-                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
-                    taskPanelMode === "tasks"
-                      ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  Tasks
-                </button>
-                <button
-                  onClick={() => setTaskPanelMode("collab")}
-                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors flex items-center gap-1 ${
-                    taskPanelMode === "collab"
-                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${notesHook.connected ? "bg-green-500" : "bg-gray-400"}`} />
-                  Collab Edit
-                </button>
-              </div>
-            )}
-
-            {taskPanelMode === "tasks" ? (
+            {/* When collaborative notes exist, show Collab Edit directly; otherwise show TaskPanel */}
+            {hasCollabNotes ? (
+              <CollaborativeTaskEditor
+                notes={notesHook.notes}
+                connected={notesHook.connected}
+                onUpdateNote={notesHook.updateNote}
+                onDeleteNote={notesHook.deleteNote}
+                workspaceId="default"
+              />
+            ) : (
               <TaskPanel
                 tasks={routaTasks}
                 onConfirmAll={handleConfirmAllTasks}
@@ -900,14 +882,6 @@ export default function HomePage() {
                 onSelectCrafter={handleSelectCrafter}
                 concurrency={concurrency}
                 onConcurrencyChange={handleConcurrencyChange}
-              />
-            ) : (
-              <CollaborativeTaskEditor
-                notes={notesHook.notes}
-                connected={notesHook.connected}
-                onUpdateNote={notesHook.updateNote}
-                onDeleteNote={notesHook.deleteNote}
-                workspaceId="default"
               />
             )}
           </aside>

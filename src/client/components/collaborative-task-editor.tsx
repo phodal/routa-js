@@ -40,6 +40,7 @@ export function CollaborativeTaskEditor({
 }: CollaborativeTaskEditorProps) {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+  const [specExpanded, setSpecExpanded] = useState(false);
 
   // Filter task notes and spec note
   const taskNotes = useMemo(
@@ -106,10 +107,13 @@ export function CollaborativeTaskEditor({
         </div>
       </div>
 
-      {/* Spec Note (if exists) */}
+      {/* Spec Note (if exists) - collapsible */}
       {specNote && specNote.content && (
-        <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 bg-blue-50/50 dark:bg-blue-900/10">
-          <div className="flex items-center gap-1.5 mb-1">
+        <div className="border-b border-gray-100 dark:border-gray-800 bg-blue-50/50 dark:bg-blue-900/10">
+          <div
+            className="flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-blue-100/50 dark:hover:bg-blue-900/20 transition-colors"
+            onClick={() => setSpecExpanded((prev) => !prev)}
+          >
             <svg
               className="w-3 h-3 text-blue-500"
               fill="none"
@@ -123,16 +127,36 @@ export function CollaborativeTaskEditor({
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex-1">
               Spec
             </span>
+            <svg
+              className={`w-3.5 h-3.5 text-blue-400 transition-transform ${specExpanded ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
           </div>
-          <div className="text-[11px] text-gray-600 dark:text-gray-400 line-clamp-3">
-            <MarkdownViewer
-              content={specNote.content.slice(0, 300)}
-              className="text-[11px]"
-            />
-          </div>
+          {specExpanded ? (
+            <div className="px-3 pb-3 max-h-[50vh] overflow-y-auto">
+              <MarkdownViewer
+                content={specNote.content}
+                className="text-[11px] text-gray-600 dark:text-gray-400"
+              />
+            </div>
+          ) : (
+            <div className="px-3 pb-2">
+              <div className="text-[11px] text-gray-600 dark:text-gray-400 line-clamp-2">
+                <MarkdownViewer
+                  content={specNote.content.slice(0, 200) + (specNote.content.length > 200 ? "..." : "")}
+                  className="text-[11px]"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -221,6 +245,126 @@ const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }
     bg: "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800",
   },
 };
+
+// ─── Parse task content into structured sections ────────────────────────────
+interface ParsedTaskSections {
+  objective?: string;
+  scope?: string;
+  inputs?: string;
+  outputs?: string;
+  definitionOfDone?: string;
+  remainingContent?: string;
+}
+
+const SECTION_NAMES = ["Objective", "Scope", "Inputs", "Outputs", "Definition of Done", "Acceptance Criteria"];
+
+function parseTaskContent(content: string): ParsedTaskSections {
+  const sections: ParsedTaskSections = {};
+  let remaining = content;
+
+  // Map section names to their normalized keys
+  const sectionKeyMap: Record<string, keyof ParsedTaskSections> = {
+    "objective": "objective",
+    "scope": "scope",
+    "inputs": "inputs",
+    "outputs": "outputs",
+    "definitionofdone": "definitionOfDone",
+    "acceptancecriteria": "definitionOfDone",
+  };
+
+  for (const name of SECTION_NAMES) {
+    const pattern = new RegExp(
+      `(?:^|\\n)(?:#+\\s*)?(?:\\*\\*)?${name}(?:\\*\\*)?[:\\s]*\\n([\\s\\S]*?)(?=(?:\\n(?:#+\\s*)?(?:\\*\\*)?(?:${SECTION_NAMES.join("|")})(?:\\*\\*)?[:\\s]*\\n)|$)`,
+      "i"
+    );
+    const match = content.match(pattern);
+    if (match) {
+      const rawKey = name.toLowerCase().replace(/\s+/g, "");
+      const normalizedKey = sectionKeyMap[rawKey];
+      if (normalizedKey) {
+        sections[normalizedKey] = match[1].trim();
+        remaining = remaining.replace(match[0], "");
+      }
+    }
+  }
+
+  // Get remaining content that's not in any section
+  remaining = remaining.trim();
+  if (remaining && !sections.objective) {
+    // If no objective found, treat remaining as objective
+    sections.objective = remaining;
+  } else if (remaining) {
+    sections.remainingContent = remaining;
+  }
+
+  return sections;
+}
+
+// ─── Section Component for task content ─────────────────────────────────────
+function TaskSection({ title, content }: { title: string; content: string }) {
+  return (
+    <div className="mb-2.5 last:mb-0">
+      <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+        <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500" />
+        {title}
+      </div>
+      <div className="text-xs text-gray-600 dark:text-gray-300 pl-2.5 border-l border-gray-200 dark:border-gray-700">
+        <MarkdownViewer content={content} className="text-xs" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Task Content Renderer ──────────────────────────────────────────────────
+function TaskContentRenderer({ content }: { content: string }) {
+  if (!content) {
+    return (
+      <div className="text-xs text-gray-400 dark:text-gray-500 italic">
+        No content
+      </div>
+    );
+  }
+
+  const sections = parseTaskContent(content);
+  const hasSections = sections.objective || sections.scope || sections.inputs ||
+                      sections.outputs || sections.definitionOfDone;
+
+  if (!hasSections) {
+    // No structured sections found, render as plain markdown
+    return (
+      <div className="text-xs text-gray-600 dark:text-gray-300">
+        <MarkdownViewer content={content} className="text-xs" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0">
+      {sections.objective && (
+        <TaskSection title="Objective" content={sections.objective} />
+      )}
+      {sections.scope && (
+        <TaskSection title="Scope" content={sections.scope} />
+      )}
+      {sections.inputs && (
+        <TaskSection title="Inputs" content={sections.inputs} />
+      )}
+      {sections.outputs && (
+        <TaskSection title="Outputs" content={sections.outputs} />
+      )}
+      {sections.definitionOfDone && (
+        <TaskSection title="Definition of Done" content={sections.definitionOfDone} />
+      )}
+      {sections.remainingContent && (
+        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50">
+          <div className="text-xs text-gray-600 dark:text-gray-300">
+            <MarkdownViewer content={sections.remainingContent} className="text-xs" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TaskNoteCard({
   note,
@@ -357,11 +501,8 @@ function TaskNoteCard({
             />
           ) : (
             <>
-              <div className="mt-2.5 text-xs">
-                <MarkdownViewer
-                  content={note.content || "*No content*"}
-                  className="text-gray-600 dark:text-gray-300"
-                />
+              <div className="mt-2.5 space-y-2">
+                <TaskContentRenderer content={note.content || ""} />
               </div>
 
               {/* Actions */}
