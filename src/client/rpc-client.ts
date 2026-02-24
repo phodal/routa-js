@@ -68,11 +68,19 @@ function nextId(): number {
 
 async function tauriInvoke(request: JsonRpcRequest): Promise<JsonRpcResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const invoke = (window as any).__TAURI__?.core?.invoke;
-  if (!invoke) {
-    throw new Error("Tauri invoke not available");
+  const win = window as any;
+
+  // Try __TAURI_INTERNALS__ first (Tauri v2 internal API)
+  if (win.__TAURI_INTERNALS__?.invoke) {
+    return win.__TAURI_INTERNALS__.invoke("rpc_call", { request }) as Promise<JsonRpcResponse>;
   }
-  return invoke("rpc_call", { request }) as Promise<JsonRpcResponse>;
+
+  // Fallback to __TAURI__.core.invoke (older style)
+  if (win.__TAURI__?.core?.invoke) {
+    return win.__TAURI__.core.invoke("rpc_call", { request }) as Promise<JsonRpcResponse>;
+  }
+
+  throw new Error("Tauri invoke not available");
 }
 
 async function httpPost(

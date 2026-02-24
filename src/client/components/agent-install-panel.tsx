@@ -99,17 +99,26 @@ interface TauriInstalledAgentInfo {
 // ─── Tauri Invoke Helper ───────────────────────────────────────────────────
 
 /**
- * Dynamically invoke a Tauri command using the global __TAURI__ object.
+ * Dynamically invoke a Tauri command using the global __TAURI_INTERNALS__ object.
  * This avoids bundling @tauri-apps/api/core in web builds.
- * Uses the Window.__TAURI__ type from diagnostics.ts.
+ *
+ * In Tauri v2, the invoke function is exposed via __TAURI_INTERNALS__.invoke
  */
 async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const invoke = (window as any).__TAURI__?.core?.invoke;
-  if (!invoke) {
-    throw new Error("Tauri invoke not available - not running in Tauri environment");
+  const win = window as any;
+
+  // Try __TAURI_INTERNALS__ first (Tauri v2 internal API)
+  if (win.__TAURI_INTERNALS__?.invoke) {
+    return win.__TAURI_INTERNALS__.invoke(command, args) as Promise<T>;
   }
-  return invoke(command, args) as Promise<T>;
+
+  // Fallback to __TAURI__.core.invoke (older style)
+  if (win.__TAURI__?.core?.invoke) {
+    return win.__TAURI__.core.invoke(command, args) as Promise<T>;
+  }
+
+  throw new Error("Tauri invoke not available - not running in Tauri environment");
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────
