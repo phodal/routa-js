@@ -5,6 +5,7 @@ use crate::db::Database;
 use crate::error::ServerError;
 use crate::models::task::{Task, TaskStatus, VerificationVerdict};
 
+#[derive(Clone)]
 pub struct TaskStore {
     db: Database,
 }

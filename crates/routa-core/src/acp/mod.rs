@@ -8,14 +8,20 @@
 //!   - `session/prompt` → reuses the live process, sends `session/prompt`
 //!   - `session/cancel` → sends cancellation notification
 //!   - SSE GET          → subscribes to `broadcast` channel for `session/update` events
+//!
+//! **Claude Code** uses a different protocol (stream-json) instead of ACP.
+//! The `ClaudeCodeProcess` translates Claude's output into ACP-compatible
+//! `session/update` notifications for frontend compatibility.
 
 pub mod binary_manager;
+pub mod claude_code_process;
 pub mod installation_state;
 pub mod paths;
 pub mod process;
 pub mod registry_types;
 
 pub use binary_manager::AcpBinaryManager;
+pub use claude_code_process::{ClaudeCodeConfig, ClaudeCodeProcess};
 pub use installation_state::AcpInstallationState;
 pub use paths::AcpPaths;
 pub use registry_types::*;
@@ -45,10 +51,18 @@ pub struct AcpSessionRecord {
 
 // ─── Managed Process ────────────────────────────────────────────────────
 
-/// A managed ACP agent process with its metadata.
+/// Process type enum to support both ACP and Claude stream-json protocols.
+enum AgentProcessType {
+    /// Standard ACP protocol (opencode, gemini, copilot, etc.)
+    Acp(Arc<AcpProcess>),
+    /// Claude Code stream-json protocol
+    Claude(Arc<ClaudeCodeProcess>),
+}
+
+/// A managed agent process with its metadata.
 struct ManagedProcess {
-    process: Arc<AcpProcess>,
-    /// The agent's own session ID (returned by `session/new`).
+    process: AgentProcessType,
+    /// The agent's own session ID (returned by `session/new` or claude's session_id).
     acp_session_id: String,
     preset_id: String,
     #[allow(dead_code)]
@@ -61,6 +75,7 @@ struct ManagedProcess {
 ///
 /// Each session maps to a long-lived child process that communicates via
 /// stdio JSON-RPC. Notifications are forwarded to subscribers via broadcast.
+#[derive(Clone)]
 pub struct AcpManager {
     /// Our sessionId → session record (for UI listing)
     sessions: Arc<RwLock<HashMap<String, AcpSessionRecord>>>,
@@ -93,6 +108,7 @@ impl AcpManager {
 
     /// Create a new ACP session: spawn agent process, initialize, create session.
     /// Supports both static presets and registry-based agents.
+    /// **Claude** uses stream-json protocol instead of ACP.
     ///
     /// Returns `(our_session_id, agent_session_id)`.
     pub async fn create_session(
@@ -104,29 +120,53 @@ impl AcpManager {
         role: Option<String>,
     ) -> Result<(String, String), String> {
         let provider_name = provider.as_deref().unwrap_or("opencode");
-        let preset = get_preset_by_id_with_registry(provider_name).await?;
 
         // Create the notification broadcast channel for this session
         let (ntx, _) = broadcast::channel::<serde_json::Value>(256);
 
-        // Spawn the agent process
-        let process = AcpProcess::spawn(
-            &preset.command,
-            &preset.args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-            &cwd,
-            ntx.clone(),
-            &preset.name,
-            &session_id,
-        )
-        .await?;
+        // Check if this is Claude (uses stream-json protocol, not ACP)
+        let (process_type, acp_session_id) = if provider_name == "claude" {
+            // Use Claude Code stream-json protocol
+            let config = ClaudeCodeConfig {
+                command: "claude".to_string(),
+                cwd: cwd.clone(),
+                display_name: format!("Claude-{}", &session_id[..8.min(session_id.len())]),
+                permission_mode: Some("bypassPermissions".to_string()),
+                mcp_configs: Vec::new(),
+            };
 
-        // Initialize the protocol
-        process.initialize().await?;
+            let claude_process = ClaudeCodeProcess::spawn(config, ntx.clone()).await?;
+            let claude_session_id = claude_process
+                .session_id()
+                .await
+                .unwrap_or_else(|| format!("claude-{}", &session_id[..8.min(session_id.len())]));
 
-        // Create the agent session
-        let acp_session_id = process.new_session(&cwd).await?;
+            (
+                AgentProcessType::Claude(Arc::new(claude_process)),
+                claude_session_id,
+            )
+        } else {
+            // Use standard ACP protocol
+            let preset = get_preset_by_id_with_registry(provider_name).await?;
 
-        let process = Arc::new(process);
+            let process = AcpProcess::spawn(
+                &preset.command,
+                &preset.args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                &cwd,
+                ntx.clone(),
+                &preset.name,
+                &session_id,
+            )
+            .await?;
+
+            // Initialize the protocol
+            process.initialize().await?;
+
+            // Create the agent session
+            let agent_session_id = process.new_session(&cwd).await?;
+
+            (AgentProcessType::Acp(Arc::new(process)), agent_session_id)
+        };
 
         // Store everything
         let record = AcpSessionRecord {
@@ -147,7 +187,7 @@ impl AcpManager {
         self.processes.write().await.insert(
             session_id.clone(),
             ManagedProcess {
-                process,
+                process: process_type,
                 acp_session_id: acp_session_id.clone(),
                 preset_id: provider_name.to_string(),
                 created_at: chrono::Utc::now().to_rfc3339(),
@@ -180,24 +220,35 @@ impl AcpManager {
             .get(session_id)
             .ok_or_else(|| format!("No agent process for session: {}", session_id))?;
 
-        if !managed.process.is_alive() {
+        let is_alive = match &managed.process {
+            AgentProcessType::Acp(p) => p.is_alive(),
+            AgentProcessType::Claude(p) => p.is_alive(),
+        };
+
+        if !is_alive {
             return Err(format!(
-                "ACP agent ({}) process is not running",
+                "Agent ({}) process is not running",
                 managed.preset_id
             ));
         }
 
-        managed
-            .process
-            .prompt(&managed.acp_session_id, text)
-            .await
+        match &managed.process {
+            AgentProcessType::Acp(p) => p.prompt(&managed.acp_session_id, text).await,
+            AgentProcessType::Claude(p) => {
+                let stop_reason = p.prompt(text).await?;
+                Ok(serde_json::json!({ "stopReason": stop_reason }))
+            }
+        }
     }
 
     /// Cancel the current prompt in a session.
     pub async fn cancel(&self, session_id: &str) {
         let processes = self.processes.read().await;
         if let Some(managed) = processes.get(session_id) {
-            managed.process.cancel(&managed.acp_session_id).await;
+            match &managed.process {
+                AgentProcessType::Acp(p) => p.cancel(&managed.acp_session_id).await,
+                AgentProcessType::Claude(p) => p.cancel().await,
+            }
         }
     }
 
@@ -205,7 +256,10 @@ impl AcpManager {
     pub async fn kill_session(&self, session_id: &str) {
         // Kill the process
         if let Some(managed) = self.processes.write().await.remove(session_id) {
-            managed.process.kill().await;
+            match &managed.process {
+                AgentProcessType::Acp(p) => p.kill().await,
+                AgentProcessType::Claude(p) => p.kill().await,
+            }
         }
         // Remove session record
         self.sessions.write().await.remove(session_id);
@@ -228,7 +282,10 @@ impl AcpManager {
         let processes = self.processes.read().await;
         processes
             .get(session_id)
-            .map(|m| m.process.is_alive())
+            .map(|m| match &m.process {
+                AgentProcessType::Acp(p) => p.is_alive(),
+                AgentProcessType::Claude(p) => p.is_alive(),
+            })
             .unwrap_or(false)
     }
 
