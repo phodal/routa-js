@@ -13,15 +13,39 @@ import { WorkspaceTools } from "../tools/workspace-tools";
 import { ToolResult } from "../tools/tool-result";
 import type { RoutaOrchestrator } from "../orchestration/orchestrator";
 
+/**
+ * Tool registration mode for MCP server.
+ * - "essential": Only 7 core Agent coordination tools (best for weak models)
+ * - "full": All 34 tools (Task, Agent, Note, Workspace, Git)
+ */
+export type ToolMode = "essential" | "full";
+
 export class RoutaMcpToolManager {
   private orchestrator?: RoutaOrchestrator;
   private noteTools?: NoteTools;
   private workspaceTools?: WorkspaceTools;
+  private toolMode: ToolMode = "essential";
 
   constructor(
     private tools: AgentTools,
     private workspaceId: string
   ) {}
+
+  /**
+   * Set the tool registration mode.
+   * - "essential": Only 7 core Agent coordination tools
+   * - "full": All tools
+   */
+  setToolMode(mode: ToolMode): void {
+    this.toolMode = mode;
+  }
+
+  /**
+   * Get the current tool mode.
+   */
+  getToolMode(): ToolMode {
+    return this.toolMode;
+  }
 
   /**
    * Set the orchestrator for process-spawning delegation.
@@ -45,13 +69,31 @@ export class RoutaMcpToolManager {
   }
 
   /**
-   * Register all coordination tools with the MCP server.
+   * Register coordination tools with the MCP server.
+   * In "essential" mode, only 7 core Agent tools are registered.
+   * In "full" mode, all 34 tools are registered.
    */
   registerTools(server: McpServer): void {
+    if (this.toolMode === "essential") {
+      // Essential mode: Only 7 core Agent coordination tools
+      // Best for weak models that struggle with too many tool choices
+      this.registerListAgents(server);
+      this.registerReadAgentConversation(server);
+      this.registerCreateAgent(server);
+      this.registerDelegateTask(server);
+      this.registerDelegateTaskToNewAgent(server);
+      this.registerSendMessageToAgent(server);
+      this.registerReportToParent(server);
+      return;
+    }
+
+    // Full mode: All tools
+    // Task tools
     this.registerCreateTask(server);
     this.registerListTasks(server);
     this.registerUpdateTaskStatus(server);
     this.registerUpdateTask(server);
+    // Agent tools
     this.registerListAgents(server);
     this.registerReadAgentConversation(server);
     this.registerCreateAgent(server);

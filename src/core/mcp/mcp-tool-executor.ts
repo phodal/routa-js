@@ -9,8 +9,23 @@ import { AgentTools } from "@/core/tools/agent-tools";
 import { NoteTools } from "@/core/tools/note-tools";
 import { WorkspaceTools } from "@/core/tools/workspace-tools";
 import { getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
+import { ToolMode } from "./routa-mcp-tool-manager";
 
 const DEFAULT_WORKSPACE_ID = "default";
+
+/**
+ * Essential tools for weak models - minimum viable coordination.
+ * Only 7 tools needed for basic multi-agent coordination.
+ */
+const ESSENTIAL_TOOL_NAMES = new Set([
+  "list_agents",
+  "read_agent_conversation",
+  "create_agent",
+  "delegate_task",
+  "delegate_task_to_agent",
+  "send_message_to_agent",
+  "report_to_parent",
+]);
 
 export async function executeMcpTool(
   tools: AgentTools,
@@ -307,8 +322,12 @@ function formatResult(result: { success: boolean; data?: unknown; error?: string
   };
 }
 
-export function getMcpToolDefinitions() {
-  return [
+/**
+ * Get MCP tool definitions, optionally filtered by tool mode.
+ * @param toolMode - "essential" for 7 core tools, "full" for all tools (default: "essential")
+ */
+export function getMcpToolDefinitions(toolMode: ToolMode = "essential") {
+  const allTools = [
     // ── Task tools ──────────────────────────────────────────────────
     {
       name: "create_task",
@@ -740,4 +759,10 @@ export function getMcpToolDefinitions() {
       },
     },
   ];
+
+  // Filter tools based on mode
+  if (toolMode === "essential") {
+    return allTools.filter((tool) => ESSENTIAL_TOOL_NAMES.has(tool.name));
+  }
+  return allTools;
 }

@@ -6,31 +6,51 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { RoutaMcpToolManager } from "./routa-mcp-tool-manager";
+import { RoutaMcpToolManager, ToolMode } from "./routa-mcp-tool-manager";
 import { RoutaSystem, getRoutaSystem } from "../routa-system";
 import { getRoutaOrchestrator } from "../orchestration/orchestrator-singleton";
 
 export interface RoutaMcpServerResult {
   server: McpServer;
   system: RoutaSystem;
+  toolManager: RoutaMcpToolManager;
+}
+
+export interface CreateMcpServerOptions {
+  /** Workspace ID */
+  workspaceId: string;
+  /** Tool mode: "essential" (7 tools) or "full" (all tools). Default: "essential" */
+  toolMode?: ToolMode;
+  /** Optional existing RoutaSystem instance */
+  system?: RoutaSystem;
 }
 
 /**
- * Create a configured MCP server with all Routa coordination tools.
+ * Create a configured MCP server with Routa coordination tools.
  * If an orchestrator is available, it will be wired in for process-spawning delegation.
+ *
+ * @param options.toolMode - "essential" for 7 core tools (weak models), "full" for all 34 tools
  */
 export function createRoutaMcpServer(
-  workspaceId: string,
+  workspaceIdOrOptions: string | CreateMcpServerOptions,
   system?: RoutaSystem
 ): RoutaMcpServerResult {
-  const routaSystem = system ?? getRoutaSystem();
+  // Support both old signature (workspaceId, system?) and new (options)
+  const opts: CreateMcpServerOptions =
+    typeof workspaceIdOrOptions === "string"
+      ? { workspaceId: workspaceIdOrOptions, system, toolMode: "essential" }
+      : workspaceIdOrOptions;
+
+  const routaSystem = opts.system ?? getRoutaSystem();
+  const toolMode = opts.toolMode ?? "essential";
 
   const server = new McpServer({
     name: "routa-mcp",
     version: "0.1.0",
   });
 
-  const toolManager = new RoutaMcpToolManager(routaSystem.tools, workspaceId);
+  const toolManager = new RoutaMcpToolManager(routaSystem.tools, opts.workspaceId);
+  toolManager.setToolMode(toolMode);
 
   // Wire in orchestrator if available
   const orchestrator = getRoutaOrchestrator();
@@ -44,5 +64,5 @@ export function createRoutaMcpServer(
 
   toolManager.registerTools(server);
 
-  return { server, system: routaSystem };
+  return { server, system: routaSystem, toolManager };
 }
