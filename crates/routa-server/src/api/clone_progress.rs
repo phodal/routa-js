@@ -20,6 +20,77 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/", post(clone_with_progress))
 }
 
+/// Parse git error output and return a user-friendly message
+fn parse_git_error(stderr: &str, exit_code: Option<i32>) -> String {
+    let stderr_lower = stderr.to_lowercase();
+
+    // Auth errors
+    if stderr_lower.contains("authentication failed")
+        || stderr_lower.contains("could not read username")
+        || stderr_lower.contains("could not read password")
+        || stderr_lower.contains("terminal prompts disabled")
+    {
+        return "Git credentials not configured. Set up a credential manager or use SSH.".to_string();
+    }
+
+    // SSH auth errors
+    if stderr_lower.contains("permission denied (publickey)")
+        || stderr_lower.contains("host key verification failed")
+    {
+        return "SSH key not configured. Set up SSH keys or switch to HTTPS.".to_string();
+    }
+
+    // Repository not found (exit code 128 often means this)
+    if stderr_lower.contains("repository") && stderr_lower.contains("not found") {
+        return "Repository not found or you don't have access.".to_string();
+    }
+
+    // HTTP errors
+    if stderr_lower.contains("the requested url returned error: 401")
+        || stderr_lower.contains("the requested url returned error: 403")
+    {
+        return "Access denied. Check your credentials or repository permissions.".to_string();
+    }
+
+    if stderr_lower.contains("the requested url returned error: 404") {
+        return "Repository not found. Check the URL and your access permissions.".to_string();
+    }
+
+    // Network errors
+    if stderr_lower.contains("could not resolve host")
+        || stderr_lower.contains("network is unreachable")
+        || stderr_lower.contains("connection refused")
+    {
+        return "Network error. Check your internet connection.".to_string();
+    }
+
+    // SSL/TLS errors
+    if stderr_lower.contains("ssl certificate problem") {
+        return "SSL certificate error. Check your network or proxy settings.".to_string();
+    }
+
+    // Rate limiting
+    if stderr_lower.contains("rate limit") {
+        return "API rate limit exceeded. Please try again later.".to_string();
+    }
+
+    // If we have stderr content, extract the "fatal:" line
+    if let Some(fatal_line) = stderr.lines().find(|l| l.starts_with("fatal:")) {
+        return fatal_line.trim_start_matches("fatal:").trim().to_string();
+    }
+
+    // Fallback: include stderr content if available
+    if !stderr.trim().is_empty() {
+        let first_line = stderr.lines().next().unwrap_or("").trim();
+        if !first_line.is_empty() {
+            return format!("Clone failed: {}", first_line);
+        }
+    }
+
+    // Last resort: just show the exit code
+    format!("Clone failed with exit code {}", exit_code.unwrap_or(-1))
+}
+
 #[derive(Debug, Deserialize)]
 struct CloneProgressRequest {
     url: Option<String>,
@@ -93,12 +164,19 @@ async fn clone_with_progress(
             }
         };
 
+        // Collect stderr output for error reporting
+        let mut stderr_buf = String::new();
+
         // git clone writes progress to stderr
         if let Some(stderr) = child.stderr.take() {
             let reader = tokio::io::BufReader::new(stderr);
             let mut lines = tokio::io::AsyncBufReadExt::lines(reader);
 
             while let Ok(Some(text)) = lines.next_line().await {
+                // Accumulate all stderr for error reporting
+                stderr_buf.push_str(&text);
+                stderr_buf.push('\n');
+
                 let phase_re = regex::Regex::new(
                     r"(Counting objects|Compressing objects|Receiving objects|Resolving deltas):\s+(\d+)%",
                 );
@@ -153,11 +231,13 @@ async fn clone_with_progress(
                     .await;
             }
             Ok(s) => {
+                // Parse error message from stderr
+                let error_msg = parse_git_error(&stderr_buf, s.code());
                 let _ = tx
                     .send(Ok(Event::default().data(
                         serde_json::json!({
                             "phase": "error",
-                            "error": format!("Clone exited with code {:?}", s.code()),
+                            "error": error_msg,
                         })
                         .to_string(),
                     )))

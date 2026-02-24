@@ -75,7 +75,7 @@ async fn clone_repo(Json(body): Json<CloneRequest>) -> Result<Json<serde_json::V
     let clone_url = format!("https://github.com/{}/{}.git", parsed.owner, parsed.repo);
     let target_dir_str = target_dir.to_string_lossy().to_string();
 
-    tokio::task::spawn_blocking({
+    let output = tokio::task::spawn_blocking({
         let clone_url = clone_url.clone();
         let target = target_dir_str.clone();
         move || {
@@ -87,6 +87,13 @@ async fn clone_repo(Json(body): Json<CloneRequest>) -> Result<Json<serde_json::V
     .await
     .map_err(|e| ServerError::Internal(e.to_string()))?
     .map_err(|e| ServerError::Internal(format!("Clone failed: {}", e)))?;
+
+    // Check if clone succeeded
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let error_msg = parse_git_clone_error(&stderr, output.status.code());
+        return Err(ServerError::Internal(error_msg));
+    }
 
     // Fetch all branches
     let _ = tokio::task::spawn_blocking({
