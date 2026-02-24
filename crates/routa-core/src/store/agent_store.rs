@@ -6,6 +6,7 @@ use crate::db::Database;
 use crate::error::ServerError;
 use crate::models::agent::{Agent, AgentRole, AgentStatus, ModelTier};
 
+#[derive(Clone)]
 pub struct AgentStore {
     db: Database,
 }

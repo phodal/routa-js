@@ -61,6 +61,7 @@ struct ManagedProcess {
 ///
 /// Each session maps to a long-lived child process that communicates via
 /// stdio JSON-RPC. Notifications are forwarded to subscribers via broadcast.
+#[derive(Clone)]
 pub struct AcpManager {
     /// Our sessionId → session record (for UI listing)
     sessions: Arc<RwLock<HashMap<String, AcpSessionRecord>>>,

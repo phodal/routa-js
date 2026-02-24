@@ -1,0 +1,37 @@
+[package]
+name = "routa-cli"
+version = "0.1.0"
+description = "Routa.js CLI — command-line interface for multi-agent coordination"
+authors = ["phodal"]
+edition = "2021"
+license = "MIT"
+
+[[bin]]
+name = "routa"
+path = "src/main.rs"
+
+[dependencies]
+# Core domain (transport-agnostic, no HTTP deps)
+routa-core = { path = "../routa-core" }
+
+# HTTP server (for the `server` subcommand)
+routa-server = { path = "../routa-server" }
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive", "env"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
