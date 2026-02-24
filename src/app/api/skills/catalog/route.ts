@@ -58,6 +58,25 @@ function getGitHubToken(): string | undefined {
   return process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 }
 
+/**
+ * Get the destination directory for installing skills.
+ * On serverless environments (Vercel), falls back to a temp directory since
+ * the home directory is read-only.
+ */
+function getSkillsDestDir(): string {
+  // Check if we're in a serverless environment (Vercel sets this)
+  const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+  if (isServerless) {
+    // On serverless, use /tmp which is the only writable location
+    // Note: This is ephemeral and won't persist across invocations
+    return path.join(os.tmpdir(), ".codex/skills");
+  }
+
+  // On local/traditional servers, use the home directory
+  return path.join(os.homedir(), ".codex/skills");
+}
+
 async function githubFetch(url: string): Promise<Response> {
   const headers: Record<string, string> = {
     "User-Agent": "routa-skill-catalog",
@@ -277,8 +296,17 @@ async function handleSkillsShInstall(body: {
     );
   }
 
-  const destBase = path.join(os.homedir(), ".codex/skills");
-  fs.mkdirSync(destBase, { recursive: true });
+  // Use appropriate dest based on environment (Vercel serverless can't write to homedir)
+  const destBase = getSkillsDestDir();
+  try {
+    fs.mkdirSync(destBase, { recursive: true });
+  } catch (err) {
+    console.error("[skills/catalog] Failed to create skills directory:", destBase, err);
+    return NextResponse.json(
+      { error: `Cannot create skills directory: ${err instanceof Error ? err.message : String(err)}. On serverless environments, skill installation may not be supported.` },
+      { status: 500 }
+    );
+  }
 
   const installed: string[] = [];
   const errors: string[] = [];
@@ -458,8 +486,16 @@ async function handleGithubInstall(body: {
     }
 
     const repoRoot = path.join(tmpDir, topDirs[0].name);
-    const destBase = path.join(os.homedir(), ".codex/skills");
-    fs.mkdirSync(destBase, { recursive: true });
+    const destBase = getSkillsDestDir();
+    try {
+      fs.mkdirSync(destBase, { recursive: true });
+    } catch (err) {
+      console.error("[skills/catalog] Failed to create skills directory:", destBase, err);
+      return NextResponse.json(
+        { error: `Cannot create skills directory: ${err instanceof Error ? err.message : String(err)}. On serverless environments, skill installation may not be supported.` },
+        { status: 500 }
+      );
+    }
 
     const installed: string[] = [];
     const errors: string[] = [];
