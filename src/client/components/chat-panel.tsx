@@ -569,11 +569,12 @@ export function ChatPanel({
 
     // After prompt completes, check assistant messages for @@@task blocks
     if (onTasksDetected) {
+      let detectedTasks: ParsedTask[] = [];
+
       setMessagesBySession((prev) => {
         const msgs = prev[sid];
         if (!msgs) return prev;
 
-        const next = { ...prev };
         const arr = [...msgs];
         let tasksFound = false;
 
@@ -584,18 +585,22 @@ export function ChatPanel({
             if (tasks.length > 0) {
               // Replace the message content with cleaned version (tasks removed)
               arr[i] = { ...msg, content: cleanedContent };
-              onTasksDetected(tasks);
+              detectedTasks = tasks;
               tasksFound = true;
             }
           }
         }
 
         if (tasksFound) {
-          next[sid] = arr;
-          return next;
+          return { ...prev, [sid]: arr };
         }
         return prev;
       });
+
+      // Call onTasksDetected outside the state updater to avoid setState-during-render
+      if (detectedTasks.length > 0) {
+        onTasksDetected(detectedTasks);
+      }
     }
   }, [activeSessionId, onEnsureSession, onSelectSession, prompt, repoSelection, onLoadSkill, acp, onTasksDetected]);
 
