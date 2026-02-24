@@ -20,6 +20,10 @@
 
 ---
 
+> **📦 Distribution Notice**
+> This project primarily provides a **Tauri desktop application** (binary distribution).
+> The web version is available **only for demo purposes** and is not the main deployment target.
+
 ## Overview
 
 **Routa** orchestrates AI agents to collaborate on complex development tasks through specialized roles and real-time coordination. It parses natural language into structured intent (Spec with Tasks), then shares this unified intent across all downstream agents, ensuring context consistency throughout the workflow.
@@ -59,7 +63,17 @@ Instead of a single AI handling everything, Routa enables multiple agents to wor
 
 ## 🚀 Quick Start
 
-### Local Development
+### Desktop Application (Recommended)
+
+```bash
+# Install dependencies
+npm install --legacy-peer-deps
+
+# Run Tauri desktop app
+npm run tauri dev
+```
+
+### Web Demo (For Testing Only)
 
 ```bash
 # Install dependencies
