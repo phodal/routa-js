@@ -14,6 +14,8 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
+import * as fs from "fs";
+import * as path from "path";
 import { AgentRole, AgentStatus, ModelTier } from "../models/agent";
 import { TaskStatus, VerificationVerdict } from "../models/task";
 import { AgentEventType } from "../events/event-bus";
@@ -99,6 +101,19 @@ export class RoutaOrchestrator {
   private activeGroupByAgent = new Map<string, string>();
   /** SSE notification handler for sending updates to the frontend */
   private notificationHandler?: (sessionId: string, data: unknown) => void;
+  /** Session registration handler for adding child sessions to the UI sidebar */
+  private sessionRegistrationHandler?: (session: {
+    sessionId: string;
+    name?: string;
+    cwd: string;
+    workspaceId: string;
+    routaAgentId: string;
+    provider: string;
+    role: string;
+    parentSessionId?: string;
+  }) => void;
+  /** Map: agentId → file watcher cleanup function */
+  private reportFileWatchers = new Map<string, () => void>();
 
   constructor(
     system: RoutaSystem,
@@ -137,6 +152,24 @@ export class RoutaOrchestrator {
     handler: (sessionId: string, data: unknown) => void
   ): void {
     this.notificationHandler = handler;
+  }
+
+  /**
+   * Set the session registration handler for adding child sessions to the UI sidebar.
+   */
+  setSessionRegistrationHandler(
+    handler: (session: {
+      sessionId: string;
+      name?: string;
+      cwd: string;
+      workspaceId: string;
+      routaAgentId: string;
+      provider: string;
+      role: string;
+      parentSessionId?: string;
+    }) => void
+  ): void {
+    this.sessionRegistrationHandler = handler;
   }
 
   /**
@@ -259,6 +292,20 @@ export class RoutaOrchestrator {
     this.childAgents.set(agentId, record);
     this.agentSessionMap.set(agentId, childSessionId);
 
+    // 8.5 Register child session in UI sidebar
+    if (this.sessionRegistrationHandler) {
+      this.sessionRegistrationHandler({
+        sessionId: childSessionId,
+        name: agentName,
+        cwd,
+        workspaceId,
+        routaAgentId: agentId,
+        provider,
+        role: specialistConfig.role,
+        parentSessionId: callerSessionId,
+      });
+    }
+
     // 9. Handle wait mode
     if (waitMode === "after_all") {
       let groupId = this.activeGroupByAgent.get(callerAgentId);
@@ -366,6 +413,10 @@ export class RoutaOrchestrator {
         [mcpConfigJson]
       );
 
+      // Watch for .report_to_parent_*.json files in the cwd
+      // Claude Code sometimes writes these files instead of calling the MCP tool
+      this.watchForReportFiles(agentId, cwd);
+
       // Send the initial prompt and handle completion
       const claudeProc = this.processManager.getClaudeProcess(sessionId);
       if (claudeProc) {
@@ -472,6 +523,104 @@ export class RoutaOrchestrator {
   }
 
   /**
+   * Watch for .report_to_parent_*.json files in a directory.
+   * Claude Code sometimes writes these files instead of calling the MCP tool.
+   */
+  private watchForReportFiles(agentId: string, cwd: string): void {
+    // Clean up existing watcher if any
+    this.cleanupReportWatcher(agentId);
+
+    try {
+      const watcher = fs.watch(cwd, { persistent: false }, (eventType, filename) => {
+        if (!filename || !filename.startsWith(".report_to_parent_") || !filename.endsWith(".json")) {
+          return;
+        }
+
+        const filePath = path.join(cwd, filename);
+        console.log(`[Orchestrator] Detected report file: ${filePath} for agent ${agentId}`);
+
+        // Read and process the file
+        this.processReportFile(agentId, filePath);
+      });
+
+      // Store cleanup function
+      this.reportFileWatchers.set(agentId, () => {
+        watcher.close();
+      });
+
+      console.log(`[Orchestrator] Watching for report files in ${cwd} for agent ${agentId}`);
+    } catch (err) {
+      console.warn(`[Orchestrator] Failed to set up file watcher for ${cwd}:`, err);
+    }
+  }
+
+  /**
+   * Process a .report_to_parent_*.json file.
+   */
+  private async processReportFile(agentId: string, filePath: string): Promise<void> {
+    try {
+      // Wait a moment for the file to be fully written
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      const report = JSON.parse(content) as {
+        agentId?: string;
+        taskId?: string;
+        summary?: string;
+        filesModified?: string[];
+        verificationResults?: string;
+        success?: boolean;
+      };
+
+      console.log(`[Orchestrator] Processing report file for agent ${agentId}:`, report);
+
+      // Get the child agent record
+      const record = this.childAgents.get(agentId);
+      if (!record) {
+        console.warn(`[Orchestrator] No record for agent ${agentId}, ignoring report file`);
+        return;
+      }
+
+      // Call reportToParent with the file contents
+      await this.system.tools.reportToParent({
+        agentId: report.agentId ?? agentId,
+        report: {
+          agentId: report.agentId ?? agentId,
+          taskId: report.taskId ?? record.taskId,
+          summary: report.summary ?? "Completed (from report file)",
+          filesModified: report.filesModified,
+          verificationResults: report.verificationResults,
+          success: report.success ?? true,
+        },
+      });
+
+      // Clean up the file
+      try {
+        fs.unlinkSync(filePath);
+        console.log(`[Orchestrator] Cleaned up report file: ${filePath}`);
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      // Clean up the watcher
+      this.cleanupReportWatcher(agentId);
+    } catch (err) {
+      console.error(`[Orchestrator] Error processing report file ${filePath}:`, err);
+    }
+  }
+
+  /**
+   * Clean up report file watcher for an agent.
+   */
+  private cleanupReportWatcher(agentId: string): void {
+    const cleanup = this.reportFileWatchers.get(agentId);
+    if (cleanup) {
+      cleanup();
+      this.reportFileWatchers.delete(agentId);
+    }
+  }
+
+  /**
    * Check session/update notifications for signs of agent completion.
    * This is a fallback in case the agent doesn't call report_to_parent.
    */
@@ -522,6 +671,9 @@ export class RoutaOrchestrator {
     childAgentId: string,
     record: ChildAgentRecord
   ): Promise<void> {
+    // Clean up the report file watcher
+    this.cleanupReportWatcher(childAgentId);
+
     // Check if this child is part of an after_all group
     for (const [groupId, group] of this.delegationGroups.entries()) {
       if (group.childAgentIds.includes(childAgentId)) {

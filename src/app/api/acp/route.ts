@@ -199,6 +199,23 @@ export async function POST(request: NextRequest) {
             } as never);
           });
 
+          // Set up session registration handler to add child sessions to sidebar
+          orchestrator.setSessionRegistrationHandler((childSession) => {
+            store.upsertSession({
+              sessionId: childSession.sessionId,
+              name: childSession.name,
+              cwd: childSession.cwd,
+              workspaceId: childSession.workspaceId,
+              routaAgentId: childSession.routaAgentId,
+              provider: childSession.provider,
+              role: childSession.role,
+              createdAt: new Date().toISOString(),
+            });
+            console.log(
+              `[ACP Route] Child session registered: ${childSession.sessionId} (parent: ${childSession.parentSessionId})`
+            );
+          });
+
           console.log(
             `[ACP Route] ROUTA coordinator agent created: ${routaAgentId}`
           );

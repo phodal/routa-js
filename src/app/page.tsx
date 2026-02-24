@@ -588,6 +588,7 @@ export default function HomePage() {
           const delegateResult = await callMcpTool("delegate_task_to_agent", {
             taskId: mcpTaskId,
             callerAgentId: "routa-ui",
+            callerSessionId: activeSessionId, // Pass parent session ID for SSE notification routing
             specialist: "CRAFTER",
           });
 
