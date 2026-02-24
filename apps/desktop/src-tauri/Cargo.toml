@@ -18,7 +18,7 @@ tauri = { version = "2", features = ["tray-icon", "devtools"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
-tauri-plugin-notification = "2"
+# tauri-plugin-notification = "2"  # Removed: not used, causes ACL issues
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-process = "2"
 tauri-plugin-os = "2"
@@ -39,4 +39,6 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
+axum = "0.8.8"
 reqwest = { version = "0.12", features = ["json"] }
+tower-http = { version = "0.6.8", features = ["cors"] }
