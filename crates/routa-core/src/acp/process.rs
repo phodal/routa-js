@@ -241,8 +241,8 @@ impl AcpProcess {
                                     .and_then(|t| t.as_str())
                                     .unwrap_or("");
                                 agent_msg_buffer.push_str(text);
-                                // Trace when buffer reaches 50+ chars (lower threshold for shorter responses)
-                                if agent_msg_buffer.len() >= 50 {
+                                // Trace when buffer reaches 100+ chars (captures meaningful segments)
+                                if agent_msg_buffer.len() >= 100 {
                                     let record = TraceRecord::new(
                                         &our_sid,
                                         TraceEventType::AgentMessage,

@@ -37,7 +37,7 @@ use tokio::sync::{broadcast, RwLock};
 
 use process::AcpProcess;
 use crate::trace::{
-    Contributor, TraceConversation, TraceEventType, TraceFile, TraceRecord, TraceTool, TraceWriter,
+    Contributor, TraceConversation, TraceEventType, TraceRecord, TraceWriter,
 };
 
 // ─── Session Record ─────────────────────────────────────────────────────

@@ -283,8 +283,8 @@ impl ClaudeCodeProcess {
                                 }
                             }
                         }
-                        // Trace when buffer reaches 50+ chars (lower threshold for shorter responses)
-                        if agent_msg_buffer.len() >= 50 {
+                        // Trace when buffer reaches 100+ chars (captures meaningful segments)
+                        if agent_msg_buffer.len() >= 100 {
                             if let Some(sid) = session_id.lock().await.clone() {
                                 let record = TraceRecord::new(
                                     sid,
