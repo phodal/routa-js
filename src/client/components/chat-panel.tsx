@@ -863,7 +863,7 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-3xl mx-auto px-5 py-6 space-y-4">
+        <div className="max-w-3xl mx-auto px-5 py-5 space-y-2">
           {visibleMessages.length === 0 && (
             <div className="text-center py-20">
               <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 flex items-center justify-center">

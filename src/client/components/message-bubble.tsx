@@ -65,9 +65,9 @@ export function MessageBubble({message}: { message: ChatMessage }) {
 
 function UserBubble({content}: { content: string }) {
     return (
-        <div className="flex justify-end">
+        <div className="w-full">
             <div
-                className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-blue-600 text-white text-sm whitespace-pre-wrap">
+                className="w-full px-3 py-2 rounded-xl border border-blue-100/70 dark:border-blue-900/30 bg-blue-50/60 dark:bg-blue-900/10 text-sm text-blue-900 dark:text-blue-100 whitespace-pre-wrap">
                 {content}
             </div>
         </div>
@@ -76,9 +76,9 @@ function UserBubble({content}: { content: string }) {
 
 function AssistantBubble({content}: { content: string }) {
     return (
-        <div className="flex justify-start">
+        <div className="w-full">
             <div
-                className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-md bg-gray-50 dark:bg-[#1a1d2e] text-sm text-gray-900 dark:text-gray-100">
+                className="w-full px-3 py-2 rounded-xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/50 dark:bg-[#151924] text-sm text-gray-900 dark:text-gray-100">
                 <MarkdownViewer content={content} className="text-sm"/>
             </div>
         </div>
