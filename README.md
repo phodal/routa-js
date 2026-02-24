@@ -22,7 +22,14 @@
 
 ## Overview
 
-**Routa** orchestrates AI agents to collaborate on complex development tasks through specialized roles and real-time coordination. Instead of a single AI handling everything, Routa enables multiple agents to work together—one plans, another implements, and a third verifies—creating a more robust and scalable development workflow.
+**Routa** orchestrates AI agents to collaborate on complex development tasks through specialized roles and real-time coordination. It parses natural language into structured intent (Spec with Tasks), then shares this unified intent across all downstream agents, ensuring context consistency throughout the workflow.
+
+**Multi-Protocol Architecture:**
+- **MCP (Model Context Protocol)** — Coordination tools for agent collaboration (task delegation, messaging, notes)
+- **ACP (Agent Client Protocol)** — Spawns and manages agent processes (Claude Code, OpenCode, Codex, Gemini)
+- **A2A (Agent-to-Agent Protocol)** — Exposes external federation interface for cross-platform agent communication
+
+Instead of a single AI handling everything, Routa enables multiple agents to work together—one plans, another implements, and a third verifies—creating a more robust and scalable development workflow.
 
 ### What It Does
 
@@ -34,12 +41,12 @@
 
 ### Key Capabilities
 
-| Icon | Role | Description |
-|------|------|-------------|
-| 🔵 | **Routa (Coordinator)** | Plans work, breaks down tasks, delegates to specialists, orchestrates workflow |
-| 🟠 | **CRAFTER (Implementor)** | Executes implementation tasks, writes code, makes minimal focused changes |
-| 🟢 | **GATE (Verifier)** | Reviews work, validates against acceptance criteria, approves or requests fixes |
-| 🎯 | **DEVELOPER (Solo)** | Plans and implements independently without delegation (single-agent mode) |
+| Icon | Role                      | Description                                                                             |
+|------|---------------------------|-----------------------------------------------------------------------------------------|
+| 🔵   | **Routa (Coordinator)**   | Plans work, parses intent into structured Spec, creates tasks, delegates to specialists |
+| 🟠   | **CRAFTER (Implementor)** | Executes implementation tasks, writes code, makes minimal focused changes               |
+| 🟢   | **GATE (Verifier)**       | Reviews work, validates against acceptance criteria, approves or requests fixes         |
+| 🎯   | **DEVELOPER (Solo)**      | Plans and implements independently without delegation (single-agent mode)               |
 
 - **🔄 Task Orchestration**: Create tasks, delegate to agents, track dependencies, parallel execution
 - **💬 Inter-Agent Communication**: Message passing, conversation history, completion reports
