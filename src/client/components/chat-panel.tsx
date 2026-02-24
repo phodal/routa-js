@@ -132,14 +132,137 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleMessages]);
 
-  // When active session changes, swap visible transcript
+  // Track which sessions we've already loaded history for
+  const loadedHistoryRef = useRef<Set<string>>(new Set());
+
+  // Fetch and process session history when switching sessions
+  const fetchSessionHistory = useCallback(async (sessionId: string) => {
+    // Skip if already loaded
+    if (loadedHistoryRef.current.has(sessionId)) return;
+    if (messagesBySession[sessionId]?.length) {
+      // Already have messages from SSE
+      loadedHistoryRef.current.add(sessionId);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/history`, { cache: "no-store" });
+      const data = await res.json();
+      const history = Array.isArray(data?.history) ? data.history as AcpSessionNotification[] : [];
+
+      if (history.length === 0) {
+        loadedHistoryRef.current.add(sessionId);
+        return;
+      }
+
+      // Process history into messages
+      const messages: ChatMessage[] = [];
+      let streamingMsgId: string | null = null;
+      let streamingThoughtId: string | null = null;
+      let lastKind: string | null = null;
+
+      for (const notification of history) {
+        const update = (notification.update ?? notification) as Record<string, unknown>;
+        const kind = update.sessionUpdate as string | undefined;
+        if (!kind) continue;
+
+        const extractText = (): string => {
+          const content = update.content as { type: string; text?: string } | undefined;
+          if (content?.text) return content.text;
+          if (typeof update.text === "string") return update.text;
+          return "";
+        };
+
+        switch (kind) {
+          case "agent_message_chunk": {
+            const text = extractText();
+            if (!text) break;
+            streamingThoughtId = null;
+            const shouldCreateNew = lastKind !== "agent_message_chunk";
+            if (shouldCreateNew) streamingMsgId = null;
+            if (!streamingMsgId) {
+              streamingMsgId = uuidv4();
+              messages.push({ id: streamingMsgId, role: "assistant", content: text, timestamp: new Date() });
+            } else {
+              const idx = messages.findIndex((m) => m.id === streamingMsgId);
+              if (idx >= 0) messages[idx] = { ...messages[idx], content: messages[idx].content + text };
+            }
+            break;
+          }
+          case "agent_thought_chunk": {
+            const text = extractText();
+            if (!text) break;
+            const shouldCreateNewThought = lastKind !== "agent_thought_chunk";
+            if (shouldCreateNewThought) streamingThoughtId = null;
+            if (!streamingThoughtId) {
+              streamingThoughtId = uuidv4();
+              messages.push({ id: streamingThoughtId, role: "thought", content: text, timestamp: new Date() });
+            } else {
+              const idx = messages.findIndex((m) => m.id === streamingThoughtId);
+              if (idx >= 0) messages[idx] = { ...messages[idx], content: messages[idx].content + text };
+            }
+            break;
+          }
+          case "user_message": {
+            const text = extractText();
+            if (text) messages.push({ id: uuidv4(), role: "user", content: text, timestamp: new Date() });
+            streamingMsgId = null;
+            streamingThoughtId = null;
+            break;
+          }
+          case "tool_call": {
+            const title = (update.title as string) ?? "tool";
+            const status = (update.status as string) ?? "completed";
+            const toolKind = update.kind as string | undefined;
+            const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
+              ? update.rawInput as Record<string, unknown>
+              : undefined;
+            const contentParts: string[] = [];
+            if (update.rawInput) {
+              contentParts.push(`Input:\n${typeof update.rawInput === "string" ? update.rawInput : JSON.stringify(update.rawInput, null, 2)}`);
+            }
+            const toolContent = update.content as Array<{ type: string; text?: string }> | undefined;
+            if (Array.isArray(toolContent)) {
+              for (const c of toolContent) if (c.text) contentParts.push(c.text);
+            }
+            messages.push({
+              id: uuidv4(),
+              role: "tool",
+              content: contentParts.join("\n\n") || title,
+              toolName: title,
+              toolStatus: status,
+              toolKind,
+              toolRawInput: rawInput,
+              timestamp: new Date(),
+            });
+            break;
+          }
+        }
+        lastKind = kind;
+      }
+
+      loadedHistoryRef.current.add(sessionId);
+      if (messages.length > 0) {
+        setMessagesBySession((prev) => ({
+          ...prev,
+          [sessionId]: messages,
+        }));
+      }
+    } catch {
+      // ignore errors
+    }
+  }, [messagesBySession]);
+
+  // When active session changes, swap visible transcript and load history
   useEffect(() => {
     if (!activeSessionId) {
       setVisibleMessages([]);
       return;
     }
+    // Load history if not yet loaded
+    fetchSessionHistory(activeSessionId);
     setVisibleMessages(messagesBySession[activeSessionId] ?? []);
-  }, [activeSessionId, messagesBySession]);
+  }, [activeSessionId, messagesBySession, fetchSessionHistory]);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -734,6 +857,7 @@ export function ChatPanel({
           <div className="flex gap-2 items-end">
             <TiptapInput
               onSend={handleSend}
+              onStop={acp.cancel}
               placeholder={
                 connected
                   ? activeSessionId

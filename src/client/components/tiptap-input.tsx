@@ -444,6 +444,8 @@ interface SessionItem {
 
 interface TiptapInputProps {
   onSend: (text: string, context: InputContext) => void;
+  /** Called when user clicks stop button during loading */
+  onStop?: () => void;
   placeholder?: string;
   disabled?: boolean;
   loading?: boolean;
@@ -463,6 +465,7 @@ interface TiptapInputProps {
 
 export function TiptapInput({
   onSend,
+  onStop,
   placeholder = "Type a message...",
   disabled = false,
   loading = false,
@@ -974,24 +977,30 @@ export function TiptapInput({
             <span className="mx-1.5">&middot;</span>
             <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">/</kbd> skill
           </span>
-          <button
-            type="button"
-            onClick={() => handleSendRef.current()}
-            disabled={disabled || loading}
-            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Send"
-          >
-            {loading ? (
-              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          {loading ? (
+            <button
+              type="button"
+              onClick={() => onStop?.()}
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+              title="Stop"
+            >
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="1" />
               </svg>
-            ) : (
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleSendRef.current()}
+              disabled={disabled}
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Send"
+            >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
               </svg>
-            )}
-          </button>
+            </button>
+          )}
         </div>
       </div>
     </div>

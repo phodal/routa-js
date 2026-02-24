@@ -33,6 +33,8 @@ class HttpSessionStore {
   private sessions = new Map<string, RoutaSessionRecord>();
   private sseControllers = new Map<string, Controller>();
   private pendingNotifications = new Map<string, SessionUpdateNotification[]>();
+  /** Store all notifications per session for history replay */
+  private messageHistory = new Map<string, SessionUpdateNotification[]>();
 
   upsertSession(record: RoutaSessionRecord) {
     this.sessions.set(record.sessionId, record);
@@ -83,6 +85,12 @@ class HttpSessionStore {
    */
   pushNotification(notification: SessionUpdateNotification) {
     const sessionId = notification.sessionId;
+
+    // Always store in history for session switching
+    const history = this.messageHistory.get(sessionId) ?? [];
+    history.push(notification);
+    this.messageHistory.set(sessionId, history);
+
     const controller = this.sseControllers.get(sessionId);
 
     if (controller) {
@@ -97,6 +105,13 @@ class HttpSessionStore {
     const pending = this.pendingNotifications.get(sessionId) ?? [];
     pending.push(notification);
     this.pendingNotifications.set(sessionId, pending);
+  }
+
+  /**
+   * Get message history for a session (used when switching sessions).
+   */
+  getHistory(sessionId: string): SessionUpdateNotification[] {
+    return this.messageHistory.get(sessionId) ?? [];
   }
 
   /**
