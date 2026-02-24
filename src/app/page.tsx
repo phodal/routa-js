@@ -888,6 +888,11 @@ export default function HomePage() {
               selectedSessionId={activeSessionId}
               onSelect={handleSelectSession}
               refreshKey={refreshKey}
+              onSessionDeleted={(deletedId) => {
+                if (activeSessionId === deletedId) {
+                  setActiveSessionId(null);
+                }
+              }}
             />
 
             {/* Divider */}

@@ -123,3 +123,29 @@ export const pendingEvents = sqliteTable("pending_events", {
   data: text("data", { mode: "json" }).$type<Record<string, unknown>>().default({}),
   timestamp: integer("timestamp", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
+
+// ─── ACP Sessions ─────────────────────────────────────────────────────
+
+export interface AcpSessionNotification {
+  sessionId: string;
+  update?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export const acpSessions = sqliteTable("acp_sessions", {
+  id: text("id").primaryKey(),
+  /** User-editable display name */
+  name: text("name"),
+  cwd: text("cwd").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  routaAgentId: text("routa_agent_id"),
+  provider: text("provider"),
+  role: text("role"),
+  modeId: text("mode_id"),
+  /** Whether the first prompt has been sent */
+  firstPromptSent: integer("first_prompt_sent", { mode: "boolean" }).default(false),
+  /** Message history stored as JSON array */
+  messageHistory: text("message_history", { mode: "json" }).$type<AcpSessionNotification[]>().default([]),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});

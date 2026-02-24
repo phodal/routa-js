@@ -157,6 +157,23 @@ function initializeSqliteTables(db: SqliteDatabase): void {
     )
   `);
 
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS acp_sessions (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      cwd TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      routa_agent_id TEXT,
+      provider TEXT,
+      role TEXT,
+      mode_id TEXT,
+      first_prompt_sent INTEGER DEFAULT 0,
+      message_history TEXT DEFAULT '[]',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    )
+  `);
+
   console.log("[SQLite] Tables initialized");
 }
 

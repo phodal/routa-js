@@ -19,6 +19,7 @@ import type { AgentStore } from "../store/agent-store";
 import type { TaskStore } from "../store/task-store";
 import type { ConversationStore } from "../store/conversation-store";
 import type { NoteStore } from "../store/note-store";
+import type { AcpSessionStore, AcpSession, AcpSessionNotification } from "../store/acp-session-store";
 
 type SqliteDb = BetterSQLite3Database<typeof sqliteSchema>;
 
@@ -624,6 +625,117 @@ export class SqliteNoteStore implements NoteStore {
       content: row.content,
       workspaceId: row.workspaceId,
       metadata,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+}
+
+// ─── SQLite ACP Session Store ───────────────────────────────────────────
+
+export class SqliteAcpSessionStore implements AcpSessionStore {
+  constructor(private db: SqliteDb) {}
+
+  async save(session: AcpSession): Promise<void> {
+    await this.db
+      .insert(sqliteSchema.acpSessions)
+      .values({
+        id: session.id,
+        name: session.name,
+        cwd: session.cwd,
+        workspaceId: session.workspaceId,
+        routaAgentId: session.routaAgentId,
+        provider: session.provider,
+        role: session.role,
+        modeId: session.modeId,
+        firstPromptSent: session.firstPromptSent ?? false,
+        messageHistory: session.messageHistory,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: sqliteSchema.acpSessions.id,
+        set: {
+          name: session.name,
+          modeId: session.modeId,
+          firstPromptSent: session.firstPromptSent ?? false,
+          messageHistory: session.messageHistory,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async get(sessionId: string): Promise<AcpSession | undefined> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.acpSessions)
+      .where(eq(sqliteSchema.acpSessions.id, sessionId))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
+  async list(): Promise<AcpSession[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.acpSessions)
+      .orderBy(desc(sqliteSchema.acpSessions.createdAt));
+    return rows.map(this.toModel);
+  }
+
+  async delete(sessionId: string): Promise<void> {
+    await this.db
+      .delete(sqliteSchema.acpSessions)
+      .where(eq(sqliteSchema.acpSessions.id, sessionId));
+  }
+
+  async rename(sessionId: string, name: string): Promise<void> {
+    await this.db
+      .update(sqliteSchema.acpSessions)
+      .set({ name, updatedAt: new Date() })
+      .where(eq(sqliteSchema.acpSessions.id, sessionId));
+  }
+
+  async appendHistory(sessionId: string, notification: AcpSessionNotification): Promise<void> {
+    const session = await this.get(sessionId);
+    if (!session) return;
+    const history = [...session.messageHistory, notification];
+    await this.db
+      .update(sqliteSchema.acpSessions)
+      .set({ messageHistory: history, updatedAt: new Date() })
+      .where(eq(sqliteSchema.acpSessions.id, sessionId));
+  }
+
+  async getHistory(sessionId: string): Promise<AcpSessionNotification[]> {
+    const session = await this.get(sessionId);
+    return session?.messageHistory ?? [];
+  }
+
+  async markFirstPromptSent(sessionId: string): Promise<void> {
+    await this.db
+      .update(sqliteSchema.acpSessions)
+      .set({ firstPromptSent: true, updatedAt: new Date() })
+      .where(eq(sqliteSchema.acpSessions.id, sessionId));
+  }
+
+  async updateMode(sessionId: string, modeId: string): Promise<void> {
+    await this.db
+      .update(sqliteSchema.acpSessions)
+      .set({ modeId, updatedAt: new Date() })
+      .where(eq(sqliteSchema.acpSessions.id, sessionId));
+  }
+
+  private toModel(row: typeof sqliteSchema.acpSessions.$inferSelect): AcpSession {
+    return {
+      id: row.id,
+      name: row.name ?? undefined,
+      cwd: row.cwd,
+      workspaceId: row.workspaceId,
+      routaAgentId: row.routaAgentId ?? undefined,
+      provider: row.provider ?? undefined,
+      role: row.role ?? undefined,
+      modeId: row.modeId ?? undefined,
+      firstPromptSent: row.firstPromptSent ?? false,
+      messageHistory: row.messageHistory ?? [],
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

@@ -243,15 +243,36 @@ export function ChatPanel({
 
       loadedHistoryRef.current.add(sessionId);
       if (messages.length > 0) {
+        // Extract tasks from loaded history
+        let detectedTasks: ParsedTask[] = [];
+        const processedMessages = [...messages];
+
+        for (let i = 0; i < processedMessages.length; i++) {
+          const msg = processedMessages[i];
+          if (msg.role === "assistant" && hasTaskBlocks(msg.content)) {
+            const { tasks, cleanedContent } = extractTaskBlocks(msg.content);
+            if (tasks.length > 0) {
+              // Replace the message content with cleaned version (tasks removed)
+              processedMessages[i] = { ...msg, content: cleanedContent };
+              detectedTasks = tasks;
+            }
+          }
+        }
+
         setMessagesBySession((prev) => ({
           ...prev,
-          [sessionId]: messages,
+          [sessionId]: processedMessages,
         }));
+
+        // Notify parent about detected tasks from history
+        if (detectedTasks.length > 0 && onTasksDetected) {
+          onTasksDetected(detectedTasks);
+        }
       }
     } catch {
       // ignore errors
     }
-  }, [messagesBySession]);
+  }, [messagesBySession, onTasksDetected]);
 
   // When active session changes, swap visible transcript and load history
   useEffect(() => {

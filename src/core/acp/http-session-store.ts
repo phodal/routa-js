@@ -10,6 +10,8 @@
 
 export interface RoutaSessionRecord {
   sessionId: string;
+  /** User-editable display name */
+  name?: string;
   cwd: string;
   workspaceId: string;
   routaAgentId?: string;
@@ -49,6 +51,21 @@ class HttpSessionStore {
 
   getSession(sessionId: string): RoutaSessionRecord | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  deleteSession(sessionId: string): boolean {
+    this.messageHistory.delete(sessionId);
+    this.pendingNotifications.delete(sessionId);
+    // Detach SSE if connected
+    this.sseControllers.delete(sessionId);
+    return this.sessions.delete(sessionId);
+  }
+
+  renameSession(sessionId: string, name: string): boolean {
+    const existing = this.sessions.get(sessionId);
+    if (!existing) return false;
+    existing.name = name;
+    return true;
   }
 
   markFirstPromptSent(sessionId: string) {
