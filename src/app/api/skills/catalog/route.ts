@@ -22,6 +22,9 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { getDatabase, getDatabaseDriver } from "@/core/db";
+import { PgSkillStore } from "@/core/db/pg-skill-store";
+import type { SkillFileEntry } from "@/core/db/schema";
 
 // ── skills.sh constants ─────────────────────────────────────────────────
 const SKILLS_SH_API = process.env.SKILLS_API_URL || "https://skills.sh";
@@ -89,7 +92,7 @@ async function githubFetch(url: string): Promise<Response> {
   return fetch(url, { headers });
 }
 
-function getInstalledSkillNames(): Set<string> {
+function getInstalledSkillNamesFromFs(): Set<string> {
   const installed = new Set<string>();
   const skillDirs = [
     path.join(process.cwd(), ".agents/skills"),
@@ -112,6 +115,40 @@ function getInstalledSkillNames(): Set<string> {
     }
   }
   return installed;
+}
+
+async function getInstalledSkillNamesFromDb(): Promise<Set<string>> {
+  const installed = new Set<string>();
+  const dbDriver = getDatabaseDriver();
+  if (dbDriver !== "postgres") {
+    return installed;
+  }
+
+  try {
+    const db = getDatabase();
+    const skillStore = new PgSkillStore(db);
+    const skills = await skillStore.list();
+    for (const skill of skills) {
+      installed.add(skill.name);
+    }
+  } catch (err) {
+    console.warn("[skills/catalog] Failed to get installed skills from DB:", err);
+  }
+  return installed;
+}
+
+async function getInstalledSkillNames(): Promise<Set<string>> {
+  const fsInstalled = getInstalledSkillNamesFromFs();
+
+  // On serverless, also check database
+  if (isServerlessEnvironment()) {
+    const dbInstalled = await getInstalledSkillNamesFromDb();
+    for (const name of dbInstalled) {
+      fsInstalled.add(name);
+    }
+  }
+
+  return fsInstalled;
 }
 
 // ── GET ─────────────────────────────────────────────────────────────────
@@ -170,7 +207,7 @@ async function handleSkillsShSearch(request: NextRequest) {
       count: number;
     };
 
-    const installed = getInstalledSkillNames();
+    const installed = await getInstalledSkillNames();
 
     const skills: SkillsShSkill[] = (data.skills ?? []).map((s) => ({
       name: s.name,
@@ -228,7 +265,7 @@ async function handleGithubList(request: NextRequest) {
       );
     }
 
-    const installed = getInstalledSkillNames();
+    const installed = await getInstalledSkillNames();
 
     const skills: GithubCatalogSkill[] = data
       .filter((entry) => entry.type === "dir")
@@ -266,25 +303,36 @@ function isServerlessEnvironment(): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    // On serverless environments (Vercel), skill installation is not supported
-    // because the filesystem is read-only or ephemeral
-    if (isServerlessEnvironment()) {
-      return NextResponse.json(
-        {
-          error: "Skill installation is not supported on serverless deployments (Vercel). Please use a local or self-hosted instance to install skills.",
-          serverless: true,
-        },
-        { status: 501 } // 501 Not Implemented
-      );
-    }
-
     const body = await request.json();
     const catalogType = body.type || "skillssh";
 
-    if (catalogType === "skillssh") {
-      return handleSkillsShInstall(body);
-    } else if (catalogType === "github") {
-      return handleGithubInstall(body);
+    // On serverless environments (Vercel), use database storage
+    if (isServerlessEnvironment()) {
+      // Check if we have a database configured
+      const dbDriver = getDatabaseDriver();
+      if (dbDriver !== "postgres") {
+        return NextResponse.json(
+          {
+            error: "Skill installation requires a database on serverless deployments. Please configure DATABASE_URL.",
+            serverless: true,
+          },
+          { status: 501 }
+        );
+      }
+
+      // Use database storage for serverless
+      if (catalogType === "skillssh") {
+        return handleSkillsShInstallToDb(body);
+      } else if (catalogType === "github") {
+        return handleGithubInstallToDb(body);
+      }
+    } else {
+      // Use filesystem storage for local/self-hosted
+      if (catalogType === "skillssh") {
+        return handleSkillsShInstall(body);
+      } else if (catalogType === "github") {
+        return handleGithubInstall(body);
+      }
     }
 
     return NextResponse.json(
@@ -574,5 +622,278 @@ function copyDirRecursive(src: string, dest: string): void {
     } else {
       fs.copyFileSync(srcPath, destPath);
     }
+  }
+}
+
+/**
+ * Read all files from a directory recursively and return as SkillFileEntry array.
+ */
+function readDirAsFileEntries(dir: string, basePath = ""): SkillFileEntry[] {
+  const entries: SkillFileEntry[] = [];
+  const items = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const item of items) {
+    const itemPath = path.join(dir, item.name);
+    const relativePath = basePath ? `${basePath}/${item.name}` : item.name;
+
+    if (item.isDirectory()) {
+      if (item.name === ".git" || item.name === "node_modules") continue;
+      entries.push(...readDirAsFileEntries(itemPath, relativePath));
+    } else {
+      try {
+        const content = fs.readFileSync(itemPath, "utf-8");
+        entries.push({ path: relativePath, content });
+      } catch {
+        // Skip binary files or files that can't be read
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Extract description from SKILL.md frontmatter.
+ */
+function extractSkillDescription(skillMdContent: string): string {
+  // Try to parse YAML frontmatter
+  const frontmatterMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (frontmatterMatch) {
+    const frontmatter = frontmatterMatch[1];
+    const descMatch = frontmatter.match(/description:\s*(.+)/);
+    if (descMatch) {
+      return descMatch[1].trim().replace(/^["']|["']$/g, "");
+    }
+  }
+
+  // Fallback: use first non-empty line after frontmatter
+  const content = skillMdContent.replace(/^---[\s\S]*?---\s*/, "").trim();
+  const firstLine = content.split("\n").find(line => line.trim() && !line.startsWith("#"));
+  return firstLine?.trim() || "";
+}
+
+
+// ── Database Storage Functions (for Serverless) ────────────────────────
+
+/**
+ * Install skills from skills.sh to database (serverless mode).
+ */
+async function handleSkillsShInstallToDb(body: {
+  skills: Array<{ name: string; source: string }>;
+}) {
+  const { skills: skillsToInstall } = body;
+
+  if (!Array.isArray(skillsToInstall) || skillsToInstall.length === 0) {
+    return NextResponse.json(
+      { error: "Missing 'skills' array with {name, source} items" },
+      { status: 400 }
+    );
+  }
+
+  const db = getDatabase();
+  const skillStore = new PgSkillStore(db);
+
+  const installed: string[] = [];
+  const errors: string[] = [];
+
+  // Group skills by source repo
+  const byRepo = new Map<string, string[]>();
+  for (const skill of skillsToInstall) {
+    if (!skill.source || !skill.name) {
+      errors.push(`Invalid skill entry: ${JSON.stringify(skill)}`);
+      continue;
+    }
+    const existing = byRepo.get(skill.source) || [];
+    existing.push(skill.name);
+    byRepo.set(skill.source, existing);
+  }
+
+  for (const [repoSource, skillNames] of byRepo) {
+    const parts = repoSource.split("/");
+    if (parts.length !== 2) {
+      errors.push(`Invalid source: ${repoSource}`);
+      continue;
+    }
+    const [owner, repoName] = parts;
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "routa-catalog-db-"));
+
+    try {
+      const zipUrl = `https://codeload.github.com/${owner}/${repoName}/zip/main`;
+      const token = getGitHubToken();
+      const headers: Record<string, string> = { "User-Agent": "routa-skill-install" };
+      if (token) headers["Authorization"] = `token ${token}`;
+
+      const zipResponse = await fetch(zipUrl, { headers });
+
+      if (!zipResponse.ok) {
+        errors.push(`Failed to download ${repoSource}: HTTP ${zipResponse.status}`);
+        continue;
+      }
+
+      const zipBuffer = Buffer.from(await zipResponse.arrayBuffer());
+      const AdmZip = (await import("adm-zip")).default;
+      const zip = new AdmZip(zipBuffer);
+      zip.extractAllTo(tmpDir, true);
+
+      const topDirs = fs.readdirSync(tmpDir, { withFileTypes: true }).filter((e) => e.isDirectory());
+      if (topDirs.length !== 1) {
+        errors.push(`Unexpected archive layout for ${repoSource}`);
+        continue;
+      }
+
+      const repoRoot = path.join(tmpDir, topDirs[0].name);
+      const searchDirs = ["skills", ".agents/skills", ".opencode/skills", ".claude/skills", ".codex/skills"];
+
+      for (const skillName of skillNames) {
+        // Check if already installed
+        const existing = await skillStore.get(skillName);
+        if (existing) {
+          errors.push(`Already installed: ${skillName}`);
+          continue;
+        }
+
+        let foundSrc: string | null = null;
+        for (const searchDir of searchDirs) {
+          const candidate = path.join(repoRoot, searchDir, skillName);
+          if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory() &&
+              fs.existsSync(path.join(candidate, "SKILL.md"))) {
+            foundSrc = candidate;
+            break;
+          }
+        }
+
+        if (!foundSrc) {
+          errors.push(`Skill "${skillName}" not found in ${repoSource}`);
+          continue;
+        }
+
+        // Read all files and store to database
+        const files = readDirAsFileEntries(foundSrc);
+        const skillMdFile = files.find(f => f.path === "SKILL.md");
+        const description = skillMdFile ? extractSkillDescription(skillMdFile.content) : "";
+
+        await skillStore.save({
+          id: skillName,
+          name: skillName,
+          description,
+          source: repoSource,
+          catalogType: "skillssh",
+          files,
+        });
+
+        installed.push(skillName);
+      }
+    } catch (err) {
+      errors.push(`Failed to install from ${repoSource}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  }
+
+  return NextResponse.json({
+    success: installed.length > 0,
+    installed,
+    errors,
+    dest: "database",
+  });
+}
+
+/**
+ * Install skills from GitHub catalog to database (serverless mode).
+ */
+async function handleGithubInstallToDb(body: {
+  repo?: string;
+  path?: string;
+  ref?: string;
+  skills: string[];
+}) {
+  const {
+    repo = DEFAULT_GITHUB_REPO,
+    path: catalogPath = DEFAULT_GITHUB_PATH,
+    ref = DEFAULT_REF,
+    skills: skillNames,
+  } = body;
+
+  if (!Array.isArray(skillNames) || skillNames.length === 0) {
+    return NextResponse.json({ error: "Missing 'skills' array" }, { status: 400 });
+  }
+
+  const parts = repo.split("/");
+  if (parts.length !== 2) {
+    return NextResponse.json({ error: "Invalid repo format. Expected: owner/repo" }, { status: 400 });
+  }
+  const [owner, repoName] = parts;
+
+  const zipUrl = `https://codeload.github.com/${owner}/${repoName}/zip/${ref}`;
+  const token = getGitHubToken();
+  const headers: Record<string, string> = { "User-Agent": "routa-skill-install" };
+  if (token) headers["Authorization"] = `token ${token}`;
+
+  const zipResponse = await fetch(zipUrl, { headers });
+  if (!zipResponse.ok) {
+    return NextResponse.json({ error: `Failed to download repo: HTTP ${zipResponse.status}` }, { status: zipResponse.status });
+  }
+
+  const zipBuffer = Buffer.from(await zipResponse.arrayBuffer());
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "routa-catalog-db-"));
+
+  try {
+    const AdmZip = (await import("adm-zip")).default;
+    const zip = new AdmZip(zipBuffer);
+    zip.extractAllTo(tmpDir, true);
+
+    const topDirs = fs.readdirSync(tmpDir, { withFileTypes: true }).filter((e) => e.isDirectory());
+    if (topDirs.length !== 1) {
+      return NextResponse.json({ error: "Unexpected archive layout" }, { status: 500 });
+    }
+
+    const repoRoot = path.join(tmpDir, topDirs[0].name);
+    const db = getDatabase();
+    const skillStore = new PgSkillStore(db);
+
+    const installed: string[] = [];
+    const errors: string[] = [];
+
+    for (const skillName of skillNames) {
+      try {
+        const existing = await skillStore.get(skillName);
+        if (existing) {
+          errors.push(`Already installed: ${skillName}`);
+          continue;
+        }
+
+        const skillSrc = path.join(repoRoot, catalogPath, skillName);
+        if (!fs.existsSync(skillSrc) || !fs.statSync(skillSrc).isDirectory()) {
+          errors.push(`Skill not found in catalog: ${skillName}`);
+          continue;
+        }
+        if (!fs.existsSync(path.join(skillSrc, "SKILL.md"))) {
+          errors.push(`No SKILL.md in ${skillName}`);
+          continue;
+        }
+
+        const files = readDirAsFileEntries(skillSrc);
+        const skillMdFile = files.find(f => f.path === "SKILL.md");
+        const description = skillMdFile ? extractSkillDescription(skillMdFile.content) : "";
+
+        await skillStore.save({
+          id: skillName,
+          name: skillName,
+          description,
+          source: repo,
+          catalogType: "github",
+          files,
+        });
+
+        installed.push(skillName);
+      } catch (err) {
+        errors.push(`Failed to install ${skillName}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return NextResponse.json({ success: installed.length > 0, installed, errors, dest: "database" });
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }

@@ -149,3 +149,35 @@ export const acpSessions = sqliteTable("acp_sessions", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
+
+// ─── Skills ───────────────────────────────────────────────────────────
+
+export interface SkillFileEntry {
+  /** Relative path within the skill (e.g., "SKILL.md", "examples/usage.md") */
+  path: string;
+  /** File content */
+  content: string;
+}
+
+export const skills = sqliteTable("skills", {
+  /** Skill name (unique identifier, e.g., "mysql-best-practices") */
+  id: text("id").primaryKey(),
+  /** Human-readable name */
+  name: text("name").notNull(),
+  /** Short description extracted from SKILL.md frontmatter */
+  description: text("description").notNull().default(""),
+  /** Source repository (e.g., "mindrally/skills") */
+  source: text("source").notNull(),
+  /** Catalog type: "skillssh" | "github" | "local" */
+  catalogType: text("catalog_type").notNull().default("skillssh"),
+  /** All files in the skill directory, stored as JSON array */
+  files: text("files", { mode: "json" }).$type<SkillFileEntry[]>().notNull().default([]),
+  /** Optional license from SKILL.md frontmatter */
+  license: text("license"),
+  /** Additional metadata from SKILL.md frontmatter */
+  metadata: text("metadata", { mode: "json" }).$type<Record<string, string>>().default({}),
+  /** Installation count (for analytics) */
+  installs: integer("installs").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});

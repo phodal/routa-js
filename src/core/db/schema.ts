@@ -155,3 +155,35 @@ export const acpSessions = pgTable("acp_sessions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Skills ───────────────────────────────────────────────────────────
+
+export interface SkillFileEntry {
+  /** Relative path within the skill (e.g., "SKILL.md", "examples/usage.md") */
+  path: string;
+  /** File content */
+  content: string;
+}
+
+export const skills = pgTable("skills", {
+  /** Skill name (unique identifier, e.g., "mysql-best-practices") */
+  id: text("id").primaryKey(),
+  /** Human-readable name */
+  name: text("name").notNull(),
+  /** Short description extracted from SKILL.md frontmatter */
+  description: text("description").notNull().default(""),
+  /** Source repository (e.g., "mindrally/skills") */
+  source: text("source").notNull(),
+  /** Catalog type: "skillssh" | "github" | "local" */
+  catalogType: text("catalog_type").notNull().default("skillssh"),
+  /** All files in the skill directory, stored as JSON array */
+  files: jsonb("files").$type<SkillFileEntry[]>().notNull().default([]),
+  /** Optional license from SKILL.md frontmatter */
+  license: text("license"),
+  /** Additional metadata from SKILL.md frontmatter */
+  metadata: jsonb("metadata").$type<Record<string, string>>().default({}),
+  /** Installation count (for analytics) */
+  installs: integer("installs").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
