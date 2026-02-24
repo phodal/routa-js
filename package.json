@@ -28,7 +28,8 @@
     "api:test:nextjs": "BASE_URL=http://localhost:3000 npx tsx tests/api-contract/run.ts",
     "api:test:rust": "BASE_URL=http://localhost:3210 npx tsx tests/api-contract/run.ts",
     "api:validate": "./scripts/validate-api-parity.sh",
-    "api:validate:full": "./scripts/validate-api-parity.sh --runtime"
+    "api:validate:full": "./scripts/validate-api-parity.sh --runtime",
+    "test": "npx tsx"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.10",
@@ -57,6 +58,7 @@
     "glob": "^11.0.0",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
+    "js-yaml": "^4.1.0",
     "lowlight": "^3.3.0",
     "marked": "^17.0.2",
     "mermaid": "^11.12.2",
