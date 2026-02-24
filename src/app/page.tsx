@@ -390,8 +390,8 @@ export default function HomePage() {
       await ensureConnected();
       acp.selectSession(sessionId);
       setActiveSessionId(sessionId);
-      // Clear tasks when switching sessions
-      setRoutaTasks([]);
+      // Don't clear tasks here - let onTasksDetected update them when history loads
+      // This prevents the right sidebar from disappearing during session switch
       bumpRefresh();
     },
     [acp, ensureConnected, bumpRefresh]

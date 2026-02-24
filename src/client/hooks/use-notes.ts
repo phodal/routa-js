@@ -257,6 +257,12 @@ export function useNotes(workspaceId: string = "default"): UseNotesReturn {
     };
   }, [workspaceId]);
 
+  // Clear notes when workspaceId changes to avoid showing stale data
+  useEffect(() => {
+    setNotes([]);
+    setConnected(false);
+  }, [workspaceId]);
+
   // Connect SSE and fetch initial notes
   useEffect(() => {
     fetchNotes();
