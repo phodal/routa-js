@@ -94,7 +94,10 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     id: "copilot",
     name: "GitHub Copilot",
     command: "copilot",
-    args: ["--acp"],
+    // --allow-all-tools: auto-approve all tool calls without confirmation
+    // This prevents "The user rejected this tool call" errors when using MCP tools
+    // --no-ask-user: disable the ask_user tool (agent works autonomously)
+    args: ["--acp", "--allow-all-tools", "--no-ask-user"],
     description: "GitHub Copilot CLI",
     envBinOverride: "COPILOT_BIN",
   },
