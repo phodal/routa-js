@@ -35,7 +35,8 @@ export default function HomePage() {
   const [routaTasks, setRoutaTasks] = useState<ParsedTask[]>([]);
   const acp = useAcp();
   const skillsHook = useSkills();
-  const notesHook = useNotes("default");
+  // Use activeSessionId as workspaceId to isolate notes per session
+  const notesHook = useNotes(activeSessionId ?? "default");
 
   // ── Collaborative editing panel view ──────────────────────────────────
   const [taskPanelMode, setTaskPanelMode] = useState<"tasks" | "collab">("tasks");
@@ -55,6 +56,7 @@ export default function HomePage() {
   // ── Mobile sidebar toggle ──────────────────────────────────────────
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
+  const [showProviderDropdown, setShowProviderDropdown] = useState(false);
   const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -62,6 +64,9 @@ export default function HomePage() {
   const [crafterAgents, setCrafterAgents] = useState<CrafterAgent[]>([]);
   const [activeCrafterId, setActiveCrafterId] = useState<string | null>(null);
   const [concurrency, setConcurrency] = useState(1);
+
+  // ── Tool mode state ──────────────────────────────────────────────────
+  const [toolMode, setToolMode] = useState<"essential" | "full">("essential");
 
   // Track last processed update index for child agent routing
   const lastChildUpdateIndexRef = useRef(0);
@@ -73,6 +78,46 @@ export default function HomePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load global tool mode on mount
+  useEffect(() => {
+    fetch("/api/mcp/tools")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.globalMode) {
+          setToolMode(data.globalMode);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Toggle tool mode handler
+  const handleToolModeToggle = useCallback(async (checked: boolean) => {
+    const newMode = checked ? "essential" : "full";
+    setToolMode(newMode);
+    try {
+      await fetch("/api/mcp/tools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: newMode }),
+      });
+    } catch (error) {
+      console.error("Failed to toggle tool mode:", error);
+    }
+  }, []);
+
+  // Close provider dropdown when clicking outside
+  useEffect(() => {
+    if (!showProviderDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-provider-dropdown]')) {
+        setShowProviderDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showProviderDropdown]);
 
   // Load repo skills when repo selection changes
   useEffect(() => {
@@ -332,6 +377,8 @@ export default function HomePage() {
       const result = await acp.createSession(cwd, provider, undefined, role);
       if (result?.sessionId) {
         setActiveSessionId(result.sessionId);
+        // Clear tasks when creating a new session
+        setRoutaTasks([]);
         bumpRefresh();
       }
     },
@@ -343,6 +390,8 @@ export default function HomePage() {
       await ensureConnected();
       acp.selectSession(sessionId);
       setActiveSessionId(sessionId);
+      // Clear tasks when switching sessions
+      setRoutaTasks([]);
       bumpRefresh();
     },
     [acp, ensureConnected, bumpRefresh]
@@ -369,6 +418,7 @@ export default function HomePage() {
   }, [skillsHook, repoSelection?.path]);
 
   const handleAgentChange = useCallback((role: AgentRole) => {
+    console.log(`[handleAgentChange] Changing agent role to: ${role}`);
     setSelectedAgent(role);
     if (role === "ROUTA") {
       setShowAgentToast(true);
@@ -713,6 +763,22 @@ export default function HomePage() {
           <ProtocolBadge name="ACP" endpoint="/api/acp" />
         </div>
 
+        {/* Tool Mode Toggle */}
+        <label className="hidden md:flex items-center gap-1.5 cursor-pointer select-none" title={`Tool Mode: ${toolMode === "essential" ? "Essential (7 tools)" : "Full (34 tools)"}`}>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500">Full</span>
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={toolMode === "essential"}
+              onChange={(e) => handleToolModeToggle(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-7 h-3.5 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-purple-500 transition-colors" />
+            <div className="absolute left-0.5 top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform peer-checked:translate-x-3.5" />
+          </div>
+          <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">Essential</span>
+        </label>
+
         {/* MCP Tools link */}
         <a
           href="/mcp-tools"
@@ -754,18 +820,56 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Current provider indicator */}
+            {/* Provider selector */}
             {acp.selectedProvider && (
-              <div className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    acp.providers.find((p) => p.id === acp.selectedProvider)?.status === "available"
-                      ? "bg-green-500" : "bg-gray-400"
-                  }`} />
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
-                    {acp.providers.find((p) => p.id === acp.selectedProvider)?.name ?? acp.selectedProvider}
-                  </span>
-                </div>
+              <div className="relative mb-2" data-provider-dropdown>
+                <button
+                  type="button"
+                  onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                  className="w-full px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      acp.providers.find((p) => p.id === acp.selectedProvider)?.status === "available"
+                        ? "bg-green-500" : "bg-gray-400"
+                    }`} />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1 text-left">
+                      {acp.providers.find((p) => p.id === acp.selectedProvider)?.name ?? acp.selectedProvider}
+                    </span>
+                    <svg className={`w-3 h-3 text-gray-400 transition-transform ${showProviderDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
+
+                {/* Provider dropdown */}
+                {showProviderDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-50 max-h-64 overflow-y-auto">
+                    {acp.providers.filter((p) => p.status === "available").map((provider) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        onClick={() => {
+                          acp.setProvider(provider.id);
+                          setShowProviderDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2 text-xs transition-colors ${
+                          provider.id === acp.selectedProvider
+                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        <span className="font-medium truncate flex-1">{provider.name}</span>
+                      </button>
+                    ))}
+                    {acp.providers.filter((p) => p.status === "available").length === 0 && (
+                      <div className="px-3 py-3 text-xs text-gray-400 text-center">
+                        No providers available
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -867,7 +971,7 @@ export default function HomePage() {
                 connected={notesHook.connected}
                 onUpdateNote={notesHook.updateNote}
                 onDeleteNote={notesHook.deleteNote}
-                workspaceId="default"
+                workspaceId={activeSessionId ?? "default"}
               />
             ) : (
               <TaskPanel
