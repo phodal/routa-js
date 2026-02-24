@@ -11,7 +11,7 @@ import { NoteStore } from "../store/note-store";
 import { TaskStore } from "../store/task-store";
 import { createNote, Note, SPEC_NOTE_ID } from "../models/note";
 import { createTask as createTaskModel, TaskStatus } from "../models/task";
-import { extractTaskBlocks } from "../orchestration/task-block-parser";
+import { extractTaskBlocks, hasTaskBlocks } from "../orchestration/task-block-parser";
 import { ToolResult, successResult, errorResult } from "./tool-result";
 
 export class NoteTools {
@@ -110,6 +110,8 @@ export class NoteTools {
     workspaceId: string;
     content: string;
     title?: string;
+    /** If true, auto-convert @@@task blocks to Task records. Default: true for spec note */
+    autoConvertTasks?: boolean;
   }): Promise<ToolResult> {
     let note = await this.noteStore.get(params.noteId, params.workspaceId);
 
@@ -131,11 +133,33 @@ export class NoteTools {
     note.updatedAt = new Date();
     await this.saveNote(note, "agent");
 
+    // Auto-convert @@@task blocks if enabled (default: true for spec note)
+    const shouldAutoConvert = params.autoConvertTasks ?? (params.noteId === SPEC_NOTE_ID);
+    let convertedTasks: Array<{ taskId: string; noteId: string; title: string }> = [];
+
+    if (shouldAutoConvert && hasTaskBlocks(params.content)) {
+      const conversionResult = await this.convertTaskBlocks({
+        noteId: params.noteId,
+        workspaceId: params.workspaceId,
+      });
+
+      if (conversionResult.success && conversionResult.data) {
+        const data = conversionResult.data as { tasks?: Array<{ taskId: string; noteId: string; title: string }> };
+        convertedTasks = data.tasks ?? [];
+      }
+    }
+
     return successResult({
       noteId: note.id,
       title: note.title,
       contentLength: note.content.length,
       updatedAt: note.updatedAt.toISOString(),
+      // Include converted tasks if any were created
+      ...(convertedTasks.length > 0 && {
+        tasksCreated: convertedTasks.length,
+        tasks: convertedTasks,
+        hint: "Tasks auto-created from @@@task blocks. Use delegate_task_to_agent with these taskIds.",
+      }),
     });
   }
 

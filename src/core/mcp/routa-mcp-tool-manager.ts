@@ -15,7 +15,7 @@ import type { RoutaOrchestrator } from "../orchestration/orchestrator";
 
 /**
  * Tool registration mode for MCP server.
- * - "essential": Only 7 core Agent coordination tools (best for weak models)
+ * - "essential": 12 core coordination tools (Agent + Note) for Routa workflow
  * - "full": All 34 tools (Task, Agent, Note, Workspace, Git)
  */
 export type ToolMode = "essential" | "full";
@@ -33,7 +33,7 @@ export class RoutaMcpToolManager {
 
   /**
    * Set the tool registration mode.
-   * - "essential": Only 7 core Agent coordination tools
+   * - "essential": 12 core coordination tools (Agent + Note)
    * - "full": All tools
    */
   setToolMode(mode: ToolMode): void {
@@ -70,13 +70,13 @@ export class RoutaMcpToolManager {
 
   /**
    * Register coordination tools with the MCP server.
-   * In "essential" mode, only 7 core Agent tools are registered.
+   * In "essential" mode, 12 core coordination tools are registered (Agent + Note).
    * In "full" mode, all 34 tools are registered.
    */
   registerTools(server: McpServer): void {
     if (this.toolMode === "essential") {
-      // Essential mode: Only 7 core Agent coordination tools
-      // Best for weak models that struggle with too many tool choices
+      // Essential mode: 12 core coordination tools
+      // Agent tools (7)
       this.registerListAgents(server);
       this.registerReadAgentConversation(server);
       this.registerCreateAgent(server);
@@ -84,6 +84,12 @@ export class RoutaMcpToolManager {
       this.registerDelegateTaskToNewAgent(server);
       this.registerSendMessageToAgent(server);
       this.registerReportToParent(server);
+      // Note tools (5) - critical for Spec workflow and @@@task blocks
+      this.registerCreateNote(server);
+      this.registerReadNote(server);
+      this.registerListNotes(server);
+      this.registerSetNoteContent(server);
+      this.registerConvertTaskBlocks(server);
       return;
     }
 
