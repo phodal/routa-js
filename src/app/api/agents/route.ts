@@ -13,8 +13,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 
-const DEFAULT_WORKSPACE = "default";
-
 // Force dynamic - no caching for agent state
 export const dynamic = "force-dynamic";
 
@@ -22,8 +20,11 @@ export async function GET(request: NextRequest) {
   const system = getRoutaSystem();
   const id = request.nextUrl.searchParams.get("id");
   const summary = request.nextUrl.searchParams.has("summary");
-  const workspaceId =
-    request.nextUrl.searchParams.get("workspaceId") ?? DEFAULT_WORKSPACE;
+  const workspaceId = request.nextUrl.searchParams.get("workspaceId");
+
+  if (!workspaceId && !id) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
 
   const headers = {
     "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result.data, { headers });
   }
 
-  const result = await system.tools.listAgents(workspaceId);
+  const result = await system.tools.listAgents(workspaceId!);
   return NextResponse.json(result.data, { headers });
 }
 
@@ -48,10 +49,14 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const system = getRoutaSystem();
 
+  if (!body.workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
+
   const result = await system.tools.createAgent({
     name: body.name,
     role: body.role,
-    workspaceId: body.workspaceId ?? DEFAULT_WORKSPACE,
+    workspaceId: body.workspaceId,
     parentId: body.parentId,
     modelTier: body.modelTier,
   });

@@ -36,7 +36,7 @@ export default function HomePage() {
   const acp = useAcp();
   const skillsHook = useSkills();
   // Use activeSessionId as workspaceId to isolate notes per session
-  const notesHook = useNotes(activeSessionId ?? "default");
+  const notesHook = useNotes(activeSessionId ?? "");
 
   // ── Collaborative editing panel view ──────────────────────────────────
   const [taskPanelMode, setTaskPanelMode] = useState<"tasks" | "collab">("tasks");
@@ -1045,7 +1045,7 @@ export default function HomePage() {
                 connected={notesHook.connected}
                 onUpdateNote={notesHook.updateNote}
                 onDeleteNote={notesHook.deleteNote}
-                workspaceId={activeSessionId ?? "default"}
+                workspaceId={activeSessionId ?? ""}
               />
             ) : (
               <TaskPanel

@@ -36,7 +36,7 @@ export function CollaborativeTaskEditor({
   connected,
   onUpdateNote,
   onDeleteNote,
-  workspaceId = "default",
+  workspaceId,
 }: CollaborativeTaskEditorProps) {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);

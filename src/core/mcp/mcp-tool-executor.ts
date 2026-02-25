@@ -11,8 +11,6 @@ import { WorkspaceTools } from "@/core/tools/workspace-tools";
 import { getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { ToolMode } from "./routa-mcp-tool-manager";
 
-const DEFAULT_WORKSPACE_ID = "default";
-
 /**
  * Essential tools for weak models - minimum viable coordination.
  * Only 7 tools needed for basic multi-agent coordination.
@@ -34,7 +32,13 @@ export async function executeMcpTool(
   noteTools?: NoteTools,
   workspaceTools?: WorkspaceTools
 ) {
-  const workspace = (args.workspaceId as string) ?? DEFAULT_WORKSPACE_ID;
+  const workspace = args.workspaceId as string;
+  if (!workspace) {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ error: "workspaceId is required" }) }],
+      isError: true,
+    };
+  }
 
   switch (name) {
     // ── Task tools ────────────────────────────────────────────────────

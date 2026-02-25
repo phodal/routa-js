@@ -12,9 +12,13 @@ import { createNote, Note } from "@/core/models/note";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const workspaceId = searchParams.get("workspaceId") ?? "default";
+  const workspaceId = searchParams.get("workspaceId");
   const type = searchParams.get("type") as "spec" | "task" | "general" | null;
   const noteId = searchParams.get("noteId");
+
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
 
   const system = getRoutaSystem();
 
@@ -43,11 +47,15 @@ export async function POST(request: NextRequest) {
     noteId,
     title,
     content,
-    workspaceId = "default",
+    workspaceId,
     type = "general",
     metadata,
     source = "user",
   } = body;
+
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
 
   const system = getRoutaSystem();
   const store = system.noteStore;
@@ -87,10 +95,13 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const noteId = searchParams.get("noteId");
-  const workspaceId = searchParams.get("workspaceId") ?? "default";
+  const workspaceId = searchParams.get("workspaceId");
 
   if (!noteId) {
     return NextResponse.json({ error: "noteId is required" }, { status: 400 });
+  }
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
   }
 
   const system = getRoutaSystem();

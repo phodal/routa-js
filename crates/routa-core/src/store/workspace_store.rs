@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::db::Database;
 use crate::error::ServerError;
-use crate::models::workspace::{Workspace, WorkspaceStatus, DEFAULT_WORKSPACE_ID};
+use crate::models::workspace::{Workspace, WorkspaceStatus};
 
 pub struct WorkspaceStore {
     db: Database,
@@ -20,20 +20,16 @@ impl WorkspaceStore {
         self.db
             .with_conn_async(move |conn| {
                 conn.execute(
-                    "INSERT INTO workspaces (id, title, repo_path, branch, status, metadata, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    "INSERT INTO workspaces (id, title, status, metadata, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                      ON CONFLICT(id) DO UPDATE SET
                        title = excluded.title,
-                       repo_path = excluded.repo_path,
-                       branch = excluded.branch,
                        status = excluded.status,
                        metadata = excluded.metadata,
                        updated_at = excluded.updated_at",
                     rusqlite::params![
                         ws.id,
                         ws.title,
-                        ws.repo_path,
-                        ws.branch,
                         ws.status.as_str(),
                         serde_json::to_string(&ws.metadata).unwrap_or_default(),
                         ws.created_at.timestamp_millis(),
@@ -50,7 +46,7 @@ impl WorkspaceStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, repo_path, branch, status, metadata, created_at, updated_at
+                    "SELECT id, title, status, metadata, created_at, updated_at
                      FROM workspaces WHERE id = ?1",
                 )?;
                 stmt.query_row(rusqlite::params![id], |row| {
@@ -65,7 +61,7 @@ impl WorkspaceStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, repo_path, branch, status, metadata, created_at, updated_at
+                    "SELECT id, title, status, metadata, created_at, updated_at
                      FROM workspaces ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -81,13 +77,43 @@ impl WorkspaceStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, repo_path, branch, status, metadata, created_at, updated_at
+                    "SELECT id, title, status, metadata, created_at, updated_at
                      FROM workspaces WHERE status = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
                     .query_map(rusqlite::params![status_str], |row| Ok(row_to_workspace(row)))?
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(rows)
+            })
+            .await
+    }
+
+    pub async fn update_title(&self, id: &str, title: &str) -> Result<(), ServerError> {
+        let id = id.to_string();
+        let title = title.to_string();
+        let now = Utc::now().timestamp_millis();
+        self.db
+            .with_conn_async(move |conn| {
+                conn.execute(
+                    "UPDATE workspaces SET title = ?1, updated_at = ?2 WHERE id = ?3",
+                    rusqlite::params![title, now, id],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    pub async fn update_status(&self, id: &str, status: &str) -> Result<(), ServerError> {
+        let id = id.to_string();
+        let status = status.to_string();
+        let now = Utc::now().timestamp_millis();
+        self.db
+            .with_conn_async(move |conn| {
+                conn.execute(
+                    "UPDATE workspaces SET status = ?1, updated_at = ?2 WHERE id = ?3",
+                    rusqlite::params![status, now, id],
+                )?;
+                Ok(())
             })
             .await
     }
@@ -103,14 +129,12 @@ impl WorkspaceStore {
     }
 
     pub async fn ensure_default(&self) -> Result<Workspace, ServerError> {
-        if let Some(ws) = self.get(DEFAULT_WORKSPACE_ID).await? {
+        if let Some(ws) = self.get("default").await? {
             return Ok(ws);
         }
         let ws = Workspace::new(
-            DEFAULT_WORKSPACE_ID.to_string(),
+            "default".to_string(),
             "Default Workspace".to_string(),
-            None,
-            None,
             None,
         );
         self.save(&ws).await?;
@@ -121,18 +145,16 @@ impl WorkspaceStore {
 use rusqlite::Row;
 
 fn row_to_workspace(row: &Row<'_>) -> Workspace {
-    let metadata_str: String = row.get(5).unwrap_or_default();
+    let metadata_str: String = row.get(3).unwrap_or_default();
     let metadata: HashMap<String, String> =
         serde_json::from_str(&metadata_str).unwrap_or_default();
-    let created_ms: i64 = row.get(6).unwrap_or(0);
-    let updated_ms: i64 = row.get(7).unwrap_or(0);
+    let created_ms: i64 = row.get(4).unwrap_or(0);
+    let updated_ms: i64 = row.get(5).unwrap_or(0);
 
     Workspace {
         id: row.get(0).unwrap_or_default(),
         title: row.get(1).unwrap_or_default(),
-        repo_path: row.get(2).unwrap_or(None),
-        branch: row.get(3).unwrap_or(None),
-        status: WorkspaceStatus::from_str(&row.get::<_, String>(4).unwrap_or_default()),
+        status: WorkspaceStatus::from_str(&row.get::<_, String>(2).unwrap_or_default()),
         metadata,
         created_at: chrono::DateTime::from_timestamp_millis(created_ms)
             .unwrap_or_else(|| Utc::now()),

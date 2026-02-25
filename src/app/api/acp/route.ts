@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
         const agentResult = await system.tools.createAgent({
           name: `routa-coordinator-${sessionId.slice(0, 8)}`,
           role: AgentRole.ROUTA,
-          workspaceId: "default",
+          workspaceId: (p.workspaceId as string) ?? sessionId,
         });
 
         if (agentResult.success && agentResult.data) {
@@ -230,10 +230,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Persist session for UI listing
+      const workspaceId = (p.workspaceId as string) ?? sessionId;
       store.upsertSession({
         sessionId,
         cwd,
-        workspaceId: "default",
+        workspaceId,
         routaAgentId: routaAgentId ?? acpSessionId,
         provider,
         role: role ?? "CRAFTER",
@@ -250,7 +251,7 @@ export async function POST(request: NextRequest) {
         withMetadata(
           withWorkspaceId(
             createTraceRecord(sessionId, "session_start", { provider }),
-            "default"
+            workspaceId
           ),
           "cwd", cwd
         ),
@@ -308,7 +309,7 @@ export async function POST(request: NextRequest) {
             if (isFirstPrompt) {
               promptText = buildCoordinatorPrompt({
                 agentId: agent.id,
-                workspaceId: "default",
+                workspaceId: sessionRecord.workspaceId ?? sessionId,
                 userRequest: promptText,
               });
               store.markFirstPromptSent(sessionId);

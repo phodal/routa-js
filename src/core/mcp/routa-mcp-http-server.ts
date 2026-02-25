@@ -54,7 +54,7 @@ export class RoutaMcpHttpServer {
   >();
 
   constructor(
-    private readonly workspaceId: string = "default",
+    private readonly workspaceId: string,
     private readonly host: string = "127.0.0.1",
   ) {}
 

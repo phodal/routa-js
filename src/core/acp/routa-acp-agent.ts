@@ -268,19 +268,19 @@ async function dispatchTool(
   args: Record<string, unknown>
 ) {
   const tools = system.tools;
-  const defaultWs = async () => {
-    const ws = await system.workspaceStore.ensureDefault();
-    return ws.id;
-  };
+  const workspaceId = args.workspaceId as string | undefined;
+  if (!workspaceId) {
+    throw new Error("workspaceId is required");
+  }
 
   switch (name) {
     case "list_agents":
-      return tools.listAgents((args.workspaceId as string) ?? await defaultWs());
+      return tools.listAgents(workspaceId);
     case "create_agent":
       return tools.createAgent({
         name: args.name as string,
         role: args.role as string,
-        workspaceId: (args.workspaceId as string) ?? await defaultWs(),
+        workspaceId,
         parentId: args.parentId as string | undefined,
         modelTier: args.modelTier as string | undefined,
       });

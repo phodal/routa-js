@@ -301,7 +301,7 @@ async function handleCoordinationMethod(
   switch (method) {
     case "list_agents": {
       const p = params as { workspaceId?: string };
-      return await tools.listAgents(p.workspaceId || "default");
+      return await tools.listAgents(p.workspaceId || "");
     }
 
     case "create_agent": {
@@ -318,7 +318,7 @@ async function handleCoordinationMethod(
       return await tools.createAgent({
         name: p.name,
         role: p.role,
-        workspaceId: typeof p.workspaceId === "string" ? p.workspaceId : "default",
+        workspaceId: typeof p.workspaceId === "string" ? p.workspaceId : "",
       });
     }
 

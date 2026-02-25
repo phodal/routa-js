@@ -8,7 +8,7 @@
  * ```ts
  * import { rpc } from "@/client/rpc-client";
  *
- * const { agents } = await rpc.call("agents.list", { workspaceId: "default" });
+ * const { agents } = await rpc.call("agents.list", { workspaceId: "my-workspace-id" });
  * const agent = await rpc.call("agents.get", { id: "abc" });
  * ```
  */

@@ -61,7 +61,7 @@ export interface UseNotesReturn {
   deleteNote: (noteId: string) => Promise<void>;
 }
 
-export function useNotes(workspaceId: string = "default"): UseNotesReturn {
+export function useNotes(workspaceId: string): UseNotesReturn {
   const [notes, setNotes] = useState<NoteData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

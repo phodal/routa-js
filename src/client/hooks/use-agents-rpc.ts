@@ -47,7 +47,7 @@ export interface UseAgentsRpcReturn {
 }
 
 export function useAgentsRpc(
-  workspaceId: string = "default",
+  workspaceId: string,
 ): UseAgentsRpcReturn {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(false);

@@ -15,6 +15,9 @@ pub enum ServerError {
     #[error("Bad request: {0}")]
     BadRequest(String),
 
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -32,6 +35,7 @@ impl axum::response::IntoResponse for ServerError {
             ServerError::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
             ServerError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             ServerError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            ServerError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             ServerError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
         };
 

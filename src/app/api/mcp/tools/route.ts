@@ -4,8 +4,6 @@ import { executeMcpTool, getMcpToolDefinitions } from "@/core/mcp/mcp-tool-execu
 import { ToolMode } from "@/core/mcp/routa-mcp-tool-manager";
 import { setGlobalToolMode, getGlobalToolMode } from "@/core/mcp/tool-mode-config";
 
-const DEFAULT_WORKSPACE_ID = "default";
-
 /**
  * GET /api/mcp/tools - List all MCP tool definitions
  *
@@ -88,7 +86,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Unknown tool: ${name}` }, { status: 400 });
     }
 
-    const { system } = createRoutaMcpServer({ workspaceId: DEFAULT_WORKSPACE_ID, toolMode });
+    const workspaceId = (args.workspaceId as string) ?? (body.workspaceId as string);
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId is required in args or body" }, { status: 400 });
+    }
+
+    const { system } = createRoutaMcpServer({ workspaceId, toolMode });
     const result = await executeMcpTool(system.tools, name, args, system.noteTools, system.workspaceTools);
     return NextResponse.json(result);
   } catch (error) {

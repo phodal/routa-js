@@ -53,8 +53,6 @@ pub async fn get(state: &AppState, params: GetParams) -> Result<Workspace, RpcEr
 #[serde(rename_all = "camelCase")]
 pub struct CreateParams {
     pub title: String,
-    pub repo_path: Option<String>,
-    pub branch: Option<String>,
     pub metadata: Option<HashMap<String, String>>,
 }
 
@@ -67,8 +65,6 @@ pub async fn create(state: &AppState, params: CreateParams) -> Result<CreateResu
     let ws = Workspace::new(
         uuid::Uuid::new_v4().to_string(),
         params.title,
-        params.repo_path,
-        params.branch,
         params.metadata,
     );
 

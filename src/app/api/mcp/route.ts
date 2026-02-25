@@ -32,8 +32,6 @@ interface McpSession {
 
 const sessions = new Map<string, McpSession>();
 
-const DEFAULT_WORKSPACE_ID = "default";
-
 /**
  * Create a new MCP session: transport + MCP server + tool registrations.
  * Returns the transport so it can handle the current request.
@@ -63,7 +61,7 @@ async function createSession(
   });
 
   const { server } = createRoutaMcpServer({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId: process.env.ROUTA_WORKSPACE_ID ?? "unset",
     toolMode: getGlobalToolMode(),
   });
   await server.connect(transport);

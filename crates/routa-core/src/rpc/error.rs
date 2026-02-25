@@ -45,6 +45,7 @@ impl From<ServerError> for RpcError {
         match err {
             ServerError::NotFound(msg) => RpcError::NotFound(msg),
             ServerError::BadRequest(msg) => RpcError::BadRequest(msg),
+            ServerError::Conflict(msg) => RpcError::BadRequest(msg),
             ServerError::Database(msg) => RpcError::Internal(msg),
             ServerError::Internal(msg) => RpcError::Internal(msg),
         }

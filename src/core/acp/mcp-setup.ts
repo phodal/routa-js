@@ -186,7 +186,7 @@ function ensureMcpForAuggie(
           url: mcpEndpoint,
           type: "http",
           env: {
-            ROUTA_WORKSPACE_ID: workspaceId || "default",
+            ROUTA_WORKSPACE_ID: workspaceId || "",
           },
         },
       },
@@ -229,7 +229,7 @@ function ensureMcpForClaude(
         url: mcpEndpoint,
         type: "http",
         env: {
-          ROUTA_WORKSPACE_ID: workspaceId || "default",
+          ROUTA_WORKSPACE_ID: workspaceId || "",
         },
       },
     },
@@ -468,7 +468,7 @@ function ensureMcpForCopilot(
       url: mcpEndpoint,
       tools: ["*"],
       env: {
-        ROUTA_WORKSPACE_ID: workspaceId || "default",
+        ROUTA_WORKSPACE_ID: workspaceId || "",
       },
     };
 

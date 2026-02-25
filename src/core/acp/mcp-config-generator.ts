@@ -47,7 +47,7 @@ export interface McpServerConfig {
  * @returns MCP server configuration object
  */
 export function generateRoutaMcpConfig(config: RoutaMcpConfig): McpServerConfig {
-  const { routaServerUrl, workspaceId = "default" } = config;
+  const { routaServerUrl, workspaceId } = config;
 
   // Construct the MCP endpoint URL
   const mcpEndpoint = `${routaServerUrl}/api/mcp`;
@@ -124,7 +124,7 @@ export function getDefaultRoutaMcpConfig(workspaceId?: string): RoutaMcpConfig {
         return {
           routaServerUrl: `http://${host}:${port}`,
           mcpEndpoint: standaloneServer.mcpUrl,
-          workspaceId: workspaceId || process.env.ROUTA_WORKSPACE_ID || "default",
+          workspaceId: workspaceId || process.env.ROUTA_WORKSPACE_ID,
         };
       }
     } catch {

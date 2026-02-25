@@ -89,12 +89,59 @@ impl Database {
                 CREATE TABLE IF NOT EXISTS workspaces (
                     id              TEXT PRIMARY KEY,
                     title           TEXT NOT NULL,
-                    repo_path       TEXT,
-                    branch          TEXT,
                     status          TEXT NOT NULL DEFAULT 'active',
                     metadata        TEXT NOT NULL DEFAULT '{}',
                     created_at      INTEGER NOT NULL,
                     updated_at      INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS codebases (
+                    id              TEXT PRIMARY KEY,
+                    workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    repo_path       TEXT NOT NULL,
+                    branch          TEXT,
+                    label           TEXT,
+                    is_default      INTEGER NOT NULL DEFAULT 0,
+                    created_at      INTEGER NOT NULL,
+                    updated_at      INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_codebases_workspace ON codebases(workspace_id);
+
+                CREATE TABLE IF NOT EXISTS acp_sessions (
+                    id              TEXT PRIMARY KEY,
+                    name            TEXT,
+                    cwd             TEXT NOT NULL,
+                    workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    routa_agent_id  TEXT,
+                    provider        TEXT,
+                    role            TEXT,
+                    mode_id         TEXT,
+                    first_prompt_sent INTEGER DEFAULT 0,
+                    message_history TEXT NOT NULL DEFAULT '[]',
+                    created_at      INTEGER NOT NULL,
+                    updated_at      INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_acp_sessions_workspace ON acp_sessions(workspace_id);
+
+                CREATE TABLE IF NOT EXISTS skills (
+                    id              TEXT PRIMARY KEY,
+                    name            TEXT NOT NULL,
+                    description     TEXT NOT NULL DEFAULT '',
+                    source          TEXT NOT NULL,
+                    catalog_type    TEXT NOT NULL DEFAULT 'skillssh',
+                    files           TEXT NOT NULL DEFAULT '[]',
+                    license         TEXT,
+                    metadata        TEXT NOT NULL DEFAULT '{}',
+                    installs        INTEGER NOT NULL DEFAULT 0,
+                    created_at      INTEGER NOT NULL,
+                    updated_at      INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS workspace_skills (
+                    workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    skill_id        TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+                    installed_at    INTEGER NOT NULL,
+                    PRIMARY KEY (workspace_id, skill_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS agents (

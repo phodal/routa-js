@@ -24,7 +24,7 @@ let instance: RoutaMcpHttpServer | null = null;
  * Get the running MCP server instance, or start one if it doesn't exist.
  */
 export async function getOrStartMcpServer(
-  workspaceId: string = "default",
+  workspaceId: string,
 ): Promise<RoutaMcpHttpServer> {
   if (instance && instance.isRunning) {
     return instance;
