@@ -9,6 +9,7 @@ interface WorkspaceSwitcherProps {
   onSelect: (workspaceId: string) => void;
   onCreate: (title: string) => Promise<void>;
   loading?: boolean;
+  compact?: boolean;
 }
 
 export function WorkspaceSwitcher({
@@ -17,6 +18,7 @@ export function WorkspaceSwitcher({
   onSelect,
   onCreate,
   loading,
+  compact,
 }: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -56,18 +58,32 @@ export function WorkspaceSwitcher({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors max-w-[180px]"
+        className={compact
+          ? "flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shrink-0"
+          : "flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors max-w-[180px]"
+        }
         title={active?.title ?? "Select workspace"}
       >
-        <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-        </svg>
-        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1 text-left">
-          {loading ? "..." : (active?.title ?? "Select workspace")}
-        </span>
-        <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        {compact ? (
+          <>
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+            </svg>
+            Switch
+          </>
+        ) : (
+          <>
+            <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+            </svg>
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1 text-left">
+              {loading ? "..." : (active?.title ?? "Select workspace")}
+            </span>
+            <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </>
+        )}
       </button>
 
       {open && (

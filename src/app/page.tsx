@@ -912,25 +912,31 @@ export default function HomePage() {
           style={{ width: `${leftSidebarWidth}px` }}
         >
           {/* Workspace section */}
-          <div className="p-2 border-b border-gray-100 dark:border-gray-800">
-            <div className="px-1 mb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Workspace</div>
+          <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+              </svg>
+              <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
+                {workspacesHook.workspaces.find((w) => w.id === activeWorkspaceId)?.title ?? "No workspace"}
+              </span>
+              {codebases.length > 0 && repoSelection && (
+                <>
+                  <span className="text-gray-300 dark:text-gray-600">/</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {repoSelection.name ?? repoSelection.path.split("/").pop()}
+                  </span>
+                </>
+              )}
+            </div>
             <WorkspaceSwitcher
               workspaces={workspacesHook.workspaces}
               activeWorkspaceId={activeWorkspaceId}
               onSelect={handleWorkspaceSelect}
               onCreate={handleWorkspaceCreate}
               loading={workspacesHook.loading}
+              compact
             />
-            {codebases.length > 0 && (
-              <div className="mt-1">
-                <div className="px-1 mb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Repository</div>
-                <CodebasePicker
-                  codebases={codebases}
-                  selectedRepoPath={repoSelection?.path ?? null}
-                  onSelect={handleCodebaseSelect}
-                />
-              </div>
-            )}
           </div>
 
           {/* Sessions header + New Session */}
