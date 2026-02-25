@@ -155,10 +155,11 @@ export function QuickStartInput({
   const selectedProviderInfo = acp.providers.find((p) => p.id === acp.selectedProvider);
 
   // Group providers by source and availability (same as tiptap-input)
+  // Use optional chaining and coalescing for safety
   const builtinAvailable = acp.providers.filter((p) => p.source === "static" && p.status === "available");
-  const builtinUnavailable = acp.providers.filter((p) => p.source === "static" && p.status !== "available");
+  const builtinUnavailable = acp.providers.filter((p) => p.source === "static" && (p.status === "unavailable" || p.status === "checking"));
   const registryAvailable = acp.providers.filter((p) => p.source === "registry" && p.status === "available");
-  const registryUnavailable = acp.providers.filter((p) => p.source === "registry" && p.status !== "available");
+  const registryUnavailable = acp.providers.filter((p) => p.source === "registry" && (p.status === "unavailable" || p.status === "checking"));
 
   return (
     <div className={`flex flex-col gap-4 ${compact ? "max-w-xl" : "max-w-2xl"} mx-auto`}>

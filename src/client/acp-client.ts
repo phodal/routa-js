@@ -145,16 +145,26 @@ export class BrowserAcpClient {
   /**
    * List available ACP providers from the backend.
    * @param check - If true, check command availability (slower). If false, return immediately with "checking" status.
+   * @param includeRegistry - If true, include registry providers (slower). If false, only local providers.
    */
-  async listProviders(check: boolean = false): Promise<AcpProviderInfo[]> {
-    // Use new fast API endpoint
-    const url = check 
-      ? `${this.baseUrl}/api/providers?check=true`
-      : `${this.baseUrl}/api/providers`;
-    
-    const response = await fetch(url);
+  async listProviders(check: boolean = false, includeRegistry: boolean = false): Promise<AcpProviderInfo[]> {
+    const params = new URLSearchParams();
+    if (check) params.set("check", "true");
+    if (includeRegistry) params.set("registry", "true");
+
+    const response = await fetch(`${this.baseUrl}/api/providers?${params}`);
     const data = await response.json();
-    
+
+    return Array.isArray(data.providers) ? data.providers : [];
+  }
+
+  /**
+   * Load registry providers asynchronously after local providers are loaded.
+   * This is useful for showing local providers first, then loading registry in background.
+   */
+  async loadRegistryProviders(): Promise<AcpProviderInfo[]> {
+    const response = await fetch(`${this.baseUrl}/api/providers?registry=true`);
+    const data = await response.json();
     return Array.isArray(data.providers) ? data.providers : [];
   }
 

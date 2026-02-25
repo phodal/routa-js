@@ -102,10 +102,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       const client = new BrowserAcpClient(baseUrl);
 
       await client.initialize();
-      
-      // Fast path: Load providers without checking (instant)
-      const fastProviders = await client.listProviders(false);
-      
+
+      // Fast path: Load only local providers (instant, < 10ms)
+      const localProviders = await client.listProviders(false, false);
+
       client.onUpdate((update) => {
         setState((s) => ({
           ...s,
@@ -118,18 +118,32 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       setState((s) => ({
         ...s,
         connected: true,
-        providers: fastProviders,
+        providers: localProviders,
         loading: false,
       }));
 
-      // Background: Check provider status and update
-      client.listProviders(true).then((checkedProviders) => {
+      // Background task 1: Check local provider status
+      client.listProviders(true, false).then((checkedLocalProviders) => {
         setState((s) => ({
           ...s,
-          providers: checkedProviders,
+          providers: checkedLocalProviders,
         }));
       }).catch((err) => {
-        logRuntime("warn", "useAcp.connect", "Failed to check provider status", err);
+        logRuntime("warn", "useAcp.connect", "Failed to check local provider status", err);
+      });
+
+      // Background task 2: Load registry providers (with timeout protection)
+      // This runs in parallel and adds registry providers when ready
+      client.loadRegistryProviders().then((registryProviders) => {
+        if (registryProviders.length > 0) {
+          setState((s) => ({
+            ...s,
+            providers: [...s.providers, ...registryProviders],
+          }));
+        }
+      }).catch((err) => {
+        // Registry load failed (timeout or network error) - not critical
+        logRuntime("info", "useAcp.connect", "Registry providers unavailable (network/timeout)", err);
       });
     } catch (err) {
       logRuntime("error", "useAcp.connect", "Failed to connect ACP client", err);
