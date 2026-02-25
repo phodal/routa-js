@@ -887,6 +887,178 @@ const sessionOptions = {
 
 ---
 
+## 11. 设置变更追踪（ClaudeSettingsChangeTracker）
+
+会话启动后，插件会持续监控 Claude 相关配置文件的变更。一旦检测到变更，下次 `invoke` 时会自动重启会话（保持 `resume` 连续性）。
+
+### 11.1 监控的文件路径
+
+```typescript
+// _createSettingsChangeTracker() 中注册的三类路径解析器
+
+// 1. CLAUDE.md 指令文件
+[
+  "~/.claude/CLAUDE.md",
+  "<workspace>/.claude/CLAUDE.md",
+  "<workspace>/.claude/CLAUDE.local.md",
+  "<workspace>/CLAUDE.md",
+  "<workspace>/CLAUDE.local.md",
+]
+
+// 2. 配置文件
+[
+  "~/.claude/settings.json",
+  "<workspace>/.claude/settings.json",
+  "<workspace>/.claude/settings.local.json",
+]
+
+// 3. Agents 目录（监控 .md 文件）
+[
+  "~/.claude/agents/",
+  "<workspace>/.claude/agents/",
+]
+```
+
+### 11.2 变更检测机制
+
+```typescript
+// 会话启动后立即拍快照
+await this._settingsChangeTracker.takeSnapshot();  // 记录所有文件的 mtime
+
+// 每次 invoke 前检查
+if (this._queryGenerator && await this._settingsChangeTracker.hasChanges()) {
+  this.logService.trace("[ClaudeCodeSession] Settings files changed, restarting session with resume");
+  this._restartSession();  // 中止当前进程，下次 invoke 重新启动（resume 保持）
+}
+```
+
+`hasChanges()` 通过比较文件 mtime 来判断是否有变更，`_restartSession()` 只重置 `_queryGenerator` 和 `_abortController`，不清空 `sessionId`，因此下次启动时仍会传入 `resume: this.sessionId`。
+
+---
+
+## 12. SDK 内置 Hooks 系统
+
+插件通过 `olt()` 实例化 hooks，通过 `sA()` 注册内置 hook 处理器。这些 hooks 在 `_buildHooks()` 中与 EditTracker hooks 合并后传给 SDK。
+
+### 12.1 内置 Hook 事件列表
+
+| Hook 事件 | 触发时机 | 插件行为 |
+|-----------|---------|---------|
+| `Notification` | Claude 发出通知 | 记录通知日志 |
+| `UserPromptSubmit` | 用户提交 prompt | 设置 `capturingToken`（用于请求日志关联） |
+| `Stop` | 会话停止 | 清除 `capturingToken` |
+| `PreCompact` | 触发上下文压缩前 | 记录压缩触发日志 |
+| `PermissionRequest` | Claude 请求权限 | 记录权限请求日志 |
+| `SessionStart` | 会话开始 | 记录会话生命周期日志 |
+| `SessionEnd` | 会话结束 | 记录会话生命周期日志 |
+| `SubagentStart` | 子 agent 启动 | 记录子 agent 生命周期日志 |
+| `SubagentStop` | 子 agent 停止 | 记录子 agent 生命周期日志 |
+| `PreToolUse` | 工具调用前 | 记录工具调用前日志 |
+| `PostToolUse` | 工具调用后 | 记录工具调用结果；**EnterPlanMode/ExitPlanMode 在此切换 `permissionMode`** |
+| `PostToolUseFailure` | 工具调用失败 | 记录工具调用失败日志 |
+
+### 12.2 Plan Mode 切换
+
+`PostToolUse` hook 中有一个特殊逻辑：当工具名为 `EnterPlanMode` 或 `ExitPlanMode` 时，会调用 `_setPermissionMode()` 切换权限模式：
+
+```typescript
+// PostToolUse hook 中
+if (toolName === "EnterPlanMode") {
+  await this._setPermissionMode("plan");
+} else if (toolName === "ExitPlanMode") {
+  await this._setPermissionMode("acceptEdits");
+}
+```
+
+这意味着 Plan Mode 的进入/退出是通过工具调用来驱动的，而非独立的 API。
+
+---
+
+## 13. 模型选择的实际实现（ClaudeCodeModels）
+
+### 13.1 从 Copilot 端点过滤 Claude 模型
+
+```typescript
+// ClaudeCodeModels（混淆名 oZ）的实现
+async getModels(): Promise<ClaudeModel[]> {
+  const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
+
+  // 过滤条件：apiType === "messages" 且 family/model 包含 "claude"
+  const claudeEndpoints = allEndpoints.filter(ep =>
+    ep.apiType === "messages" &&
+    (ep.family?.includes("claude") || ep.model?.includes("claude"))
+  );
+
+  // 按 family 去重，保留版本最高的端点
+  const familyMap = new Map<string, Endpoint>();
+  for (const ep of claudeEndpoints) {
+    const existing = familyMap.get(ep.family);
+    if (!existing || compareVersions(ep.version, existing.version) > 0) {
+      familyMap.set(ep.family, ep);
+    }
+  }
+
+  return Array.from(familyMap.values()).map(ep => ({
+    id: ep.model,
+    name: ep.name,
+    family: ep.family,
+  }));
+}
+```
+
+### 13.2 默认模型选择
+
+```typescript
+// 优先选 sonnet，存储在 globalState
+async getDefaultModel(): Promise<string> {
+  const stored = this.globalState.get("github.copilot.claudeCode.sessionModel");
+  if (stored) return stored;
+
+  const models = await this.getModels();
+  // 优先选 sonnet
+  const sonnet = models.find(m => m.family?.includes("sonnet"));
+  return sonnet?.id ?? models[0]?.id;
+}
+```
+
+### 13.3 Family 字符串解析
+
+```typescript
+// _parseFamilyString() 解析 "claude-<family>-<version>" 格式
+// 例如：
+// "claude-sonnet-4"   → family: "sonnet", version: "4"
+// "claude-opus-4-5"   → family: "opus",   version: "4-5"
+// "claude-haiku-4"    → family: "haiku",  version: "4"
+```
+
+---
+
+## 14. result 消息的错误处理
+
+`handleResultMessage()` 对三种 `subtype` 的处理：
+
+```typescript
+handleResultMessage(message: ResultMessage, stream: ChatResponseStream) {
+  if (message.subtype === "error_max_turns") {
+    // 显示 progress 提示，不抛出异常，会话可继续
+    stream.progress(l10n.t("Maximum turns reached ({0})", message.num_turns));
+
+  } else if (message.subtype === "error_during_execution") {
+    // 抛出自定义错误，触发 _cleanup()，会话终止
+    throw new TPe(l10n.t("Error during execution"));
+    // TPe 是 class TPe extends Error {}，用于区分执行错误和其他错误
+
+  } else if (message.subtype === "success") {
+    // 无操作，由 _processMessages() 中的 deferred.complete() 处理
+    // 即：this._promptQueue.shift().deferred.complete()
+  }
+}
+```
+
+关键区别：`error_max_turns` 只是提示，不终止会话；`error_during_execution` 会抛出异常，触发 `_cleanup()`，清空队列并重置所有状态。
+
+---
+
 ## 参考
 
 - 插件版本：`copilot-chat` v0.37.8
