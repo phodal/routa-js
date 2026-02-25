@@ -360,26 +360,133 @@ async _processMessages() {
   }
 }
 
-handleAssistantMessage(message, stream, pendingToolUses) {
-  for (const content of message.message.content) {
-    if (content.type === "text") {
-      stream.markdown(content.text);                    // 渲染 Markdown
-    } else if (content.type === "thinking") {
-      stream.push(new ThinkingPart(content.thinking));  // 渲染思考过程
-    } else if (content.type === "tool_use") {
-      pendingToolUses.set(content.id, content);         // 暂存，等待结果
+// _assistantMessageToResponse（混淆还原：wJ._assistantMessageToResponse）
+_assistantMessageToResponse(message, toolContext) {
+  const parts = compact(message.content.map(content => {
+    if (content.type === "text")
+      return new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(content.text));
+    if (content.type === "thinking")
+      return new vscode.ChatResponseThinkingProgressPart(content.thinking);
+    if (content.type === "tool_use") {
+      // 暂存未处理的 tool_use，等待对应的 tool_result
+      toolContext.unprocessedToolCalls.set(content.id, content);
+      // 按 tool 名称分发，生成对应的 ToolInvocation 对象
+      const invocation = createToolInvocation(content);  // U2e()
+      if (invocation) toolContext.pendingToolInvocations.set(content.id, invocation);
+      return invocation;
     }
-  }
-}
-
-handleUserMessage(message, stream, pendingToolUses, ...) {
-  for (const content of message.message.content) {
-    if (content.type === "tool_result") {
-      this.processToolResult(content, stream, pendingToolUses, ...);
-    }
-  }
+  }));
+  return new vscode.ChatResponseTurn2(parts, {}, "");
 }
 ```
+
+### 4.4 tool_use 按工具类型的差异化渲染
+
+`tool_use` 内容不是简单地统一渲染，而是通过 `U2e()` 函数按工具名称做 switch-case 分发，为每种工具生成不同的 `ToolInvocation` 对象（`rS` 类实例），携带不同的 `invocationMessage` 和 `toolSpecificData`：
+
+```typescript
+// U2e() —— tool_use 渲染分发器
+function createToolInvocation(toolUse: ToolUseContent): ToolInvocation | undefined {
+  const invocation = new ToolInvocation(toolUse.name, toolUse.id, /*confirmed=*/false);
+  invocation.isConfirmed = true;
+
+  switch (toolUse.name) {
+    // ── Bash：特殊处理，渲染为终端命令行 UI ──
+    case "Bash":
+      invocation.invocationMessage = "";
+      invocation.toolSpecificData = {
+        commandLine: { original: toolUse.input?.command },
+        language: "bash",
+      };
+      break;
+
+    // ── 文件读取类：显示文件路径链接 ──
+    case "Read":
+      const filePath = toolUse.input?.file_path ?? "";
+      invocation.invocationMessage = new MarkdownString(
+        l10n.t("Read {0}", filePath ? toFileLink(filePath) : "")
+      );
+      break;
+
+    // ── LS：同 Read，显示目录路径 ──
+    case "LS":
+      const dirPath = toolUse.input?.path ?? "";
+      invocation.invocationMessage = new MarkdownString(
+        l10n.t("Read {0}", dirPath ? toFileLink(dirPath) : "")
+      );
+      break;
+
+    // ── Glob：显示 glob 模式 ──
+    case "Glob":
+      invocation.invocationMessage = new MarkdownString(
+        l10n.t("Searched for files matching `{0}`", toolUse.input?.pattern ?? "")
+      );
+      break;
+
+    // ── Grep：显示正则模式 ──
+    case "Grep":
+      invocation.invocationMessage = new MarkdownString(
+        l10n.t("Searched for regex `{0}`", toolUse.input?.pattern ?? "")
+      );
+      break;
+
+    // ── Edit / MultiEdit / Write：完全跳过，不渲染 ──
+    // 这些工具由 EditTracker（_onWillEditTool/_onDidEditTool）通过
+    // vscode.ChatResponseStream.externalEdit() 单独处理，展示 diff UI
+    case "Edit":
+    case "MultiEdit":
+    case "Write":
+      return undefined;  // 不生成 ToolInvocation
+
+    // ── ExitPlanMode：显示 Claude 的计划内容 ──
+    case "ExitPlanMode":
+      invocation.invocationMessage = l10n.t(
+        "Here is Claude's plan:\n{0}", toolUse.input?.plan ?? ""
+      );
+      break;
+
+    // ── Task：显示子任务描述 ──
+    case "Task":
+      invocation.invocationMessage = new MarkdownString(
+        l10n.t('Completed Task: "{0}"', toolUse.input?.description ?? "")
+      );
+      break;
+
+    // ── TodoWrite：完全跳过，不渲染 ──
+    // 由插件自己拦截并同步到 VS Code 的 TODO 面板
+    case "TodoWrite":
+      return undefined;
+
+    // ── 其他所有工具（WebFetch、WebSearch、Skill 等）：通用渲染 ──
+    default:
+      invocation.invocationMessage = l10n.t("Used tool: {0}", toolUse.name);
+      break;
+  }
+
+  return invocation;
+}
+
+// 辅助：将文件路径转为 VS Code 可点击的 Markdown 链接
+function toFileLink(filePath: string): string {
+  return `[](${vscode.Uri.file(filePath).toString()})`;
+}
+```
+
+各工具的渲染策略汇总：
+
+| 工具名 | 渲染策略 | UI 表现 |
+|--------|----------|---------|
+| `Bash` | `toolSpecificData.commandLine` | 终端命令行专属 UI，显示命令内容 |
+| `Read` / `LS` | `invocationMessage` = 文件链接 | 可点击的文件路径 |
+| `Glob` | `invocationMessage` = glob 模式 | 显示搜索模式 |
+| `Grep` | `invocationMessage` = 正则模式 | 显示搜索模式 |
+| `Edit` / `MultiEdit` / `Write` | 返回 `undefined`，跳过 | 由 `EditTracker` 接管，展示 diff |
+| `ExitPlanMode` | `invocationMessage` = 计划文本 | 显示 Claude 的完整计划 |
+| `Task` | `invocationMessage` = 任务描述 | 显示子任务描述 |
+| `TodoWrite` | 返回 `undefined`，跳过 | 同步到 VS Code TODO 面板 |
+| 其他（`WebFetch` 等） | `invocationMessage` = 工具名 | 通用 "Used tool: xxx" |
+
+**关键设计**：`Edit`/`Write`/`TodoWrite` 这三类工具返回 `undefined`，完全绕过 `ToolInvocation` 渲染路径，由插件的其他机制（`EditTracker` / TODO 同步）单独处理，避免重复展示。
 
 ### 4.4 Prompt 输入格式
 
