@@ -26,8 +26,7 @@ import { json } from "@codemirror/lang-json";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { ViewPlugin } from "@codemirror/view";
-import { lineNumbers } from "@codemirror/gutter";
+import { ViewPlugin, lineNumbers } from "@codemirror/view";
 
 // ─── Language Support ───────────────────────────────────────────────────────
 
