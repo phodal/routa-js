@@ -1259,6 +1259,7 @@ export function ChatPanel({
                     </button>
                   </div>
                 </div>
+                )
               )}
               {visibleMessages.map((msg) => (
                 <MessageBubble key={msg.id} message={msg} />

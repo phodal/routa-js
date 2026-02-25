@@ -961,13 +961,15 @@ export default function HomePage() {
           {/* Sessions header + New Session */}
           <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
             <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sessions</span>
-            <button
-              onClick={() => handleCreateSession(acp.selectedProvider)}
-              disabled={acp.providers.length === 0 || !acp.selectedProvider}
-              className="px-2 py-0.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              + New
-            </button>
+            {activeSessionId && (
+              <button
+                onClick={() => handleCreateSession(acp.selectedProvider)}
+                disabled={acp.providers.length === 0 || !acp.selectedProvider}
+                className="px-2 py-0.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                + New
+              </button>
+            )}
           </div>
 
           {/* Sessions + Skills */}
