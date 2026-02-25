@@ -85,6 +85,31 @@ npm run dev
 
 Visit `http://localhost:3000` to access the web interface.
 
+### Docker Deployment
+
+```bash
+# Build and start with SQLite (no external database required)
+docker compose up --build
+```
+
+To use PostgreSQL instead, create a `.env` file in the project root:
+
+```dotenv
+# .env
+ROUTA_DB_DRIVER=postgres
+DATABASE_URL=postgresql://routa:routa_secret@postgres:5432/routa
+POSTGRES_PASSWORD=routa_secret
+```
+
+Then start with the `postgres` profile (starts a bundled Postgres container):
+
+```bash
+docker compose --profile postgres up --build
+```
+
+The service is available at `http://localhost:3000`.
+Health check: `http://localhost:3000/api/health`
+
 ## 🏗 Architecture
 
 ```mermaid

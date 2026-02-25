@@ -209,6 +209,27 @@ components:
 # API Paths
 # ─────────────────────────────────────────────────────────
 paths:
+  # ── Health ──
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Health check — returns service status
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, timestamp]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
   # ── Agents ──
   /api/agents:
     get:
