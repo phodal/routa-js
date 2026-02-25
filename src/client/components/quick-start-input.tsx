@@ -145,17 +145,16 @@ export function QuickStartInput({
     const result = await acp.createSession(cwd, undefined, undefined, selectedRole, wsId, model || undefined);
 
     if (result?.sessionId) {
-      // Send the initial prompt
-      await acp.prompt(input);
-
-      // Navigate to the new session
       const url = wsId ? `/${wsId}/${result.sessionId}` : `/${result.sessionId}`;
-      startTransition(() => {
-        router.push(url);
-      });
+      const promptText = input;
 
-      onSessionCreated?.(result.sessionId);
+      // Clear state and navigate FIRST
       setInput("");
+      onSessionCreated?.(result.sessionId);
+      router.push(url);
+
+      // Send the initial prompt AFTER navigation (don't await)
+      acp.prompt(promptText);
     }
   }, [input, acp, repoSelection, selectedWorkspaceId, selectedRole, model, router, onSessionCreated, startTransition]);
 
