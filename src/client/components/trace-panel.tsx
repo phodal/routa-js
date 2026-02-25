@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TraceRecord } from "@/core/trace";
+import { CodeBlock } from "./code-block";
 
 interface TracePanelProps {
   sessionId: string | null;
@@ -108,25 +109,54 @@ function tryParseJson(s: string): unknown | null {
   }
 }
 
-/** Render tool output: JSON tree if parseable, otherwise plain pre */
+/** Render tool output: JSON tree if parseable, otherwise code block */
 function ToolOutput({ output }: { output: string }) {
   const parsed = useMemo(() => tryParseJson(output), [output]);
-  const [mode, setMode] = useState<"tree" | "raw">("tree");
+  const [mode, setMode] = useState<"tree" | "raw" | "code">("code");
+  const isLarge = output.length > 500;
 
-  if (!parsed)
+  if (!parsed) {
+    // Non-JSON output - use CodeBlock for syntax highlighting
     return (
-      <pre className="px-2 py-1.5 text-[10px] font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words bg-white dark:bg-gray-900/40">
-        {output}
-      </pre>
+      <div>
+        <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+          <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+            Output
+          </span>
+          {isLarge && (
+            <span className="text-[9px] text-gray-400 dark:text-gray-500">
+              {output.length} chars
+            </span>
+          )}
+        </div>
+        <CodeBlock
+          content={output}
+          language="auto"
+          variant="simple"
+          className="!border-0 !rounded-none"
+        />
+      </div>
     );
+  }
 
+  // JSON output - offer tree/raw/code views
   return (
     <div>
       <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
         <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-          Output
+          Output (JSON)
         </span>
         <div className="flex gap-1">
+          <button
+            onClick={() => setMode("code")}
+            className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${
+              mode === "code"
+                ? "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300"
+                : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            }`}
+          >
+            Code
+          </button>
           <button
             onClick={() => setMode("tree")}
             className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${
@@ -153,6 +183,14 @@ function ToolOutput({ output }: { output: string }) {
         <div className="px-2 py-1.5 text-[10px] font-mono bg-white dark:bg-gray-900/40 overflow-auto">
           <JsonNode value={parsed} depth={0} />
         </div>
+      ) : mode === "code" ? (
+        <CodeBlock
+          content={JSON.stringify(parsed, null, 2)}
+          language="json"
+          filename="output.json"
+          variant={isLarge ? "rich" : "simple"}
+          className="!border-0 !rounded-none"
+        />
       ) : (
         <pre className="px-2 py-1.5 text-[10px] font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words bg-white dark:bg-gray-900/40">
           {output}
