@@ -698,7 +698,7 @@ export default function HomePage() {
   }, []);
 
   const hasCollabNotes = notesHook.notes.some((n) => n.metadata.type === "task" || n.metadata.type === "spec");
-  const showTaskPanel = routaTasks.length > 0 || crafterAgents.length > 0 || hasCollabNotes;
+  const showTaskPanel = true; // Always show right sidebar
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
