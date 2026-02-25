@@ -150,6 +150,8 @@ interface CodeViewerProps {
   showCopyButton?: boolean;
   /** Initial collapsed state */
   initiallyCollapsed?: boolean;
+  /** Wrap long lines instead of horizontal scroll (default: false) */
+  wordWrap?: boolean;
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────
@@ -163,6 +165,7 @@ export function CodeViewer({
   showLineNumbers = true,
   showCopyButton = true,
   initiallyCollapsed = false,
+  wordWrap = false,
 }: CodeViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
@@ -198,6 +201,10 @@ export function CodeViewer({
         "&": { maxHeight },
       }),
     ];
+
+    if (wordWrap) {
+      extensions.push(EditorView.lineWrapping);
+    }
 
     if (showLineNumbers) {
       extensions.push(lineNumbersExtension);

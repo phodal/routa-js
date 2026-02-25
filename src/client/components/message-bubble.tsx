@@ -2,6 +2,7 @@ import React, {useState} from "react";
 import {TerminalBubble} from "@/client/components/terminal/terminal-bubble";
 import {ChatMessage, PlanEntry} from "@/client/components/chat-panel";
 import {MarkdownViewer} from "@/client/components/markdown/markdown-viewer";
+import {CodeViewer} from "@/client/components/codemirror/code-viewer";
 
 export function MessageBubble({message}: { message: ChatMessage }) {
     const {role} = message;
@@ -278,8 +279,11 @@ function extractOutputFromContent(content: string, toolName?: string): string {
     const outputMarker = "\n\nOutput:\n";
     const idx = content.indexOf(outputMarker);
     if (idx >= 0) return content.slice(idx + outputMarker.length);
-    if (toolName && content.startsWith(toolName + "\n\n")) return content.slice(toolName.length + 2);
-    if (content.startsWith("Input:\n") || content.includes("(streaming parameters...)")) return "";
+    // Content is still input/streaming phase — no output yet
+    if (content.includes("(streaming parameters...)")) return "";
+    if (content.startsWith("Input:\n")) return "";
+    if (content.includes("\n\nInput:\n")) return "";
+    if (toolName && content.startsWith(toolName + "\n\n")) return "";
     return content;
 }
 
@@ -331,9 +335,14 @@ function ToolBubble({
                     {hasInput && (
                         <div className="px-2.5 py-2">
                             <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Input</div>
-                            <pre className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-32 overflow-y-auto">
-                                {JSON.stringify(rawInput, null, 2)}
-                            </pre>
+                            <CodeViewer
+                                code={JSON.stringify(rawInput, null, 2)}
+                                language="json"
+                                maxHeight="200px"
+                                showLineNumbers={false}
+                                showCopyButton={false}
+                                wordWrap={true}
+                            />
                         </div>
                     )}
                     {hasInput && hasOutput && <div className={`border-t ${styling.borderClass}`}/>}
