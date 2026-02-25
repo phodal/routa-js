@@ -469,13 +469,13 @@ export default function HomePage() {
     [acp, ensureConnected, bumpRefresh, activeSessionId, deleteEmptySession]
   );
 
-  const ensureSessionForChat = useCallback(async (cwd?: string, provider?: string, modeId?: string): Promise<string | null> => {
+  const ensureSessionForChat = useCallback(async (cwd?: string, provider?: string, modeId?: string, model?: string): Promise<string | null> => {
     await ensureConnected();
     if (activeSessionId) return activeSessionId;
     // Always pass the selected role
     const role = selectedAgent;
-    console.log(`[ensureSessionForChat] Creating session: provider=${provider ?? acp.selectedProvider}, role=${role}`);
-    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId, role, activeWorkspaceId ?? undefined);
+    console.log(`[ensureSessionForChat] Creating session: provider=${provider ?? acp.selectedProvider}, role=${role}, model=${model}`);
+    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId, role, activeWorkspaceId ?? undefined, model);
     if (result?.sessionId) {
       setActiveSessionId(result.sessionId);
       bumpRefresh();

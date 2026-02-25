@@ -176,6 +176,10 @@ async fn acp_rpc(
                 .get("role")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_uppercase());
+            let model = params
+                .get("model")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
 
             let session_id = uuid::Uuid::new_v4().to_string();
 
@@ -195,6 +199,7 @@ async fn acp_rpc(
                     "default".to_string(),
                     provider.clone(),
                     role.clone(),
+                    model.clone(),
                 )
                 .await
             {

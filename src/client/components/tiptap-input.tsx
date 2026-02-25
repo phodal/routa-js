@@ -424,6 +424,8 @@ export interface InputContext {
   mode?: string;
   /** Files referenced via @ mention */
   files?: FileReference[];
+  /** Model to use for this session (provider-specific, e.g. "anthropic/claude-3-5-sonnet") */
+  model?: string;
 }
 
 export interface UsageInfo {
@@ -469,6 +471,8 @@ interface TiptapInputProps {
   agentRole?: string;
   /** Usage info from last completion to display in the input area */
   usageInfo?: UsageInfo | null;
+  /** Fetch available models for a provider (returns model IDs like "anthropic/claude-3-5-sonnet") */
+  onFetchModels?: (provider: string) => Promise<string[]>;
 }
 
 export function TiptapInput({
@@ -488,6 +492,7 @@ export function TiptapInput({
   repoSelection,
   onRepoChange,
   usageInfo,
+  onFetchModels,
 }: TiptapInputProps) {
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
@@ -495,6 +500,16 @@ export function TiptapInput({
   const [dropdownPos, setDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
   const [claudeMode, setClaudeMode] = useState<"acceptEdits" | "plan">("acceptEdits");
   const [opencodeMode, setOpencodeMode] = useState<"build" | "plan">("build");
+
+  // Model selector state
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelLoading, setModelLoading] = useState(false);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const modelBtnRef = useRef<HTMLButtonElement>(null);
+  const [modelDropdownPos, setModelDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
+  const [modelFilter, setModelFilter] = useState("");
 
   // Keep mode chips aligned with the current session mode when switching sessions.
   useEffect(() => {
@@ -749,9 +764,10 @@ export function TiptapInput({
       cwd: repoSelection?.path ?? undefined,
       mode,
       files: files.length > 0 ? files : undefined,
+      model: selectedModel || undefined,
     });
     editor.commands.clearContent();
-  }, [editor, onSend, disabled, loading, repoSelection, providers, selectedProvider, claudeMode, opencodeMode, sessions, agentRole]);
+  }, [editor, onSend, disabled, loading, repoSelection, providers, selectedProvider, claudeMode, opencodeMode, sessions, agentRole, selectedModel]);
 
   // Keep ref updated so EnterToSend and external send button always call latest
   handleSendRef.current = handleSend;
@@ -767,6 +783,25 @@ export function TiptapInput({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [providerDropdownOpen]);
+
+  // Close model dropdown on click outside
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false);
+        setModelFilter("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelDropdownOpen]);
+
+  // Reset model when provider changes (model IDs are provider-specific)
+  useEffect(() => {
+    setSelectedModel("");
+    setAvailableModels([]);
+  }, [selectedProvider]);
 
   useEffect(() => {
     if (editor) editor.setEditable(!disabled);
@@ -965,6 +1000,101 @@ export function TiptapInput({
               </div>
             )}
           </div>
+
+          {/* Model selector — shown for providers that support model listing */}
+          {onFetchModels && (selectedProvider === "opencode" || selectedProvider === "gemini") && (
+            <div ref={modelDropdownRef}>
+              <button
+                ref={modelBtnRef}
+                type="button"
+                onClick={async () => {
+                  if (!modelDropdownOpen && modelBtnRef.current) {
+                    const rect = modelBtnRef.current.getBoundingClientRect();
+                    setModelDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
+                  }
+                  if (!modelDropdownOpen && availableModels.length === 0) {
+                    setModelLoading(true);
+                    const models = await onFetchModels(selectedProvider);
+                    setAvailableModels(models);
+                    setModelLoading(false);
+                  }
+                  setModelDropdownOpen((v) => !v);
+                  setModelFilter("");
+                }}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors"
+                title="Select model"
+              >
+                <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className="text-gray-700 dark:text-gray-300 font-medium max-w-[140px] truncate">
+                  {selectedModel ? selectedModel.split("/").pop() : "Default model"}
+                </span>
+                {modelLoading
+                  ? <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  : <svg className={`w-3 h-3 text-gray-400 transition-transform ${modelDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                }
+              </button>
+
+              {modelDropdownOpen && modelDropdownPos && (
+                <div
+                  className="fixed w-72 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999] flex flex-col"
+                  style={{ left: modelDropdownPos.left, bottom: modelDropdownPos.bottom, maxHeight: "320px" }}
+                >
+                  {/* Search */}
+                  <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={modelFilter}
+                      onChange={(e) => setModelFilter(e.target.value)}
+                      placeholder="Filter models..."
+                      className="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-transparent outline-none focus:ring-1 focus:ring-blue-500 text-gray-800 dark:text-gray-200"
+                    />
+                  </div>
+                  <div className="overflow-y-auto flex-1">
+                    {/* Default option */}
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedModel(""); setModelDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                        !selectedModel
+                          ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                          : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      <span className="font-medium">Default model</span>
+                    </button>
+                    {availableModels
+                      .filter((m) => !modelFilter || m.toLowerCase().includes(modelFilter.toLowerCase()))
+                      .map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { setSelectedModel(m); setModelDropdownOpen(false); setModelFilter(""); }}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2 ${
+                            m === selectedModel
+                              ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                              : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                          }`}
+                        >
+                          <span className="text-gray-400 dark:text-gray-500 font-mono text-[10px] shrink-0">
+                            {m.split("/")[0]}
+                          </span>
+                          <span className="font-medium truncate">{m.split("/").slice(1).join("/") || m}</span>
+                        </button>
+                      ))
+                    }
+                    {availableModels.length === 0 && !modelLoading && (
+                      <div className="px-3 py-3 text-xs text-gray-400 text-center">No models found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Mode toggles for selected providers (hidden in ROUTA mode) */}
           {agentRole !== "ROUTA" && selectedProvider === "claude" && (

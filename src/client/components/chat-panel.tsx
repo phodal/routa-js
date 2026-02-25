@@ -77,7 +77,7 @@ interface UsageInfo {
 interface ChatPanelProps {
   acp: UseAcpState & UseAcpActions;
   activeSessionId: string | null;
-  onEnsureSession: (cwd?: string, provider?: string, modeId?: string) => Promise<string | null>;
+  onEnsureSession: (cwd?: string, provider?: string, modeId?: string, model?: string) => Promise<string | null>;
   onSelectSession: (sessionId: string) => Promise<void>;
   skills?: SkillSummary[];
   repoSkills?: SkillSummary[];
@@ -985,7 +985,7 @@ export function ChatPanel({
     }
 
     // Ensure we have a session — pass cwd and provider
-    const sid = context.sessionId ?? activeSessionId ?? (await onEnsureSession(cwd, context.provider, context.mode));
+    const sid = context.sessionId ?? activeSessionId ?? (await onEnsureSession(cwd, context.provider, context.mode, context.model));
     if (!sid) return;
     if (context.mode) {
       await acp.setMode(context.mode);
@@ -1547,6 +1547,7 @@ export function ChatPanel({
                   onRepoChange={handleRepoChange}
                   agentRole={agentRole}
                   usageInfo={usageInfo}
+                  onFetchModels={acp.listProviderModels}
                 />
               </div>
             </div>

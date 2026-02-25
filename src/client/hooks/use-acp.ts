@@ -54,7 +54,8 @@ export interface UseAcpActions {
     provider?: string,
     modeId?: string,
     role?: string,
-    workspaceId?: string
+    workspaceId?: string,
+    model?: string,
   ) => Promise<AcpNewSessionResult | null>;
   selectSession: (sessionId: string) => void;
   setProvider: (provider: string) => void;
@@ -64,6 +65,8 @@ export interface UseAcpActions {
   disconnect: () => void;
   /** Clear auth error (e.g., when user dismisses the popup) */
   clearAuthError: () => void;
+  /** List models available for a provider (e.g. opencode) */
+  listProviderModels: (provider: string) => Promise<string[]>;
 }
 
 export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
@@ -149,7 +152,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       provider?: string,
       modeId?: string,
       role?: string,
-      workspaceId?: string
+      workspaceId?: string,
+      model?: string,
     ): Promise<AcpNewSessionResult | null> => {
       const client = clientRef.current;
       if (!client) return null;
@@ -166,6 +170,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           role,
           mcpServers: [],
           workspaceId,
+          model,
         });
         sessionIdRef.current = result.sessionId;
         setState((s) => ({
@@ -275,6 +280,16 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     });
   }, []);
 
+  const listProviderModels = useCallback(async (provider: string): Promise<string[]> => {
+    const client = clientRef.current;
+    if (!client) return [];
+    try {
+      return await client.listProviderModels(provider);
+    } catch {
+      return [];
+    }
+  }, []);
+
   return {
     ...state,
     connect,
@@ -286,5 +301,6 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     cancel,
     disconnect,
     clearAuthError,
+    listProviderModels,
   };
 }

@@ -128,6 +128,7 @@ impl AcpManager {
         workspace_id: String,
         provider: Option<String>,
         role: Option<String>,
+        model: Option<String>,
     ) -> Result<(String, String), String> {
         let provider_name = provider.as_deref().unwrap_or("opencode");
 
@@ -159,9 +160,19 @@ impl AcpManager {
             // Use standard ACP protocol
             let preset = get_preset_by_id_with_registry(provider_name).await?;
 
+            // Build args: preset args + optional model flag
+            let mut extra_args: Vec<String> = preset.args.clone();
+            if let Some(ref m) = model {
+                if !m.is_empty() {
+                    // opencode (and future providers) accept -m <model>
+                    extra_args.push("-m".to_string());
+                    extra_args.push(m.clone());
+                }
+            }
+
             let process = AcpProcess::spawn(
                 &preset.command,
-                &preset.args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                &extra_args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
                 &cwd,
                 ntx.clone(),
                 &preset.name,

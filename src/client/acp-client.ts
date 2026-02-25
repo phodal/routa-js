@@ -112,9 +112,10 @@ export class BrowserAcpClient {
     gateProvider?: string;
     mcpServers?: Array<{ name: string; url?: string }>;
     workspaceId?: string;
+    model?: string;
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", {
-      cwd: params.cwd, // Let server handle the default
+      cwd: params.cwd,
       provider: params.provider ?? "opencode",
       modeId: params.modeId,
       role: params.role,
@@ -122,6 +123,7 @@ export class BrowserAcpClient {
       gateProvider: params.gateProvider,
       mcpServers: params.mcpServers ?? [],
       workspaceId: params.workspaceId,
+      model: params.model,
     });
     this._sessionId = result.sessionId;
 
@@ -129,6 +131,15 @@ export class BrowserAcpClient {
     this.attachSession(result.sessionId);
 
     return result;
+  }
+
+  /**
+   * List available models for a provider (e.g. opencode).
+   */
+  async listProviderModels(provider: string): Promise<string[]> {
+    const response = await fetch(`${this.baseUrl}/api/providers/models?provider=${encodeURIComponent(provider)}`);
+    const data = await response.json();
+    return Array.isArray(data.models) ? data.models : [];
   }
 
   /**
