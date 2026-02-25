@@ -8,7 +8,14 @@
       "Bash(git commit:*)",
       "Bash(cargo build:*)",
       "Bash(cargo clippy:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebFetch(domain:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cargo:*)",
+      "mcp__ide__getDiagnostics",
+      "mcp__auggie__codebase-retrieval",
+      "Bash(npm run build)",
+      "Bash(kill 24421)"
     ]
   }
 }
