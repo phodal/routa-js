@@ -630,7 +630,7 @@ export function TiptapInput({
     editorProps: {
       attributes: {
         class:
-          "tiptap-chat-input outline-none min-h-[24px] max-h-[160px] overflow-y-auto text-sm text-gray-900 dark:text-gray-100",
+          "tiptap-chat-input outline-none min-h-[80px] max-h-[240px] overflow-y-auto text-sm text-gray-900 dark:text-gray-100",
       },
       handlePaste: (view, event) => {
         const items = event.clipboardData?.items;
