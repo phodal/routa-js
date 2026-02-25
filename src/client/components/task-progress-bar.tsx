@@ -4,8 +4,9 @@
  * TaskProgressBar - Collapsible task progress indicator for ACP Claude Code tasks.
  *
  * Shows a compact summary of task progress above the input area.
- * - Collapsed: Shows current running task (e.g., "2/4 探索 routa-js 中的 codex 处理")
+ * - Collapsed: Shows current running task (e.g., "Todos (3/5) Analyzing codebase...")
  * - Expanded: Shows all tasks with their statuses
+ * - Footer: Shows file changes summary (e.g., "📁 5 files changed +286 -45")
  */
 
 import { useState, useMemo } from "react";
@@ -21,12 +22,19 @@ export interface TaskInfo {
   completionSummary?: string;
 }
 
+export interface FileChangesSummary {
+  fileCount: number;
+  totalAdded: number;
+  totalRemoved: number;
+}
+
 interface TaskProgressBarProps {
   tasks: TaskInfo[];
+  fileChanges?: FileChangesSummary;
   className?: string;
 }
 
-export function TaskProgressBar({ tasks, className = "" }: TaskProgressBarProps) {
+export function TaskProgressBar({ tasks, fileChanges, className = "" }: TaskProgressBarProps) {
   const [expanded, setExpanded] = useState(false);
 
   // Find current running task and calculate progress
@@ -69,9 +77,10 @@ export function TaskProgressBar({ tasks, className = "" }: TaskProgressBarProps)
     };
   }, [tasks]);
 
-  if (tasks.length === 0) return null;
+  // Show component if we have tasks or file changes
+  if (tasks.length === 0 && !fileChanges) return null;
 
-  const allCompleted = completedCount === tasks.length;
+  const allCompleted = tasks.length > 0 && completedCount === tasks.length;
   const progressPercent = tasks.length > 0 ? (completedCount / tasks.length) * 100 : 0;
 
   return (
@@ -83,18 +92,29 @@ export function TaskProgressBar({ tasks, className = "" }: TaskProgressBarProps)
           onClick={() => setExpanded((e) => !e)}
           className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-gray-100 dark:hover:bg-[#1a1d2e] transition-colors"
         >
-          {/* Progress indicator */}
+          {/* Progress indicator with Todos label */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span className={`w-2 h-2 rounded-full ${allCompleted ? "bg-green-500" : "bg-amber-500 animate-pulse"}`} />
-            <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
-              {currentTaskIndex}/{tasks.length}
-            </span>
+            {tasks.length > 0 && (
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                Todos ({completedCount}/{tasks.length})
+              </span>
+            )}
           </div>
 
           {/* Current task title */}
           <span className="text-xs text-gray-700 dark:text-gray-300 truncate flex-1">
-            {runningTask?.title || (allCompleted ? "All tasks completed" : "Tasks")}
+            {runningTask?.title || (allCompleted ? "All tasks completed" : fileChanges ? "" : "Tasks")}
           </span>
+
+          {/* File changes summary in header (compact) */}
+          {fileChanges && (
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 shrink-0 flex items-center gap-1">
+              <span>📁 {fileChanges.fileCount}</span>
+              <span className="text-green-600 dark:text-green-400">+{fileChanges.totalAdded}</span>
+              <span className="text-red-500 dark:text-red-400">-{fileChanges.totalRemoved}</span>
+            </span>
+          )}
 
           {/* Expand/collapse icon */}
           <svg
@@ -108,20 +128,38 @@ export function TaskProgressBar({ tasks, className = "" }: TaskProgressBarProps)
           </svg>
         </button>
 
-        {/* Progress bar */}
-        <div className="h-0.5 bg-gray-200 dark:bg-gray-700">
-          <div
-            className="h-full bg-green-500 transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
+        {/* Progress bar - only show if we have tasks */}
+        {tasks.length > 0 && (
+          <div className="h-0.5 bg-gray-200 dark:bg-gray-700">
+            <div
+              className="h-full bg-green-500 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        )}
 
         {/* Expanded task list */}
-        {expanded && (
+        {expanded && tasks.length > 0 && (
           <div className="border-t border-gray-200 dark:border-gray-700 max-h-48 overflow-y-auto">
             {tasks.map((task, index) => (
               <TaskRow key={task.id} task={task} index={index} />
             ))}
+          </div>
+        )}
+
+        {/* File changes footer - show when expanded or when no tasks */}
+        {expanded && fileChanges && fileChanges.fileCount > 0 && (
+          <div className="border-t border-gray-200 dark:border-gray-700 px-3 py-2 flex items-center gap-2">
+            <span className="text-xs text-gray-500 dark:text-gray-400">📁</span>
+            <span className="text-xs text-gray-700 dark:text-gray-300">
+              {fileChanges.fileCount} file{fileChanges.fileCount !== 1 ? "s" : ""} changed
+            </span>
+            <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+              +{fileChanges.totalAdded}
+            </span>
+            <span className="text-xs text-red-500 dark:text-red-400 font-medium">
+              -{fileChanges.totalRemoved}
+            </span>
           </div>
         )}
       </div>

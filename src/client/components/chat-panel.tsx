@@ -15,9 +15,18 @@ import {type InputContext, TiptapInput} from "./tiptap-input";
 import type {SkillSummary} from "../skill-client";
 import {RepoPicker, type RepoSelection} from "./repo-picker";
 import {extractTaskBlocks, hasTaskBlocks, type ParsedTask,} from "../utils/task-block-parser";
-import {type TaskInfo, TaskProgressBar} from "./task-progress-bar";
+import {type TaskInfo, TaskProgressBar, type FileChangesSummary} from "./task-progress-bar";
 import {MessageBubble} from "@/client/components/message-bubble";
 import {TracePanel} from "@/client/components/trace-panel";
+import {type ChecklistItem, parseChecklist} from "../utils/checklist-parser";
+import {
+  type FileChangesState,
+  createFileChangesState,
+  updateFileChange,
+  extractFileChangeFromToolResult,
+  extractFilesModified,
+  getFileChangesSummary,
+} from "../utils/file-changes-tracker";
 
 // ─── Message Types ─────────────────────────────────────────────────────
 
@@ -110,8 +119,13 @@ export function ChatPanel({
   // Track the last update kind per session to determine when to create new messages
   const lastUpdateKindRef = useRef<Record<string, string | null>>({});
 
-  // Extract task-type tool calls for TaskProgressBar
-  const taskInfos = useMemo<TaskInfo[]>(() => {
+  // Checklist items parsed from agent responses (for Todos display)
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  // File changes tracked from tool executions
+  const [fileChangesState, setFileChangesState] = useState<FileChangesState>(createFileChangesState);
+
+  // Extract task-type tool calls for TaskProgressBar (existing behavior)
+  const delegatedTasks = useMemo<TaskInfo[]>(() => {
     return visibleMessages
       .filter((msg) => msg.role === "tool" && msg.toolKind === "task")
       .map((msg) => {
@@ -135,6 +149,28 @@ export function ChatPanel({
         };
       });
   }, [visibleMessages]);
+
+  // Combine checklist items into TaskInfo format for display
+  const taskInfos = useMemo<TaskInfo[]>(() => {
+    // Convert checklist items to TaskInfo
+    const checklistTasks: TaskInfo[] = checklistItems.map((item) => ({
+      id: item.id,
+      title: item.text,
+      status: item.status === "in_progress" ? "running" :
+              item.status === "cancelled" ? "failed" :
+              item.status as TaskInfo["status"],
+    }));
+
+    // If we have checklist items, show them; otherwise fall back to delegated tasks
+    return checklistTasks.length > 0 ? checklistTasks : delegatedTasks;
+  }, [checklistItems, delegatedTasks]);
+
+  // File changes summary for TaskProgressBar
+  const fileChangesSummary = useMemo<FileChangesSummary | undefined>(() => {
+    const summary = getFileChangesSummary(fileChangesState);
+    if (summary.fileCount === 0) return undefined;
+    return summary;
+  }, [fileChangesState]);
 
   // Auto-scroll
   useEffect(() => {
@@ -384,9 +420,20 @@ export function ChatPanel({
             }
             const idx = arr.findIndex((m) => m.id === msgId);
             if (idx >= 0) {
-              arr[idx] = { ...arr[idx], content: arr[idx].content + text };
+              const updatedContent = arr[idx].content + text;
+              arr[idx] = { ...arr[idx], content: updatedContent };
+              // Parse checklist from accumulated content
+              const parsedChecklist = parseChecklist(updatedContent);
+              if (parsedChecklist.length > 0) {
+                setChecklistItems(parsedChecklist);
+              }
             } else {
               arr.push({ id: msgId, role: "assistant", content: text, timestamp: new Date() });
+              // Parse checklist from new content
+              const parsedChecklist = parseChecklist(text);
+              if (parsedChecklist.length > 0) {
+                setChecklistItems(parsedChecklist);
+              }
             }
             break;
           }
@@ -453,6 +500,12 @@ export function ChatPanel({
             const toolCallId = update.toolCallId as string | undefined;
             const status = update.status as string | undefined;
             const delegatedTaskId = update.delegatedTaskId as string | undefined;
+            const toolName = update.title as string | undefined;
+            const rawOutput = typeof update.rawOutput === "string" ? update.rawOutput : undefined;
+            const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
+              ? update.rawInput as Record<string, unknown>
+              : undefined;
+
             const outputParts: string[] = [];
             if (update.rawOutput) {
               outputParts.push(
@@ -465,6 +518,15 @@ export function ChatPanel({
                 if (c.text) outputParts.push(c.text);
               }
             }
+
+            // Track file changes from Edit, Write, save-file, etc.
+            if (toolName && status === "completed") {
+              const fileChange = extractFileChangeFromToolResult(toolName, rawOutput, rawInput);
+              if (fileChange) {
+                setFileChangesState((prev) => updateFileChange({ ...prev, files: new Map(prev.files) }, fileChange));
+              }
+            }
+
             if (toolCallId) {
               const idx = arr.findIndex((m) => m.toolCallId === toolCallId);
               if (idx >= 0) {
@@ -472,7 +534,7 @@ export function ChatPanel({
                 arr[idx] = {
                   ...existing,
                   toolStatus: status ?? existing.toolStatus,
-                  toolName: (update.title as string) ?? existing.toolName,
+                  toolName: toolName ?? existing.toolName,
                   toolKind: (update.kind as string) ?? existing.toolKind,
                   // Save delegatedTaskId for matching with task_completion
                   delegatedTaskId: delegatedTaskId ?? existing.delegatedTaskId,
@@ -641,6 +703,20 @@ export function ChatPanel({
             const taskId = update.taskId as string | undefined;
             const completionSummary = update.completionSummary as string | undefined;
             const taskStatus = update.taskStatus as string | undefined;
+            const filesModified = update.filesModified as string[] | undefined;
+
+            // Track file changes from task completion
+            if (filesModified && filesModified.length > 0) {
+              const changes = extractFilesModified(filesModified);
+              setFileChangesState((prev) => {
+                let state = { ...prev, files: new Map(prev.files) };
+                for (const change of changes) {
+                  state = updateFileChange(state, change);
+                }
+                return state;
+              });
+            }
+
             if (taskId) {
               const idx = arr.findIndex(
                 (m) => m.role === "tool" && m.delegatedTaskId === taskId
@@ -969,9 +1045,9 @@ export function ChatPanel({
           {/* Input */}
           <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1117]">
             <div className="max-w-3xl mx-auto px-5 py-3 space-y-2">
-              {/* Task Progress Bar - shows above input when tasks exist */}
-              {taskInfos.length > 0 && (
-                <TaskProgressBar tasks={taskInfos} />
+              {/* Task Progress Bar - shows above input when tasks or file changes exist */}
+              {(taskInfos.length > 0 || fileChangesSummary) && (
+                <TaskProgressBar tasks={taskInfos} fileChanges={fileChangesSummary} />
               )}
               <div className="flex gap-2 items-end">
                 <TiptapInput
