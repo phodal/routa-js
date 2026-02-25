@@ -8,6 +8,7 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef, useState,} from "react";
+import {createPortal} from "react-dom";
 import {v4 as uuidv4} from "uuid";
 import type {AcpSessionNotification} from "../acp-client";
 import type {UseAcpActions, UseAcpState} from "../hooks/use-acp";
@@ -1037,6 +1038,28 @@ export function ChatPanel({
   // ── Setup State ──────────────────────────────────────────────────────
 
   const [setupInput, setSetupInput] = useState("");
+  const [setupProviderDropdownOpen, setSetupProviderDropdownOpen] = useState(false);
+  const setupProviderDropdownRef = useRef<HTMLDivElement>(null);
+  const setupProviderButtonRef = useRef<HTMLButtonElement>(null);
+  const [setupProviderDropdownPos, setSetupProviderDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (setupProviderDropdownRef.current && !setupProviderDropdownRef.current.contains(event.target as Node) &&
+          setupProviderButtonRef.current && !setupProviderButtonRef.current.contains(event.target as Node)) {
+        setSetupProviderDropdownOpen(false);
+      }
+    };
+
+    if (setupProviderDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [setupProviderDropdownOpen]);
 
   const handleStartSession = useCallback(async () => {
     if (!setupInput.trim()) return;
@@ -1198,21 +1221,187 @@ export function ChatPanel({
                     const providerInfo = acp.providers.find((p) => p.id === acp.selectedProvider);
                     return (
                       <div className="relative">
-                        <select
-                          value={acp.selectedProvider}
-                          onChange={(e) => acp.setProvider(e.target.value)}
-                          className="appearance-none flex items-center gap-1.5 pl-5 pr-5 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent transition-colors cursor-pointer focus:outline-none"
+                        <button
+                          ref={setupProviderButtonRef}
+                          type="button"
+                          onClick={() => {
+                            if (setupProviderDropdownOpen) {
+                              setSetupProviderDropdownOpen(false);
+                            } else {
+                              const rect = setupProviderButtonRef.current?.getBoundingClientRect();
+                              if (rect) {
+                                setSetupProviderDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top });
+                              }
+                              setSetupProviderDropdownOpen(true);
+                            }
+                          }}
+                          className="flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          disabled={acp.providers.filter((p) => p.status === "available").length === 0}
                         >
-                          {acp.providers.filter((p) => p.status === "available").map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                        {/* green dot overlay */}
-                        <span className={`pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${providerInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
-                        {/* chevron overlay */}
-                        <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
+                          {/* Status dot */}
+                          <span className={`w-1.5 h-1.5 rounded-full ${providerInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
+                          {/* Provider name */}
+                          <span className="truncate max-w-[120px]">{providerInfo?.name ?? "Select..."}</span>
+                          {/* Chevron */}
+                          <svg className={`w-3 h-3 text-gray-400 transition-transform ${setupProviderDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+
+                        {/* Dropdown menu */}
+                        {setupProviderDropdownOpen && setupProviderDropdownPos && typeof document !== "undefined" &&
+                          createPortal(
+                            <div
+                              ref={setupProviderDropdownRef}
+                              className="fixed w-64 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999]"
+                              style={{ left: setupProviderDropdownPos.left, bottom: setupProviderDropdownPos.bottom }}
+                            >
+                              {/* Group providers by availability */}
+                              {(() => {
+                                const availableProviders = acp.providers.filter((p) => p.status === "available");
+                                const unavailableProviders = acp.providers.filter((p) => p.status !== "available");
+                                const builtinAvailable = availableProviders.filter((p) => p.source === "static");
+                                const registryAvailable = availableProviders.filter((p) => p.source === "registry");
+                                const builtinUnavailable = unavailableProviders.filter((p) => p.source === "static");
+                                const registryUnavailable = unavailableProviders.filter((p) => p.source === "registry");
+
+                                return (
+                                  <>
+                                    {/* Builtin Available */}
+                                    {builtinAvailable.length > 0 && (
+                                      <div className="py-1">
+                                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                          Built-in ({builtinAvailable.length})
+                                        </div>
+                                        {builtinAvailable.map((p) => (
+                                          <button
+                                            key={p.id}
+                                            type="button"
+                                            onClick={() => {
+                                              acp.setProvider(p.id);
+                                              setSetupProviderDropdownOpen(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
+                                              p.id === acp.selectedProvider
+                                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                                            }`}
+                                          >
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                                            <span className="font-medium truncate flex-1">{p.name}</span>
+                                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Registry Available */}
+                                    {registryAvailable.length > 0 && (
+                                      <div className={`py-1 ${builtinAvailable.length > 0 ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
+                                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                          ACP Registry ({registryAvailable.length})
+                                        </div>
+                                        {registryAvailable.map((p) => (
+                                          <button
+                                            key={p.id}
+                                            type="button"
+                                            onClick={() => {
+                                              acp.setProvider(p.id);
+                                              setSetupProviderDropdownOpen(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
+                                              p.id === acp.selectedProvider
+                                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                                            }`}
+                                          >
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                                            <span className="font-medium truncate flex-1">{p.name}</span>
+                                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Builtin Unavailable */}
+                                    {builtinUnavailable.length > 0 && (
+                                      <div className={`py-1 ${(builtinAvailable.length > 0 || registryAvailable.length > 0) ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
+                                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                          Built-in - Not Installed ({builtinUnavailable.length})
+                                        </div>
+                                        {builtinUnavailable.map((p) => (
+                                          <button
+                                            key={p.id}
+                                            type="button"
+                                            onClick={() => {
+                                              acp.setProvider(p.id);
+                                              setSetupProviderDropdownOpen(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
+                                              p.id === acp.selectedProvider
+                                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
+                                            }`}
+                                          >
+                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                                            <span className="font-medium truncate flex-1">{p.name}</span>
+                                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Registry Unavailable */}
+                                    {registryUnavailable.length > 0 && (
+                                      <div className="py-1 border-t border-gray-100 dark:border-gray-800">
+                                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                          ACP Registry - Not Installed ({registryUnavailable.length})
+                                        </div>
+                                        {registryUnavailable.map((p) => (
+                                          <button
+                                            key={p.id}
+                                            type="button"
+                                            onClick={() => {
+                                              acp.setProvider(p.id);
+                                              setSetupProviderDropdownOpen(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
+                                              p.id === acp.selectedProvider
+                                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
+                                            }`}
+                                          >
+                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                                            <span className="font-medium truncate flex-1">{p.name}</span>
+                                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* No available providers message */}
+                                    {acp.providers.length > 0 && builtinAvailable.length === 0 && registryAvailable.length === 0 && (
+                                      <div className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+                                        {builtinUnavailable.length > 0 || registryUnavailable.length > 0 ? (
+                                          <>
+                                            <p className="font-medium mb-1">No providers available</p>
+                                            <p className="text-[10px] opacity-75">
+                                              {acp.providers.some(p => p.id === "opencode-sdk")
+                                                ? "Configure OPENCODE_SERVER_URL environment variable to use OpenCode SDK"
+                                                : "Install a provider to get started"}
+                                            </p>
+                                          </>
+                                        ) : (
+                                          "Loading providers..."
+                                        )}
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>,
+                            document.body
+                          )}
                       </div>
                     );
                   })()}
