@@ -20,6 +20,148 @@ interface TracePanelProps {
   sessionId: string | null;
 }
 
+/** Collapsible JSON tree view for tool outputs */
+function JsonNode({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  const [collapsed, setCollapsed] = useState(depth > 1);
+
+  if (value === null) return <span className="text-gray-400 dark:text-gray-500">null</span>;
+  if (typeof value === "boolean")
+    return <span className="text-yellow-600 dark:text-yellow-400">{String(value)}</span>;
+  if (typeof value === "number")
+    return <span className="text-blue-600 dark:text-blue-400">{value}</span>;
+  if (typeof value === "string")
+    return (
+      <span className="text-green-700 dark:text-green-400">
+        &quot;{value}&quot;
+      </span>
+    );
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-gray-500">[]</span>;
+    return (
+      <span>
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-mono"
+        >
+          {collapsed ? `[…${value.length}]` : "["}
+        </button>
+        {!collapsed && (
+          <>
+            <div className="pl-3 border-l border-gray-200 dark:border-gray-700 ml-1">
+              {value.map((item, i) => (
+                <div key={i} className="my-0.5">
+                  <span className="text-gray-400 dark:text-gray-500 select-none">{i}: </span>
+                  <JsonNode value={item} depth={depth + 1} />
+                  {i < value.length - 1 && <span className="text-gray-400">,</span>}
+                </div>
+              ))}
+            </div>
+            <span className="text-gray-500">]</span>
+          </>
+        )}
+      </span>
+    );
+  }
+
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return <span className="text-gray-500">{"{}"}</span>;
+    return (
+      <span>
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-mono"
+        >
+          {collapsed ? `{…${entries.length}}` : "{"}
+        </button>
+        {!collapsed && (
+          <>
+            <div className="pl-3 border-l border-gray-200 dark:border-gray-700 ml-1">
+              {entries.map(([k, v], i) => (
+                <div key={k} className="my-0.5">
+                  <span className="text-purple-700 dark:text-purple-400 font-semibold">&quot;{k}&quot;</span>
+                  <span className="text-gray-500">: </span>
+                  <JsonNode value={v} depth={depth + 1} />
+                  {i < entries.length - 1 && <span className="text-gray-400">,</span>}
+                </div>
+              ))}
+            </div>
+            <span className="text-gray-500">{"}"}</span>
+          </>
+        )}
+      </span>
+    );
+  }
+
+  return <span className="text-gray-700 dark:text-gray-300">{String(value)}</span>;
+}
+
+/** Try to parse a string as JSON; return parsed value or null */
+function tryParseJson(s: string): unknown | null {
+  const trimmed = s.trim();
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+/** Render tool output: JSON tree if parseable, otherwise plain pre */
+function ToolOutput({ output }: { output: string }) {
+  const parsed = useMemo(() => tryParseJson(output), [output]);
+  const [mode, setMode] = useState<"tree" | "raw">("tree");
+
+  if (!parsed)
+    return (
+      <pre className="px-2 py-1.5 text-[10px] font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words bg-white dark:bg-gray-900/40">
+        {output}
+      </pre>
+    );
+
+  return (
+    <div>
+      <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+        <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+          Output
+        </span>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setMode("tree")}
+            className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${
+              mode === "tree"
+                ? "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300"
+                : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            }`}
+          >
+            Tree
+          </button>
+          <button
+            onClick={() => setMode("raw")}
+            className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${
+              mode === "raw"
+                ? "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300"
+                : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            }`}
+          >
+            Raw
+          </button>
+        </div>
+      </div>
+      {mode === "tree" ? (
+        <div className="px-2 py-1.5 text-[10px] font-mono bg-white dark:bg-gray-900/40 overflow-auto">
+          <JsonNode value={parsed} depth={0} />
+        </div>
+      ) : (
+        <pre className="px-2 py-1.5 text-[10px] font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words bg-white dark:bg-gray-900/40">
+          {output}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 /** Render tool input parameters as a visible key-value table */
 function ToolInputTable({ input }: { input: unknown }) {
   if (input == null) return null;
@@ -68,7 +210,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
-  const [expandedOutputIds, setExpandedOutputIds] = useState<Set<string>>(new Set());
+
   const [stats, setStats] = useState<{
     totalDays: number;
     totalFiles: number;
@@ -156,14 +298,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
 
   const sessionGroups = useMemo(() => groupBySession(filteredTraces), [filteredTraces]);
 
-  const toggleOutputExpand = useCallback((traceId: string) => {
-    setExpandedOutputIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(traceId)) next.delete(traceId);
-      else next.add(traceId);
-      return next;
-    });
-  }, []);
+
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -307,7 +442,6 @@ export function TracePanel({ sessionId }: TracePanelProps) {
             {/* Events */}
             <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
               {sessionTraces.map((trace) => {
-                const isOutputExpanded = expandedOutputIds.has(trace.id);
 
                 /* ── Session lifecycle ── */
                 if (trace.eventType === "session_start" || trace.eventType === "session_end") {
@@ -357,7 +491,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                   const content =
                     trace.conversation?.fullContent || trace.conversation?.contentPreview || "";
                   return (
-                    <div key={trace.id} className="px-4 py-2.5 flex gap-3">
+                    <div key={trace.id} className="px-4 py-2.5 flex gap-3 border-l-2 border-purple-300 dark:border-purple-700">
                       <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
                         {formatTime(trace.timestamp)}
                       </span>
@@ -404,7 +538,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                 /* ── Tool call ── */
                 if (trace.eventType === "tool_call") {
                   return (
-                    <div key={trace.id} className="px-4 py-2.5 flex gap-3">
+                    <div key={trace.id} className="px-4 py-2.5 flex gap-3 border-l-2 border-orange-300 dark:border-orange-700">
                       <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
                         {formatTime(trace.timestamp)}
                       </span>
@@ -476,14 +610,9 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                       : typeof rawOutput === "string"
                         ? rawOutput
                         : JSON.stringify(rawOutput, null, 2);
-                  const TRUNCATE_LEN = 400;
-                  const isTruncated = outputStr.length > TRUNCATE_LEN;
-                  const displayOutput = isOutputExpanded
-                    ? outputStr
-                    : outputStr.slice(0, TRUNCATE_LEN);
 
                   return (
-                    <div key={trace.id} className="px-4 py-2.5 flex gap-3">
+                    <div key={trace.id} className="px-4 py-2.5 flex gap-3 bg-cyan-50/30 dark:bg-cyan-900/5 border-l-2 border-cyan-300 dark:border-cyan-700">
                       <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
                         {formatTime(trace.timestamp)}
                       </span>
@@ -511,25 +640,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                         </div>
                         {outputStr && (
                           <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-                            <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
-                              <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                                Output
-                              </span>
-                            </div>
-                            <pre className="px-2 py-1.5 text-[10px] font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words bg-white dark:bg-gray-900/40">
-                              {displayOutput}
-                              {isTruncated && !isOutputExpanded && "…"}
-                            </pre>
-                            {isTruncated && (
-                              <button
-                                onClick={() => toggleOutputExpand(trace.id)}
-                                className="w-full px-2 py-1 text-[10px] text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800/40 border-t border-gray-200 dark:border-gray-700/60 transition-colors text-left"
-                              >
-                                {isOutputExpanded
-                                  ? "Show less"
-                                  : `Show all (${outputStr.length} chars)`}
-                              </button>
-                            )}
+                            <ToolOutput output={outputStr} />
                           </div>
                         )}
                       </div>
