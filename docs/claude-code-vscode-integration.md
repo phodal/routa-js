@@ -974,62 +974,163 @@ if (toolName === "EnterPlanMode") {
 
 ---
 
-## 13. 模型选择的实际实现（ClaudeCodeModels）
+## 13. 模型选择的实际实现（ClaudeCodeModels / gZ）
 
-### 13.1 从 Copilot 端点过滤 Claude 模型
+### 13.1 类结构与依赖注入
 
 ```typescript
-// ClaudeCodeModels（混淆名 oZ）的实现
-async getModels(): Promise<ClaudeModel[]> {
-  const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
+// 服务标识符
+const t4  = se("ICopilotCLISDK");    // Copilot CLI SDK 服务
+const mAe = se("ICopilotCLIModels"); // ClaudeCodeModels 服务接口
 
-  // 过滤条件：apiType === "messages" 且 family/model 包含 "claude"
-  const claudeEndpoints = allEndpoints.filter(ep =>
-    ep.apiType === "messages" &&
-    (ep.family?.includes("claude") || ep.model?.includes("claude"))
-  );
+// gZ 类（ClaudeCodeModels）—— 混淆名，对应 ICopilotCLIModels 接口
+class ClaudeCodeModels {
+  constructor(
+    copilotCLISDK,      // @b(0, t4)  — Copilot CLI SDK
+    extensionContext,   // @b(1, ft)  — VS Code ExtensionContext
+    logService,         // @b(2, j)   — 日志服务
+  ) {
+    this.copilotCLISDK = copilotCLISDK;
+    this.extensionContext = extensionContext;
+    this.logService = logService;
 
-  // 按 family 去重，保留版本最高的端点
-  const familyMap = new Map<string, Endpoint>();
-  for (const ep of claudeEndpoints) {
-    const existing = familyMap.get(ep.family);
-    if (!existing || compareVersions(ep.version, existing.version) > 0) {
-      familyMap.set(ep.family, ep);
-    }
+    // 懒加载：构造时立即触发，但结果缓存在 Promise 中
+    this._availableModels = new LazyPromise(() => this._getAvailableModels());
+    this._availableModels.value.catch(err => {
+      this.logService.error("[CopilotCLIModels] Failed to fetch available models", err);
+    });
   }
-
-  return Array.from(familyMap.values()).map(ep => ({
-    id: ep.model,
-    name: ep.name,
-    family: ep.family,
-  }));
 }
 ```
 
-### 13.2 默认模型选择
+### 13.2 模型获取：调用 SDK 的 `getAvailableModels`
 
 ```typescript
-// 优先选 sonnet，存储在 globalState
-async getDefaultModel(): Promise<string> {
-  const stored = this.globalState.get("github.copilot.claudeCode.sessionModel");
-  if (stored) return stored;
+// 核心：通过 @github/copilot/sdk 包获取模型列表
+async _getAvailableModels(): Promise<CopilotCLIModel[]> {
+  // 并行获取 SDK 包和认证信息
+  const [{ getAvailableModels }, authInfo] = await Promise.all([
+    this.copilotCLISDK.getPackage(),   // 动态 import("@github/copilot/sdk")
+    this.copilotCLISDK.getAuthInfo(),  // GitHub OAuth token
+  ]);
 
+  try {
+    const models = await getAvailableModels(authInfo);
+    // 只保留 id、name、billing.multiplier 三个字段
+    return models.map(m => ({
+      id: m.id,
+      name: m.name,
+      multiplier: m.billing?.multiplier,
+    }));
+  } catch (err) {
+    this.logService.error("[CopilotCLISession] Failed to fetch models", err);
+    return [];  // 失败时返回空数组，不抛出异常
+  }
+}
+
+// 认证信息构造（来自 hZ 类 / CopilotCLISDK）
+async getAuthInfo() {
+  const session = await this.authentService.getGitHubSession("any", { silent: true });
+  return {
+    type: "token",
+    token: session?.accessToken ?? "",
+    host: "https://github.com",
+  };
+}
+```
+
+**关键点**：模型列表不是从 Copilot 的 `/models` REST 端点获取，而是通过 `@github/copilot/sdk` 包内部的 `getAvailableModels()` 函数，该函数封装了与 GitHub Copilot 后端的通信细节。
+
+### 13.3 模型解析：`resolveModel`
+
+```typescript
+// 按 id 精确匹配（大小写不敏感）
+async resolveModel(modelId: string): Promise<string | undefined> {
   const models = await this.getModels();
-  // 优先选 sonnet
-  const sonnet = models.find(m => m.family?.includes("sonnet"));
-  return sonnet?.id ?? models[0]?.id;
+  const normalized = modelId.trim().toLowerCase();
+  return models.find(m => m.id.toLowerCase() === normalized)?.id;
 }
 ```
 
-### 13.3 Family 字符串解析
+调用场景：从 `.prompt.md` 文件的 `header.model` 字段解析模型 ID：
 
 ```typescript
-// _parseFamilyString() 解析 "claude-<family>-<version>" 格式
-// 例如：
-// "claude-sonnet-4"   → family: "sonnet", version: "4"
-// "claude-opus-4-5"   → family: "opus",   version: "4-5"
-// "claude-haiku-4"    → family: "haiku",  version: "4"
+// 在 CopilotCLIAgents 中，读取 agent 文件的 model 配置
+for (const promptFile of promptFiles) {
+  const parsed = await this.promptsService.parseFile(promptFile, token);
+  if (!parsed.header?.model) continue;
+
+  // 先尝试精确匹配
+  let resolvedModel = await this.copilotCLIModels.resolveModel(parsed.header.model);
+  if (resolvedModel) return resolvedModel;
+
+  // 如果包含括号（如 "claude-sonnet-4 (fast)"），截取括号前的部分再试
+  if (!parsed.header.model.includes("(")) continue;
+  const baseModel = parsed.header.model.substring(0, parsed.header.model.indexOf("(")).trim();
+  resolvedModel = await this.copilotCLIModels.resolveModel(baseModel);
+  if (resolvedModel) return resolvedModel;
+}
 ```
+
+### 13.4 默认模型：`getDefaultModel`
+
+```typescript
+// globalState key：持久化存储用户选择的模型
+const SESSION_MODEL_KEY = "github.copilot.cli.sessionModel";
+
+async getDefaultModel(): Promise<string | undefined> {
+  const models = await this.getModels();
+  if (!models.length) return undefined;
+
+  const fallback = models[0];  // 列表第一个作为兜底
+
+  // 从 globalState 读取用户上次选择的模型 ID（大小写不敏感匹配）
+  const stored = this.extensionContext.globalState.get(SESSION_MODEL_KEY, fallback.id)
+    ?.trim()?.toLowerCase();
+
+  return models.find(m => m.id.toLowerCase() === stored)?.id ?? fallback.id;
+}
+
+// 用户切换模型时持久化
+async setDefaultModel(modelId: string): Promise<void> {
+  await this.extensionContext.globalState.update(SESSION_MODEL_KEY, modelId);
+}
+```
+
+**注意**：没有"优先选 sonnet"的硬编码逻辑，默认模型完全由 `getAvailableModels()` 返回的列表顺序决定（第一个）。用户选择后存入 `globalState`，下次启动时恢复。
+
+### 13.5 模型选择的完整调用链
+
+```
+用户启动会话
+    │
+    ▼
+ChatSessions._getSessionModel(request, workspaceFolder)
+    │
+    ├─ 1. 从 .prompt.md header.model 解析 → copilotCLIModels.resolveModel()
+    │
+    ├─ 2. 从 request.model.id 解析 → copilotCLIModels.resolveModel()
+    │
+    ├─ 3. 从 HM（hardcoded map）查找 family → 内置映射表
+    │
+    └─ 4. 兜底 → copilotCLIModels.getDefaultModel()
+                        │
+                        ▼
+              globalState["github.copilot.cli.sessionModel"]
+              或 getAvailableModels()[0].id
+```
+
+### 13.6 `copilot` CLI 支持的模型列表（从 cli.js 提取）
+
+```
+claude-sonnet-4.6, claude-sonnet-4.5, claude-haiku-4.5,
+claude-opus-4.6, claude-opus-4.6-fast, claude-opus-4.5,
+claude-sonnet-4, gemini-3-pro-preview,
+gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1-codex-max,
+gpt-5.1-codex, gpt-5.1, gpt-5.1-codex-mini, gpt-5-mini, gpt-4.1
+```
+
+这是 `copilot` CLI 的 `--model` 参数的静态 choices 列表，与运行时通过 `getAvailableModels()` 动态获取的列表可能不同（后者受账户权限和 Copilot 后端配置影响）。
 
 ---
 
