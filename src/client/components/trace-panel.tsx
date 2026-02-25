@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TraceRecord } from "@/core/trace";
 import { CodeBlock } from "./code-block";
+import { CodeRetrievalViewer } from "./code-retrieval-viewer";
 
 interface TracePanelProps {
   sessionId: string | null;
@@ -110,13 +111,32 @@ function tryParseJson(s: string): unknown | null {
 }
 
 /** Render tool output: JSON tree if parseable, otherwise code block */
-function ToolOutput({ output }: { output: string }) {
+function ToolOutput({ output, toolName }: { output: string; toolName?: string }) {
   const parsed = useMemo(() => tryParseJson(output), [output]);
-  const [mode, setMode] = useState<"tree" | "raw" | "code">("code");
+  const [mode, setMode] = useState<"tree" | "raw" | "code" | "sections">("code");
   const isLarge = output.length > 500;
+
+  // Check if this is a codebase-retrieval output
+  const isCodebaseRetrieval = toolName === "codebase-retrieval";
+  const hasCodeSections = isCodebaseRetrieval && output.includes("Path:") && output.includes("code sections");
 
   if (!parsed) {
     // Non-JSON output - use CodeBlock for syntax highlighting
+    if (hasCodeSections) {
+      return (
+        <div>
+          <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+            <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+              Output (Code Sections)
+            </span>
+          </div>
+          <div className="p-2">
+            <CodeRetrievalViewer output={output} initiallyExpanded={true} />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div>
         <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
@@ -678,7 +698,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                         </div>
                         {outputStr && (
                           <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-                            <ToolOutput output={outputStr} />
+                            <ToolOutput output={outputStr} toolName={trace.tool?.name} />
                           </div>
                         )}
                       </div>

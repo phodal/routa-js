@@ -30,7 +30,9 @@
     "api:test:rust": "BASE_URL=http://localhost:3210 npx tsx tests/api-contract/run.ts",
     "api:validate": "./scripts/validate-api-parity.sh",
     "api:validate:full": "./scripts/validate-api-parity.sh --runtime",
-    "test": "npx tsx"
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.10",
@@ -97,6 +99,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.0",
     "@types/eventsource": "^1.1.15",
@@ -105,10 +109,14 @@
     "@types/react-dom": "^19.0.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/ui": "^4.0.18",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.9",
+    "jsdom": "^28.1.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^4.0.18"
   }
 }
