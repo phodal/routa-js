@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
       const provider = (p.provider as string | undefined) ?? "opencode";
       const modeId = (p.modeId as string | undefined) ?? (p.mode as string | undefined);
       const role = (p.role as string | undefined)?.toUpperCase();
+      const model = (p.model as string | undefined);
       const sessionId = uuidv4();
 
       // Default provider for CRAFTER/GATE delegation (can be overridden per-task)
@@ -155,6 +156,12 @@ export async function POST(request: NextRequest) {
         );
       } else {
         // ── Standard ACP agent ───────────────────────────────────────
+        // Build extra args: pass -m <model> if a model was specified
+        const extraArgs: string[] = [];
+        if (model && model.trim()) {
+          extraArgs.push("-m", model.trim());
+        }
+
         acpSessionId = await manager.createSession(
           sessionId,
           cwd,
@@ -169,6 +176,7 @@ export async function POST(request: NextRequest) {
           },
           provider,
           modeId,
+          extraArgs.length > 0 ? extraArgs : undefined,
         );
       }
 
