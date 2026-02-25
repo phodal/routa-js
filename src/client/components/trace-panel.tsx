@@ -113,30 +113,39 @@ function tryParseJson(s: string): unknown | null {
 /** Render tool output: JSON tree if parseable, otherwise code block */
 function ToolOutput({ output, toolName }: { output: string; toolName?: string }) {
   const parsed = useMemo(() => tryParseJson(output), [output]);
-  const [mode, setMode] = useState<"tree" | "raw" | "code" | "sections">("code");
+  const [mode, setMode] = useState<"tree" | "raw" | "code">("code");
   const isLarge = output.length > 500;
 
   // Check if this is a codebase-retrieval output
+  // The output is a JSON string containing an array with {type: "text", text: "..."}
+  // We need to check if the parsed JSON has this structure
   const isCodebaseRetrieval = toolName === "codebase-retrieval";
-  const hasCodeSections = isCodebaseRetrieval && output.includes("Path:") && output.includes("code sections");
+  const isCodebaseRetrievalFormat = parsed &&
+    Array.isArray(parsed) &&
+    parsed.length > 0 &&
+    parsed[0]?.type === "text" &&
+    typeof parsed[0]?.text === "string" &&
+    parsed[0].text.includes("Path:") &&
+    parsed[0].text.includes("code sections");
+
+  // If it's codebase-retrieval with code sections, always use CodeRetrievalViewer
+  if (isCodebaseRetrievalFormat) {
+    return (
+      <div>
+        <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+          <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+            Output (Code Sections)
+          </span>
+        </div>
+        <div className="p-2">
+          <CodeRetrievalViewer output={output} initiallyExpanded={true} />
+        </div>
+      </div>
+    );
+  }
 
   if (!parsed) {
     // Non-JSON output - use CodeBlock for syntax highlighting
-    if (hasCodeSections) {
-      return (
-        <div>
-          <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
-            <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-              Output (Code Sections)
-            </span>
-          </div>
-          <div className="p-2">
-            <CodeRetrievalViewer output={output} initiallyExpanded={true} />
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div>
         <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">

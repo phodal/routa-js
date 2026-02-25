@@ -38,71 +38,61 @@ function parseCodeRetrievalOutput(output: string): CodeSection[] {
               : text.length;
 
             const afterPath = text.slice(pathStart + match[0].length, nextPathStart);
-            const codeLines = afterPath.split("\n");
+            const lines = afterPath.split("\n");
 
-            const startIndex = codeLines.findIndex(line =>
-              line.trim().match(/^\d+\s/) || line.match(/^\t/)
-            );
+            let firstCodeLine = -1;
+            let startLine = 1;
+            const cleanedLines: string[] = [];
 
-            if (startIndex !== -1) {
-              const cleanedLines: string[] = [];
-              let startLine = 1;
+            for (let j = 0; j < lines.length; j++) {
+              const line = lines[j];
+              const lineMatch = line.match(/^\s*(\d+)\t(.*)$/);
 
-              for (const line of codeLines.slice(startIndex)) {
-                const tabMatch = line.match(/^(\d+)\t(.*)$/);
-                if (tabMatch) {
-                  if (cleanedLines.length === 0) {
-                    startLine = parseInt(tabMatch[1], 10);
-                  }
-                  cleanedLines.push(tabMatch[2]);
-                } else {
-                  const spaceMatch = line.match(/^\s*(\d+)\s(.*)$/);
-                  if (spaceMatch) {
-                    if (cleanedLines.length === 0) {
-                      startLine = parseInt(spaceMatch[1], 10);
-                    }
-                    cleanedLines.push(spaceMatch[2]);
-                  } else if (line.trim()) {
-                    cleanedLines.push(line);
-                  }
+              if (lineMatch) {
+                if (firstCodeLine === -1) {
+                  firstCodeLine = j;
+                  startLine = parseInt(lineMatch[1], 10);
                 }
+                cleanedLines.push(lineMatch[2]);
+              } else if (firstCodeLine !== -1 && line.trim() !== "") {
+                cleanedLines.push(line);
               }
+            }
 
-              if (cleanedLines.length > 0) {
-                const ext = path.split(".").pop()?.toLowerCase();
-                const langMap: Record<string, string> = {
-                  rs: "rust",
-                  ts: "typescript",
-                  js: "javascript",
-                  jsx: "jsx",
-                  tsx: "tsx",
-                  py: "python",
-                  json: "json",
-                  yaml: "yaml",
-                  yml: "yaml",
-                  md: "markdown",
-                  css: "css",
-                  html: "html",
-                  htm: "html",
-                  sql: "sql",
-                  go: "go",
-                  java: "java",
-                  cpp: "cpp",
-                  c: "c",
-                  h: "c",
-                  cs: "csharp",
-                  php: "php",
-                  rb: "ruby",
-                  sh: "bash",
-                };
+            if (cleanedLines.length > 0) {
+              const ext = path.split(".").pop()?.toLowerCase();
+              const langMap: Record<string, string> = {
+                rs: "rust",
+                ts: "typescript",
+                js: "javascript",
+                jsx: "jsx",
+                tsx: "tsx",
+                py: "python",
+                json: "json",
+                yaml: "yaml",
+                yml: "yaml",
+                md: "markdown",
+                css: "css",
+                html: "html",
+                htm: "html",
+                sql: "sql",
+                go: "go",
+                java: "java",
+                cpp: "cpp",
+                c: "c",
+                h: "c",
+                cs: "csharp",
+                php: "php",
+                rb: "ruby",
+                sh: "bash",
+              };
 
-                sections.push({
-                  path,
-                  code: cleanedLines.join("\n"),
-                  startLine,
-                  language: ext && langMap[ext] ? langMap[ext] : "text",
-                });
-              }
+              sections.push({
+                path,
+                code: cleanedLines.join("\n"),
+                startLine,
+                language: ext && langMap[ext] ? langMap[ext] : "text",
+              });
             }
           }
         }
@@ -135,18 +125,6 @@ Path: utils/helper.py
      3
      4	class Helper:
      5	    pass`
-    }
-  ]),
-
-  // Format with space-prefixed line numbers
-  spacePrefixed: JSON.stringify([
-    {
-      type: "text",
-      text: `The following code sections were retrieved:
-Path: components/Button.tsx
-  1 export const Button = ({ children }) => {
-  2   return <button>{children}</button>;
-  3 }`
     }
   ]),
 
@@ -212,19 +190,6 @@ describe("parseCodeRetrievalOutput", () => {
       startLine: 1,
     });
     expect(sections[1].code).toContain("def calculate_sum(a, b):");
-  });
-
-  it("should parse space-prefixed line numbers", () => {
-    const sections = parseCodeRetrievalOutput(SAMPLE_OUTPUTS.spacePrefixed);
-
-    expect(sections).toHaveLength(1);
-    expect(sections[0]).toMatchObject({
-      path: "components/Button.tsx",
-      startLine: 1,
-    });
-    // Accept either typescript or tsx as valid language for .tsx files
-    expect(["typescript", "tsx"]).toContain(sections[0].language);
-    expect(sections[0].code).toContain('export const Button = ({ children })');
   });
 
   it("should parse single section correctly", () => {
