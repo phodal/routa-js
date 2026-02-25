@@ -56,6 +56,13 @@ export default function HomePage() {
     setRepoSelection({ path: def.repoPath, branch: def.branch ?? "", name: def.label ?? def.repoPath.split("/").pop() ?? "" });
   }, [codebases]);
 
+  const handleCodebaseSelect = useCallback((repoPath: string) => {
+    const codebase = codebases.find((c) => c.repoPath === repoPath);
+    if (codebase) {
+      setRepoSelection({ path: codebase.repoPath, branch: codebase.branch ?? "", name: codebase.label ?? codebase.repoPath.split("/").pop() ?? "" });
+    }
+  }, [codebases]);
+
   const handleWorkspaceSelect = useCallback((wsId: string) => {
     setActiveWorkspaceId(wsId);
     setActiveSessionId(null);
@@ -69,8 +76,7 @@ export default function HomePage() {
 
   const acp = useAcp();
   const skillsHook = useSkills();
-  // Use activeSessionId as workspaceId to isolate notes per session
-  const notesHook = useNotes(activeSessionId ?? "");
+  const notesHook = useNotes(activeWorkspaceId ?? "");
 
   // ── Collaborative editing panel view ──────────────────────────────────
   const [taskPanelMode, setTaskPanelMode] = useState<"tasks" | "collab">("tasks");
@@ -449,7 +455,7 @@ export default function HomePage() {
       // Always pass the selected role - don't skip CRAFTER
       const role = selectedAgent;
       console.log(`[handleCreateSession] Creating session: provider=${provider}, role=${role}`);
-      const result = await acp.createSession(cwd, provider, undefined, role);
+      const result = await acp.createSession(cwd, provider, undefined, role, activeWorkspaceId ?? undefined);
       if (result?.sessionId) {
         setActiveSessionId(result.sessionId);
         // Clear tasks when creating a new session
@@ -457,7 +463,7 @@ export default function HomePage() {
         bumpRefresh();
       }
     },
-    [acp, ensureConnected, bumpRefresh, repoSelection, selectedAgent, activeSessionId, deleteEmptySession]
+    [acp, ensureConnected, bumpRefresh, repoSelection, selectedAgent, activeSessionId, deleteEmptySession, activeWorkspaceId]
   );
 
   const handleSelectSession = useCallback(
@@ -482,14 +488,14 @@ export default function HomePage() {
     // Always pass the selected role
     const role = selectedAgent;
     console.log(`[ensureSessionForChat] Creating session: provider=${provider ?? acp.selectedProvider}, role=${role}`);
-    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId, role);
+    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId, role, activeWorkspaceId ?? undefined);
     if (result?.sessionId) {
       setActiveSessionId(result.sessionId);
       bumpRefresh();
       return result.sessionId;
     }
     return null;
-  }, [acp, activeSessionId, ensureConnected, bumpRefresh, selectedAgent]);
+  }, [acp, activeSessionId, ensureConnected, bumpRefresh, selectedAgent, activeWorkspaceId]);
 
   const handleLoadSkill = useCallback(async (name: string): Promise<string | null> => {
     const skill = await skillsHook.loadSkill(name, repoSelection?.path);
@@ -824,6 +830,18 @@ export default function HomePage() {
           loading={workspacesHook.loading}
         />
 
+        {/* Codebase picker */}
+        {codebases.length > 1 && (
+          <>
+            <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
+            <CodebasePicker
+              codebases={codebases}
+              selectedRepoPath={repoSelection?.path ?? null}
+              onSelect={handleCodebaseSelect}
+            />
+          </>
+        )}
+
         {/* Separator */}
         <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
 
@@ -897,6 +915,28 @@ export default function HomePage() {
             className="fixed inset-0 z-30 bg-black/40 md:hidden"
             onClick={() => setShowMobileSidebar(false)}
           />
+        )}
+
+        {/* ─── Empty workspace onboarding ──────────────────────────── */}
+        {!workspacesHook.loading && workspacesHook.workspaces.length === 0 && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-50/90 dark:bg-[#0f1117]/90 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-8 max-w-sm w-full mx-4 text-center">
+              <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Create your first workspace</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">A workspace organizes your sessions, notes, and codebases for a project.</p>
+              <button
+                type="button"
+                onClick={() => handleWorkspaceCreate("My Workspace")}
+                className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+              >
+                Create Workspace
+              </button>
+            </div>
+          </div>
         )}
 
         {/* ─── Left Sidebar ──────────────────────────────────────── */}
@@ -995,6 +1035,20 @@ export default function HomePage() {
             >
               + New Session
             </button>
+
+            {/* Codebase picker */}
+            {codebases.length > 0 && (
+              <div className="mt-2">
+                <CodebasePicker
+                  codebases={codebases}
+                  selectedRepoPath={repoSelection?.path ?? null}
+                  onSelect={(path) => {
+                    const cb = codebases.find((c) => c.repoPath === path);
+                    setRepoSelection({ path, branch: cb?.branch ?? "", name: cb?.label ?? path.split("/").pop() ?? "" });
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Sessions + Skills */}
@@ -1092,7 +1146,7 @@ export default function HomePage() {
                 connected={notesHook.connected}
                 onUpdateNote={notesHook.updateNote}
                 onDeleteNote={notesHook.deleteNote}
-                workspaceId={activeSessionId ?? ""}
+                workspaceId={activeWorkspaceId ?? ""}
               />
             ) : (
               <TaskPanel

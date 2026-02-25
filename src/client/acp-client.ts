@@ -111,6 +111,7 @@ export class BrowserAcpClient {
     crafterProvider?: string;
     gateProvider?: string;
     mcpServers?: Array<{ name: string; url?: string }>;
+    workspaceId?: string;
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", {
       cwd: params.cwd, // Let server handle the default
@@ -120,6 +121,7 @@ export class BrowserAcpClient {
       crafterProvider: params.crafterProvider,
       gateProvider: params.gateProvider,
       mcpServers: params.mcpServers ?? [],
+      workspaceId: params.workspaceId,
     });
     this._sessionId = result.sessionId;
 
