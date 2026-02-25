@@ -7,17 +7,60 @@
  * - Session lifecycle events (start/end)
  * - User messages
  * - Agent responses (messages, thoughts)
- * - Tool calls and results
+ * - Tool calls and results (with input params as table)
  * - File modifications
  *
  * Based on the Agent Trace specification: https://github.com/cursor/agent-trace
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TraceRecord } from "@/core/trace";
 
 interface TracePanelProps {
   sessionId: string | null;
+}
+
+/** Render tool input parameters as a visible key-value table */
+function ToolInputTable({ input }: { input: unknown }) {
+  if (input == null) return null;
+
+  if (typeof input === "object" && !Array.isArray(input)) {
+    const entries = Object.entries(input as Record<string, unknown>);
+    if (entries.length === 0) return null;
+    return (
+      <table className="w-full text-[10px] border-collapse">
+        <tbody>
+          {entries.map(([key, value]) => (
+            <tr key={key} className="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
+              <td className="py-1 pr-3 font-mono font-semibold text-gray-500 dark:text-gray-400 align-top whitespace-nowrap w-px">
+                {key}
+              </td>
+              <td className="py-1 font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-all">
+                {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  return (
+    <pre className="text-[10px] text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words">
+      {JSON.stringify(input, null, 2)}
+    </pre>
+  );
+}
+
+/** Group traces by sessionId, preserving insertion order */
+function groupBySession(traces: TraceRecord[]): Map<string, TraceRecord[]> {
+  const map = new Map<string, TraceRecord[]>();
+  for (const trace of traces) {
+    const sid = trace.sessionId || "unknown";
+    if (!map.has(sid)) map.set(sid, []);
+    map.get(sid)!.push(trace);
+  }
+  return map;
 }
 
 export function TracePanel({ sessionId }: TracePanelProps) {
@@ -25,7 +68,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [expandedOutputIds, setExpandedOutputIds] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<{
     totalDays: number;
     totalFiles: number;
@@ -106,75 +149,30 @@ export function TracePanel({ sessionId }: TracePanelProps) {
     }
   }, [sessionId]);
 
-  const filteredTraces = traces.filter((trace) => {
-    if (filter === "all") return true;
-    return trace.eventType === filter;
-  });
+  const filteredTraces = useMemo(
+    () => (filter === "all" ? traces : traces.filter((t) => t.eventType === filter)),
+    [traces, filter],
+  );
 
-  const toggleExpand = useCallback((traceId: string) => {
-    setExpandedIds(prev => {
+  const sessionGroups = useMemo(() => groupBySession(filteredTraces), [filteredTraces]);
+
+  const toggleOutputExpand = useCallback((traceId: string) => {
+    setExpandedOutputIds((prev) => {
       const next = new Set(prev);
-      if (next.has(traceId)) {
-        next.delete(traceId);
-      } else {
-        next.add(traceId);
-      }
+      if (next.has(traceId)) next.delete(traceId);
+      else next.add(traceId);
       return next;
     });
   }, []);
 
-  const expandAll = useCallback(() => {
-    setExpandedIds(new Set(filteredTraces.map(t => t.id)));
-  }, [filteredTraces]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedIds(new Set());
-  }, []);
-
-  const eventTypeColors: Record<string, string> = {
-    session_start: "text-green-600 dark:text-green-400",
-    session_end: "text-red-600 dark:text-red-400",
-    user_message: "text-blue-600 dark:text-blue-400",
-    agent_message: "text-purple-600 dark:text-purple-400",
-    agent_thought: "text-yellow-600 dark:text-yellow-400",
-    tool_call: "text-orange-600 dark:text-orange-400",
-    tool_result: "text-cyan-600 dark:text-cyan-400",
-  };
-
-  const eventTypeLabels: Record<string, string> = {
-    session_start: "Session Start",
-    session_end: "Session End",
-    user_message: "User",
-    agent_message: "Agent",
-    agent_thought: "Thought",
-    tool_call: "Tool",
-    tool_result: "Tool Result",
-  };
-
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
-
-  const getTraceContent = (trace: TraceRecord) => {
-    // Conversation content
-    if (trace.conversation) {
-      return trace.conversation.fullContent || trace.conversation.contentPreview || "";
-    }
-    // Tool content
-    if (trace.tool) {
-      if (trace.eventType === "tool_call") {
-        return `Calling: ${trace.tool.name}`;
-      }
-      if (trace.eventType === "tool_result") {
-        const output = trace.tool.output;
-        if (typeof output === "string") {
-          return output.slice(0, 200);
-        }
-        return JSON.stringify(output)?.slice(0, 200) || "";
-      }
-    }
-    return "";
+    return date.toLocaleTimeString("en-US", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
   };
 
   return (
@@ -233,70 +231,29 @@ export function TracePanel({ sessionId }: TracePanelProps) {
       )}
 
       {/* Filter bar */}
-      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2 shrink-0 overflow-x-auto">
-        <button
-          onClick={() => setFilter("all")}
-          className={`px-2 py-1 text-[11px] font-medium rounded-md whitespace-nowrap transition-colors ${
-            filter === "all"
-              ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
-        >
-          All
-        </button>
-        <button
-          onClick={() => setFilter("user_message")}
-          className={`px-2 py-1 text-[11px] font-medium rounded-md whitespace-nowrap transition-colors ${
-            filter === "user_message"
-              ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
-        >
-          User
-        </button>
-        <button
-          onClick={() => setFilter("agent_message")}
-          className={`px-2 py-1 text-[11px] font-medium rounded-md whitespace-nowrap transition-colors ${
-            filter === "agent_message"
-              ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
-        >
-          Agent
-        </button>
-        <button
-          onClick={() => setFilter("tool_call")}
-          className={`px-2 py-1 text-[11px] font-medium rounded-md whitespace-nowrap transition-colors ${
-            filter === "tool_call"
-              ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
-        >
-          Tools
-        </button>
-        <button
-          onClick={() => setFilter("agent_thought")}
-          className={`px-2 py-1 text-[11px] font-medium rounded-md whitespace-nowrap transition-colors ${
-            filter === "agent_thought"
-              ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
-        >
-          Thoughts
-        </button>
-        <div className="flex-1" />
-        <button
-          onClick={expandAll}
-          className="px-2 py-1 text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
-        >
-          Expand All
-        </button>
-        <button
-          onClick={collapseAll}
-          className="px-2 py-1 text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
-        >
-          Collapse All
-        </button>
+      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center gap-1.5 shrink-0 overflow-x-auto">
+        {(
+          [
+            { key: "all", label: "All", active: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" },
+            { key: "user_message", label: "User", active: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" },
+            { key: "agent_message", label: "Agent", active: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300" },
+            { key: "tool_call", label: "Tool Calls", active: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" },
+            { key: "tool_result", label: "Tool Results", active: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300" },
+            { key: "agent_thought", label: "Thoughts", active: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300" },
+          ] as const
+        ).map(({ key, label, active }) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={`px-2 py-1 text-[11px] font-medium rounded-md whitespace-nowrap transition-colors ${
+              filter === key
+                ? active
+                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Error state */}
@@ -330,175 +287,269 @@ export function TracePanel({ sessionId }: TracePanelProps) {
         </div>
       )}
 
-      {/* Trace table */}
+      {/* Trace content - grouped by session */}
       <div className="flex-1 overflow-y-auto">
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {filteredTraces.map((trace) => {
-            const isExpanded = expandedIds.has(trace.id);
-            const content = getTraceContent(trace);
+        {Array.from(sessionGroups.entries()).map(([sid, sessionTraces]) => (
+          <div key={sid}>
+            {/* Session section header */}
+            <div className="sticky top-0 z-10 px-4 py-1.5 bg-gray-100 dark:bg-gray-800/90 backdrop-blur border-y border-gray-200 dark:border-gray-700 flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                Session
+              </span>
+              <span className="text-[10px] font-mono text-gray-600 dark:text-gray-300">
+                {sid.length > 16 ? `${sid.slice(0, 8)}…${sid.slice(-4)}` : sid}
+              </span>
+              <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500">
+                {sessionTraces.length} events
+              </span>
+            </div>
 
-            return (
-              <div
-                key={trace.id}
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-              >
-                <div
-                  onClick={() => toggleExpand(trace.id)}
-                  className="px-4 py-2 cursor-pointer flex items-start gap-3"
-                >
-                  {/* Timestamp */}
-                  <div className="shrink-0 w-16 text-[10px] text-gray-400 dark:text-gray-500 font-mono text-right pt-0.5">
-                    {formatTime(trace.timestamp)}
-                  </div>
+            {/* Events */}
+            <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
+              {sessionTraces.map((trace) => {
+                const isOutputExpanded = expandedOutputIds.has(trace.id);
 
-                  {/* Event type badge */}
-                  <div className="shrink-0 pt-0.5">
-                    <span
-                      className={`text-[10px] font-medium uppercase ${
-                        eventTypeColors[trace.eventType] || "text-gray-500"
-                      }`}
-                    >
-                      {eventTypeLabels[trace.eventType] || trace.eventType}
-                    </span>
-                  </div>
+                /* ── Session lifecycle ── */
+                if (trace.eventType === "session_start" || trace.eventType === "session_end") {
+                  return (
+                    <div key={trace.id} className="px-4 py-1.5 flex items-center gap-3">
+                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right">
+                        {formatTime(trace.timestamp)}
+                      </span>
+                      <span
+                        className={`text-[10px] font-semibold uppercase tracking-wide ${
+                          trace.eventType === "session_start"
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-500 dark:text-red-400"
+                        }`}
+                      >
+                        {trace.eventType === "session_start" ? "▶ Session Started" : "■ Session Ended"}
+                      </span>
+                    </div>
+                  );
+                }
 
-                  {/* Content preview (one line) */}
-                  <div className="flex-1 min-w-0">
-                    {trace.conversation && (
-                      <p className="text-xs text-gray-700 dark:text-gray-300 truncate">
-                        {trace.conversation.contentPreview || trace.conversation.fullContent || ""}
-                      </p>
-                    )}
-                    {trace.tool && (
-                      <div className="flex items-center gap-2">
-                        <code className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-700 dark:text-gray-300">
-                          {trace.tool.name}
-                        </code>
-                        {trace.tool.status && (
-                          <span
-                            className={`text-[10px] ${
-                              trace.tool.status === "completed"
-                                ? "text-green-600 dark:text-green-400"
-                                : trace.tool.status === "failed"
-                                  ? "text-red-600 dark:text-red-400"
-                                  : "text-yellow-600 dark:text-yellow-400"
-                            }`}
-                          >
-                            {trace.tool.status}
+                /* ── User message ── */
+                if (trace.eventType === "user_message") {
+                  const content =
+                    trace.conversation?.fullContent || trace.conversation?.contentPreview || "";
+                  return (
+                    <div key={trace.id} className="px-4 py-2.5 flex gap-3">
+                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
+                        {formatTime(trace.timestamp)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                            User
                           </span>
-                        )}
-                        {trace.tool.output && typeof trace.tool.output === "string" ? (
-                          <span className="text-[10px] text-gray-400 truncate max-w-xs">
-                            {trace.tool.output.slice(0, 100)}
-                          </span>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Expand/collapse icon */}
-                  <div className="shrink-0 pt-0.5">
-                    <svg
-                      className={`w-4 h-4 text-gray-400 transition-transform ${
-                        isExpanded ? "rotate-90" : ""
-                      }`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Expanded content */}
-                {isExpanded && (
-                  <div
-                    className="px-4 pb-3 pl-20"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-md border border-gray-100 dark:border-gray-800">
-                      {/* Full conversation content */}
-                      {trace.conversation && (
-                        <div className="mb-3">
-                          <div className="text-[10px] text-gray-400 mb-1">Content</div>
-                          <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-                            {trace.conversation.fullContent || trace.conversation.contentPreview || ""}
-                          </p>
                         </div>
-                      )}
-
-                      {/* Tool details */}
-                      {trace.tool && (
-                        <div className="mb-3">
-                          <div className="text-[10px] text-gray-400 mb-1">Tool: {trace.tool.name}</div>
-                          {trace.tool.status && (
-                            <div className="text-[10px] text-gray-400 mb-1">
-                              Status: {trace.tool.status}
-                            </div>
-                          )}
-                          {trace.tool.input != null && (
-                            <details className="mt-2">
-                              <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-300">
-                                Input
-                              </summary>
-                              <pre className="text-[10px] text-gray-700 dark:text-gray-300 mt-1 overflow-x-auto whitespace-pre-wrap break-words">
-                                {JSON.stringify(trace.tool.input, null, 2)}
-                              </pre>
-                            </details>
-                          )}
-                          {trace.tool.output != null && (
-                            <details className="mt-2">
-                              <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-300">
-                                Output
-                              </summary>
-                              <pre className="text-[10px] text-gray-700 dark:text-gray-300 mt-1 overflow-x-auto whitespace-pre-wrap break-words">
-                                {typeof trace.tool.output === "string"
-                                  ? trace.tool.output
-                                  : JSON.stringify(trace.tool.output, null, 2)}
-                              </pre>
-                            </details>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Files affected */}
-                      {trace.files && trace.files.length > 0 && (
-                        <div className="mb-3">
-                          <div className="text-[10px] text-gray-400 mb-1">Files Affected</div>
-                          {trace.files.map((file, idx) => (
-                            <div key={idx} className="text-xs">
-                              <span className="font-mono text-gray-700 dark:text-gray-300">
-                                {file.path}
-                              </span>
-                              {file.ranges && file.ranges.length > 0 && (
-                                <span className="text-[10px] text-gray-400 ml-2">
-                                  (lines: {file.ranges.map((r) => `${r.startLine}-${r.endLine}`).join(", ")})
-                                </span>
-                              )}
-                              {file.operation && (
-                                <span className="inline-block ml-2 px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
-                                  {file.operation}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Metadata */}
-                      <div className="text-[10px] text-gray-400">
-                        ID: {trace.id.slice(0, 8)} • Provider: {trace.contributor.provider}
-                        {trace.contributor.model && ` • Model: ${trace.contributor.model}`}
+                        <p className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-md px-3 py-2">
+                          {content || <span className="italic text-gray-400">(empty)</span>}
+                        </p>
                       </div>
                     </div>
+                  );
+                }
+
+                /* ── Agent message ── */
+                if (trace.eventType === "agent_message") {
+                  const content =
+                    trace.conversation?.fullContent || trace.conversation?.contentPreview || "";
+                  return (
+                    <div key={trace.id} className="px-4 py-2.5 flex gap-3">
+                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
+                        {formatTime(trace.timestamp)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
+                            Agent
+                          </span>
+                          {trace.contributor.model && (
+                            <span className="text-[9px] text-gray-400 dark:text-gray-500">
+                              {trace.contributor.model}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
+                          {content || <span className="italic text-gray-400">(empty)</span>}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                /* ── Agent thought ── */
+                if (trace.eventType === "agent_thought") {
+                  const content =
+                    trace.conversation?.fullContent || trace.conversation?.contentPreview || "";
+                  return (
+                    <div key={trace.id} className="px-4 py-2 flex gap-3 bg-yellow-50/40 dark:bg-yellow-900/5">
+                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
+                        {formatTime(trace.timestamp)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] font-semibold text-yellow-600 dark:text-yellow-400 uppercase tracking-wide">
+                          Thought
+                        </span>
+                        <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400 italic whitespace-pre-wrap break-words leading-relaxed">
+                          {content}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                /* ── Tool call ── */
+                if (trace.eventType === "tool_call") {
+                  return (
+                    <div key={trace.id} className="px-4 py-2.5 flex gap-3">
+                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
+                        {formatTime(trace.timestamp)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        {/* Tool header row */}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wide">
+                            Tool
+                          </span>
+                          <code className="text-[11px] font-mono font-semibold px-2 py-0.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded border border-orange-100 dark:border-orange-800/40">
+                            {trace.tool?.name ?? "unknown"}
+                          </code>
+                          {trace.tool?.status && (
+                            <span
+                              className={`text-[10px] font-medium ${
+                                trace.tool.status === "completed"
+                                  ? "text-green-600 dark:text-green-400"
+                                  : trace.tool.status === "failed"
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-yellow-600 dark:text-yellow-400"
+                              }`}
+                            >
+                              {trace.tool.status}
+                            </span>
+                          )}
+                        </div>
+                        {/* Input parameters table */}
+                        {trace.tool?.input != null && (
+                          <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+                            <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
+                              <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                Input Parameters
+                              </span>
+                            </div>
+                            <div className="px-2 py-1.5 bg-white dark:bg-gray-900/40">
+                              <ToolInputTable input={trace.tool.input} />
+                            </div>
+                          </div>
+                        )}
+                        {/* Files affected */}
+                        {trace.files && trace.files.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {trace.files.map((f, i) => (
+                              <span
+                                key={i}
+                                className="text-[9px] font-mono px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded border border-gray-200 dark:border-gray-700"
+                              >
+                                {f.operation && (
+                                  <span className="text-blue-500 dark:text-blue-400 mr-1">
+                                    {f.operation}
+                                  </span>
+                                )}
+                                {f.path}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                /* ── Tool result ── */
+                if (trace.eventType === "tool_result") {
+                  const rawOutput = trace.tool?.output;
+                  const outputStr =
+                    rawOutput == null
+                      ? ""
+                      : typeof rawOutput === "string"
+                        ? rawOutput
+                        : JSON.stringify(rawOutput, null, 2);
+                  const TRUNCATE_LEN = 400;
+                  const isTruncated = outputStr.length > TRUNCATE_LEN;
+                  const displayOutput = isOutputExpanded
+                    ? outputStr
+                    : outputStr.slice(0, TRUNCATE_LEN);
+
+                  return (
+                    <div key={trace.id} className="px-4 py-2.5 flex gap-3">
+                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
+                        {formatTime(trace.timestamp)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 uppercase tracking-wide">
+                            Tool Result
+                          </span>
+                          <code className="text-[11px] font-mono px-2 py-0.5 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300 rounded border border-cyan-100 dark:border-cyan-800/40">
+                            {trace.tool?.name ?? "unknown"}
+                          </code>
+                          {trace.tool?.status && (
+                            <span
+                              className={`text-[10px] font-medium ${
+                                trace.tool.status === "completed"
+                                  ? "text-green-600 dark:text-green-400"
+                                  : trace.tool.status === "failed"
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-yellow-600 dark:text-yellow-400"
+                              }`}
+                            >
+                              {trace.tool.status}
+                            </span>
+                          )}
+                        </div>
+                        {outputStr && (
+                          <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+                            <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
+                              <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                Output
+                              </span>
+                            </div>
+                            <pre className="px-2 py-1.5 text-[10px] font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words bg-white dark:bg-gray-900/40">
+                              {displayOutput}
+                              {isTruncated && !isOutputExpanded && "…"}
+                            </pre>
+                            {isTruncated && (
+                              <button
+                                onClick={() => toggleOutputExpand(trace.id)}
+                                className="w-full px-2 py-1 text-[10px] text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800/40 border-t border-gray-200 dark:border-gray-700/60 transition-colors text-left"
+                              >
+                                {isOutputExpanded
+                                  ? "Show less"
+                                  : `Show all (${outputStr.length} chars)`}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                /* ── Fallback ── */
+                return (
+                  <div key={trace.id} className="px-4 py-1.5 flex items-center gap-3">
+                    <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right">
+                      {formatTime(trace.timestamp)}
+                    </span>
+                    <span className="text-[10px] text-gray-500 uppercase">{trace.eventType}</span>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
