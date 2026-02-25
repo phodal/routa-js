@@ -805,56 +805,6 @@ export default function HomePage() {
           </span>
         </div>
 
-        {/* Separator */}
-        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
-
-        {/* Workspace switcher */}
-        <WorkspaceSwitcher
-          workspaces={workspacesHook.workspaces}
-          activeWorkspaceId={activeWorkspaceId}
-          onSelect={handleWorkspaceSelect}
-          onCreate={handleWorkspaceCreate}
-          loading={workspacesHook.loading}
-        />
-
-        {/* Codebase picker (top bar, only when multiple codebases) */}
-        {codebases.length > 1 && (
-          <>
-            <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
-            <CodebasePicker
-              codebases={codebases}
-              selectedRepoPath={repoSelection?.path ?? null}
-              onSelect={(path) => {
-                const cb = codebases.find((c) => c.repoPath === path);
-                setRepoSelection({ path, branch: cb?.branch ?? "", name: cb?.label ?? path.split("/").pop() ?? "" });
-              }}
-            />
-          </>
-        )}
-
-        {/* Separator */}
-        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
-
-        {/* Agent selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 dark:text-gray-400 hidden md:inline">Agent:</span>
-          <div className="relative">
-            <select
-              value={selectedAgent}
-              onChange={(e) => handleAgentChange(e.target.value as AgentRole)}
-              className="appearance-none pl-3 pr-7 py-1 text-xs font-medium rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 cursor-pointer focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="CRAFTER">CRAFTER</option>
-              <option value="ROUTA">ROUTA</option>
-              <option value="GATE">GATE</option>
-              <option value="DEVELOPER">DEVELOPER</option>
-            </select>
-            <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-        </div>
-
         {/* Spacer */}
         <div className="flex-1" />
 
