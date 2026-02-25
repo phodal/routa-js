@@ -32,7 +32,7 @@ type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 export default function HomePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<AgentRole>("CRAFTER");
+  const [selectedAgent, setSelectedAgent] = useState<AgentRole>("ROUTA");
   const [showAgentToast, setShowAgentToast] = useState(false);
   const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const [routaTasks, setRoutaTasks] = useState<ParsedTask[]>([]);
