@@ -1,4 +1,4 @@
-import {useState} from "react";
+import React, {useState} from "react";
 import {TerminalBubble} from "@/client/components/terminal/terminal-bubble";
 import {ChatMessage, PlanEntry} from "@/client/components/chat-panel";
 import {MarkdownViewer} from "@/client/components/markdown/markdown-viewer";
@@ -133,6 +133,113 @@ function formatToolInputInline(rawInput?: Record<string, unknown>, maxLen = 60):
     return str.length > maxLen ? `${str.slice(0, maxLen)}…` : str;
 }
 
+/**
+ * Get tool icon based on tool kind.
+ * Returns an SVG path for different tool categories.
+ */
+function getToolIcon(kind?: string): React.ReactNode {
+    switch (kind) {
+        // Shell/Bash - Terminal icon
+        case "shell":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+            );
+
+        // Read file - Document icon
+        case "read-file":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            );
+
+        // Edit/Write file - Pencil icon
+        case "edit-file":
+        case "write-file":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+            );
+
+        // Glob/Grep - Search icon
+        case "glob":
+        case "grep":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+            );
+
+        // Web operations - Globe icon
+        case "web-fetch":
+        case "web-search":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+            );
+
+        // Default - Tool icon
+        default:
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            );
+    }
+}
+
+/**
+ * Get styling based on tool kind for visual distinction.
+ */
+function getToolStyling(kind?: string): { bgClass: string; borderClass: string; iconColorClass: string } {
+    switch (kind) {
+        case "shell":
+            return {
+                bgClass: "bg-slate-50 dark:bg-slate-900/30",
+                borderClass: "border-slate-200 dark:border-slate-700/50",
+                iconColorClass: "text-slate-600 dark:text-slate-400",
+            };
+        case "edit-file":
+        case "write-file":
+            return {
+                bgClass: "bg-blue-50/50 dark:bg-blue-900/10",
+                borderClass: "border-blue-200/50 dark:border-blue-800/30",
+                iconColorClass: "text-blue-600 dark:text-blue-400",
+            };
+        case "read-file":
+            return {
+                bgClass: "bg-emerald-50/50 dark:bg-emerald-900/10",
+                borderClass: "border-emerald-200/50 dark:border-emerald-800/30",
+                iconColorClass: "text-emerald-600 dark:text-emerald-400",
+            };
+        case "glob":
+        case "grep":
+            return {
+                bgClass: "bg-violet-50/50 dark:bg-violet-900/10",
+                borderClass: "border-violet-200/50 dark:border-violet-800/30",
+                iconColorClass: "text-violet-600 dark:text-violet-400",
+            };
+        case "web-fetch":
+        case "web-search":
+            return {
+                bgClass: "bg-cyan-50/50 dark:bg-cyan-900/10",
+                borderClass: "border-cyan-200/50 dark:border-cyan-800/30",
+                iconColorClass: "text-cyan-600 dark:text-cyan-400",
+            };
+        default:
+            return {
+                bgClass: "bg-gray-50 dark:bg-[#161922]",
+                borderClass: "border-gray-200/50 dark:border-gray-800/50",
+                iconColorClass: "text-gray-500 dark:text-gray-400",
+            };
+    }
+}
+
 function ToolBubble({
                         content, toolName, toolStatus, toolKind, rawInput,
                     }: {
@@ -144,24 +251,29 @@ function ToolBubble({
             : toolStatus === "failed" ? "bg-red-500"
                 : toolStatus === "in_progress" || toolStatus === "running" ? "bg-yellow-500 animate-pulse"
                     : "bg-gray-400";
-    const kindLabel = toolKind ? ` (${toolKind})` : "";
+
     const inputPreview = formatToolInputInline(rawInput);
+    const styling = getToolStyling(toolKind);
+    const icon = getToolIcon(toolKind);
 
     return (
         <div className="flex flex-col w-full">
             <button
                 type="button"
                 onClick={() => setExpanded((e) => !e)}
-                className="w-full px-2.5 py-1 rounded-md bg-gray-50 dark:bg-[#161922] flex items-center gap-2 text-left hover:bg-gray-100 dark:hover:bg-[#1a1d2e] transition-colors"
+                className={`w-full px-2.5 py-1.5 rounded-md border ${styling.bgClass} ${styling.borderClass} flex items-center gap-2 text-left hover:brightness-95 dark:hover:brightness-110 transition-all`}
             >
+                <span className={`shrink-0 ${styling.iconColorClass}`}>
+                    {icon}
+                </span>
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor}`}/>
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 shrink-0">
-          {toolName ?? "tool"}{kindLabel}
-        </span>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1">
+                    {toolName ?? "tool"}
+                </span>
                 {inputPreview && (
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate flex-1">
-            {inputPreview}
-          </span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate max-w-[40%]">
+                        {inputPreview}
+                    </span>
                 )}
                 <svg
                     className={`w-2.5 h-2.5 text-gray-400 transition-transform duration-150 shrink-0 ${expanded ? "rotate-90" : ""}`}
@@ -172,7 +284,7 @@ function ToolBubble({
             </button>
             {expanded && content && (
                 <div
-                    className="mt-1 ml-4 px-2.5 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto bg-gray-50 dark:bg-[#161922] rounded-md">
+                    className={`mt-1 ml-4 px-2.5 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto rounded-md border ${styling.bgClass} ${styling.borderClass}`}>
                     {content}
                 </div>
             )}

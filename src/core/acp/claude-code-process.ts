@@ -820,6 +820,10 @@ function tryParsePartialJson(partialJson: string): Record<string, unknown> | nul
     return null;
 }
 
+/**
+ * Map Claude tool names to normalized kind identifiers for UI styling.
+ * Returns a simplified category name used for styling and routing in the UI.
+ */
 function mapClaudeToolName(claudeToolName: string): string {
     // Handle MCP tool names: mcp__server-name__tool_name -> tool_name
     if (claudeToolName.startsWith("mcp__")) {
@@ -835,23 +839,56 @@ function mapClaudeToolName(claudeToolName: string): string {
     }
 
     switch (claudeToolName) {
+        // Shell/Command execution
         case "Bash": return "shell";
+
+        // File read operations
         case "Read": return "read-file";
+        case "LS": return "read-file";
+
+        // File write/edit operations (could be handled differently)
         case "Write": return "write-file";
         case "Edit": return "edit-file";
+        case "MultiEdit": return "edit-file";
+
+        // Search operations
         case "Glob": return "glob";
         case "Grep": return "grep";
+
+        // Web operations
         case "WebSearch": return "web-search";
         case "WebFetch": return "web-fetch";
+
+        // Task/Agent operations
         case "Task": return "task";
+
+        // Todo operations
         case "TodoRead": return "todo-read";
         case "TodoWrite": return "todo-write";
+
+        // Notebook operations
         case "NotebookRead": return "notebook-read";
         case "NotebookEdit": return "notebook-edit";
+
+        // Plan mode
+        case "ExitPlanMode": return "plan";
+        case "EnterPlanMode": return "plan";
+
         default: return claudeToolName;
     }
 }
 
+/**
+ * Format tool title for display based on tool type and parameters.
+ * Follows the U2e dispatcher pattern from VS Code extension analysis:
+ * - Read/LS: "Read {path}" with file path
+ * - Glob: "Searched for files matching `{pattern}`"
+ * - Grep: "Searched for regex `{pattern}`"
+ * - Edit/Write/MultiEdit: "Editing {path}" or "Writing {path}"
+ * - Bash: Shows command (handled via toolSpecificData in VS Code)
+ * - Task: "Task: {description}" or "Completed Task: {description}"
+ * - Default: "Used tool: {name}"
+ */
 function formatToolTitle(toolName: string, params: Record<string, unknown>): string {
     // Handle MCP tool names: mcp__server-name__tool_name -> tool_name
     let displayName = toolName;
@@ -863,16 +900,46 @@ function formatToolTitle(toolName: string, params: Record<string, unknown>): str
     }
 
     switch (displayName) {
-        case "Read":
-        case "Write":
-        case "Edit": {
+        // ── Read/LS: Show "Read {path}" with clickable file path hint ──
+        case "Read": {
             const path = (params.file_path ?? params.path ?? "") as string;
-            return `${displayName}: ${path}`;
+            return path ? `Read ${path}` : "Read";
         }
+        case "LS": {
+            const path = (params.path ?? "") as string;
+            return path ? `Read ${path}` : "List directory";
+        }
+
+        // ── Glob: Show search pattern ──
+        case "Glob": {
+            const pattern = (params.pattern ?? params.glob_pattern ?? "") as string;
+            return pattern ? `Searched for files matching \`${pattern}\`` : "Glob search";
+        }
+
+        // ── Grep: Show regex pattern ──
+        case "Grep": {
+            const pattern = (params.pattern ?? params.regex ?? "") as string;
+            return pattern ? `Searched for regex \`${pattern}\`` : "Grep search";
+        }
+
+        // ── Edit/Write/MultiEdit: Show path being edited ──
+        case "Edit":
+        case "MultiEdit": {
+            const path = (params.file_path ?? params.path ?? "") as string;
+            return path ? `Editing ${path}` : "Editing file";
+        }
+        case "Write": {
+            const path = (params.file_path ?? params.path ?? "") as string;
+            return path ? `Writing ${path}` : "Writing file";
+        }
+
+        // ── Bash: Show command (truncated) ──
         case "Bash": {
             const cmd = ((params.command as string) ?? "").slice(0, 80);
-            return `Bash: ${cmd}`;
+            return cmd || "Bash";
         }
+
+        // ── Task: Show description with optional subagent type ──
         case "Task": {
             const desc = (params.description as string) ?? "";
             const subType = (params.subagent_type as string) ?? "";
@@ -881,19 +948,47 @@ function formatToolTitle(toolName: string, params: Record<string, unknown>): str
             }
             return "Task";
         }
-        case "Glob":
-        case "Grep": {
-            const pattern = (params.pattern ?? params.glob_pattern ?? "") as string;
-            return `${displayName}: ${pattern}`;
+
+        // ── MCP delegate_task_to_agent ──
+        case "delegate_task_to_agent": {
+            const desc = (params.description as string) ?? (params.task_description as string) ?? "";
+            return desc ? `Task: ${desc}` : "Delegating task";
         }
+
+        // ── ExitPlanMode: Show plan text ──
+        case "ExitPlanMode": {
+            const plan = (params.plan as string) ?? "";
+            return plan ? `Plan:\n${plan}` : "Plan mode completed";
+        }
+
+        // ── Todo tools ──
         case "TodoWrite":
         case "TodoRead": {
-            // Todo tools might have file_path or similar params
             const todoPath = (params.file_path ?? params.path ?? "") as string;
             return todoPath ? `${displayName}: ${todoPath}` : displayName;
         }
+
+        // ── WebFetch: Show URL ──
+        case "WebFetch": {
+            const url = (params.url as string) ?? "";
+            return url ? `Fetching ${url}` : "Fetching webpage";
+        }
+
+        // ── WebSearch: Show query ──
+        case "WebSearch": {
+            const query = (params.query as string) ?? "";
+            return query ? `Searching: ${query}` : "Web search";
+        }
+
+        // ── NotebookEdit: Show notebook path ──
+        case "NotebookEdit": {
+            const path = (params.file_path ?? params.path ?? "") as string;
+            return path ? `Editing notebook ${path}` : "Editing notebook";
+        }
+
+        // ── Default: "Used tool: {name}" ──
         default:
-            return displayName;
+            return `Used tool: ${displayName}`;
     }
 }
 
