@@ -1,6 +1,6 @@
 /**
  * Agent Trace Module
- * 
+ *
  * Provides tracing capabilities for agent sessions, recording:
  * - Session lifecycle (start/end)
  * - User messages
@@ -11,4 +11,5 @@
 
 export * from "./types";
 export * from "./writer";
+export * from "./reader";
 

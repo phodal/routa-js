@@ -17,6 +17,7 @@ import {RepoPicker, type RepoSelection} from "./repo-picker";
 import {extractTaskBlocks, hasTaskBlocks, type ParsedTask,} from "../utils/task-block-parser";
 import {type TaskInfo, TaskProgressBar} from "./task-progress-bar";
 import {MessageBubble} from "@/client/components/message-bubble";
+import {TracePanel} from "@/client/components/trace-panel";
 
 // ─── Message Types ─────────────────────────────────────────────────────
 
@@ -100,6 +101,8 @@ export function ChatPanel({
   >({});
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // View mode: 'chat' or 'trace'
+  const [viewMode, setViewMode] = useState<"chat" | "trace">("chat");
 
   const streamingMsgIdRef = useRef<Record<string, string | null>>({});
   const streamingThoughtIdRef = useRef<Record<string, string | null>>({});
@@ -817,13 +820,38 @@ export function ChatPanel({
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#0f1117]">
-      {/* Session info bar */}
+      {/* Session info bar with view toggle */}
       {activeSessionId && (
-        <div className="px-5 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-            Session: {activeSessionId.slice(0, 12)}...
-          </span>
+        <div className="px-5 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+              Session: {activeSessionId.slice(0, 12)}...
+            </span>
+          </div>
+          {/* View toggle: Chat | Trace */}
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-md p-0.5">
+            <button
+              onClick={() => setViewMode("chat")}
+              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                viewMode === "chat"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setViewMode("trace")}
+              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                viewMode === "trace"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
+            >
+              Trace
+            </button>
+          </div>
         </div>
       )}
 
@@ -897,76 +925,83 @@ export function ChatPanel({
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-3xl mx-auto px-5 py-5 space-y-2">
-          {visibleMessages.length === 0 && (
-            <div className="text-center py-20">
-              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-500/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <div className="text-sm text-gray-400 dark:text-gray-500 mb-6">
-                {connected
-                  ? activeSessionId
-                    ? "Send a message to start."
-                    : "Select or create a session from the sidebar."
-                  : "Connect via the top bar to get started."}
-              </div>
+      {/* Main Content Area - Chat or Trace */}
+      {viewMode === "trace" ? (
+        <TracePanel sessionId={activeSessionId} />
+      ) : (
+        <>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="max-w-3xl mx-auto px-5 py-5 space-y-2">
+              {visibleMessages.length === 0 && (
+                <div className="text-center py-20">
+                  <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-500/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <div className="text-sm text-gray-400 dark:text-gray-500 mb-6">
+                    {connected
+                      ? activeSessionId
+                        ? "Send a message to start."
+                        : "Select or create a session from the sidebar."
+                      : "Connect via the top bar to get started."}
+                  </div>
 
-              {/* ── Repo Picker in center when no messages ── */}
-              {connected && (
-                <div className="inline-block text-left">
-                  <RepoPicker
-                    value={repoSelection}
-                    onChange={handleRepoChange}
-                  />
+                  {/* ── Repo Picker in center when no messages ── */}
+                  {connected && (
+                    <div className="inline-block text-left">
+                      <RepoPicker
+                        value={repoSelection}
+                        onChange={handleRepoChange}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
+              {visibleMessages.map((msg) => (
+                <MessageBubble key={msg.id} message={msg} />
+              ))}
+              <div ref={messagesEndRef} />
             </div>
-          )}
-          {visibleMessages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Input */}
-      <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1117]">
-        <div className="max-w-3xl mx-auto px-5 py-3 space-y-2">
-          {/* Task Progress Bar - shows above input when tasks exist */}
-          {taskInfos.length > 0 && (
-            <TaskProgressBar tasks={taskInfos} />
-          )}
-          <div className="flex gap-2 items-end">
-            <TiptapInput
-              onSend={handleSend}
-              onStop={acp.cancel}
-              placeholder={
-                connected
-                  ? activeSessionId
-                    ? "Type a message... @ file, # agent, / skill"
-                    : "Type a message to auto-create a session..."
-                  : "Connect first..."
-              }
-              disabled={!connected}
-              loading={loading}
-              skills={skills}
-              repoSkills={repoSkills}
-              providers={acp.providers}
-              selectedProvider={acp.selectedProvider}
-              onProviderChange={acp.setProvider}
-              sessions={sessions}
-              activeSessionMode={activeSessionId ? sessionModeById[activeSessionId] : undefined}
-              repoSelection={repoSelection}
-              onRepoChange={handleRepoChange}
-              agentRole={agentRole}
-            />
           </div>
-        </div>
-      </div>
+
+          {/* Input */}
+          <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1117]">
+            <div className="max-w-3xl mx-auto px-5 py-3 space-y-2">
+              {/* Task Progress Bar - shows above input when tasks exist */}
+              {taskInfos.length > 0 && (
+                <TaskProgressBar tasks={taskInfos} />
+              )}
+              <div className="flex gap-2 items-end">
+                <TiptapInput
+                  onSend={handleSend}
+                  onStop={acp.cancel}
+                  placeholder={
+                    connected
+                      ? activeSessionId
+                        ? "Type a message... @ file, # agent, / skill"
+                        : "Type a message to auto-create a session..."
+                      : "Connect first..."
+                  }
+                  disabled={!connected}
+                  loading={loading}
+                  skills={skills}
+                  repoSkills={repoSkills}
+                  providers={acp.providers}
+                  selectedProvider={acp.selectedProvider}
+                  onProviderChange={acp.setProvider}
+                  sessions={sessions}
+                  activeSessionMode={activeSessionId ? sessionModeById[activeSessionId] : undefined}
+                  repoSelection={repoSelection}
+                  onRepoChange={handleRepoChange}
+                  agentRole={agentRole}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

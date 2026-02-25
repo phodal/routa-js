@@ -18,6 +18,7 @@ pub mod skills_clone;
 pub mod skills_upload;
 pub mod tasks;
 pub mod test_mcp;
+pub mod traces;
 pub mod workspaces;
 
 use axum::Router;
@@ -48,4 +49,5 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/files", files::router())
         .nest("/api/rpc", rpc::router())
         .nest("/api/a2a", a2a::router())
+        .nest("/api/traces", traces::router())
 }

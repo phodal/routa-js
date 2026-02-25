@@ -10,12 +10,15 @@
 //! - `TraceRange` — Line/column range within a file
 //! - `Contributor` — The model/provider that produced the trace
 //! - `TraceWriter` — JSONL append-only writer for trace storage
+//! - `TraceReader` — Query and read traces from filesystem
 //!
 //! Storage: `<workspace>/.routa/traces/{day}/traces-{datetime}.jsonl`
 
 mod types;
 mod writer;
+mod reader;
 
 pub use types::*;
 pub use writer::*;
+pub use reader::*;
 

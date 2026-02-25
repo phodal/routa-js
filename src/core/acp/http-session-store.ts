@@ -137,7 +137,7 @@ class HttpSessionStore {
     if (accumulated && accumulated.length > 0) {
       const sessionRecord = this.sessions.get(sessionId);
       const agentTrace = withConversation(
-        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider }),
+        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider ?? "unknown" }),
         {
           role: "assistant",
           contentPreview: accumulated.slice(0, 200),
@@ -226,7 +226,7 @@ class HttpSessionStore {
       if (accumulated.length >= 100) {
         const sessionRecord = this.sessions.get(sessionId);
         const agentTrace = withConversation(
-          createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider }),
+          createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider ?? "unknown" }),
           {
             role: "assistant",
             contentPreview: accumulated.slice(0, 200),
@@ -241,7 +241,7 @@ class HttpSessionStore {
       const text = content?.text ?? "";
       const sessionRecord = this.sessions.get(sessionId);
       const agentTrace = withConversation(
-        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider }),
+        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider ?? "unknown" }),
         {
           role: "assistant",
           contentPreview: text.slice(0, 200),

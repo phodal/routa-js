@@ -1,6 +1,6 @@
 /**
  * Agent Trace Domain Types
- * 
+ *
  * Based on https://github.com/cursor/agent-trace specification.
  * Records "which model/session/tool affected which files and when".
  */
@@ -24,40 +24,67 @@ export type TraceEventType =
  */
 export interface TraceFile {
   path: string;
-  range?: TraceRange;
+  /** Affected ranges within the file */
+  ranges?: TraceRange[];
+  /** Operation type (read, write, delete, create) */
+  operation?: string;
+  /** Content hash after operation (for attribution) */
+  contentHash?: string;
 }
 
 /**
  * A line range within a file.
  */
 export interface TraceRange {
+  /** Start line (1-based) */
   startLine: number;
+  /** End line (1-based, inclusive) */
   endLine: number;
+  /** Start column (1-based, optional) */
+  startColumn?: number;
+  /** End column (1-based, optional) */
+  endColumn?: number;
 }
 
 /**
  * The contributor (model/agent) that generated this event.
  */
 export interface Contributor {
-  provider?: string;
+  /** Provider name (e.g., "claude", "opencode", "codex") */
+  provider: string;
+  /** Model identifier (e.g., "claude-sonnet-4-20250514") */
   model?: string;
+  /** Normalized model ID in format "provider/model" */
+  normalizedId?: string;
 }
 
 /**
  * Tool invocation information.
  */
 export interface TraceTool {
+  /** Tool name (e.g., "read_file", "write_file", "delegate_task_to_agent") */
   name: string;
-  input?: Record<string, unknown>;
-  output?: string;
+  /** Tool call ID (from the agent) */
+  toolCallId?: string;
+  /** Tool status ("running", "completed", "failed") */
+  status?: string;
+  /** Raw input parameters */
+  input?: unknown;
+  /** Raw output (for tool results) */
+  output?: unknown;
 }
 
 /**
  * Conversation content for message events.
  */
 export interface TraceConversation {
-  role: "user" | "assistant" | "system";
+  /** Turn number in the conversation */
+  turn?: number;
+  /** Message role (user, assistant, tool) */
+  role?: string;
+  /** Message content (truncated for storage) */
   contentPreview?: string;
+  /** Full content (optional) */
   fullContent?: string;
 }
 
@@ -65,25 +92,43 @@ export interface TraceConversation {
  * Version control information.
  */
 export interface TraceVcs {
-  gitSha?: string;
+  /** Current Git revision (commit SHA) */
+  revision?: string;
+  /** Current Git branch */
   branch?: string;
+  /** Repository root path */
+  repoRoot?: string;
+  /** Legacy field for SHA (kept for compatibility) */
+  gitSha?: string;
 }
 
 /**
  * A single trace record.
  */
 export interface TraceRecord {
+  /** Schema version (e.g., "0.1.0") */
   version: string;
+  /** Unique identifier for this trace */
   id: string;
+  /** ISO 8601 timestamp when the trace was recorded */
   timestamp: string;
+  /** Session ID this trace belongs to */
   sessionId: string;
+  /** Workspace ID */
   workspaceId?: string;
+  /** The contributor (model/provider) that produced this trace */
   contributor: Contributor;
+  /** Type of trace event */
   eventType: TraceEventType;
+  /** Tool information (if this is a tool call) */
   tool?: TraceTool;
+  /** Files affected by this trace */
   files?: TraceFile[];
+  /** Conversation context */
   conversation?: TraceConversation;
+  /** VCS (Git) context */
   vcs?: TraceVcs;
+  /** Additional metadata */
   metadata?: Record<string, unknown>;
 }
 

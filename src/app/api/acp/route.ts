@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
       // ── Trace: user_message ─────────────────────────────────────────
       const sessionRecord = store.getSession(sessionId);
       const userMsgTrace = withConversation(
-        createTraceRecord(sessionId, "user_message", { provider: sessionRecord?.provider }),
+        createTraceRecord(sessionId, "user_message", { provider: sessionRecord?.provider ?? "unknown" }),
         {
           role: "user",
           contentPreview: promptText.slice(0, 200),
