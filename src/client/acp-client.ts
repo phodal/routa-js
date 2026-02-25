@@ -38,7 +38,7 @@ export interface AcpProviderInfo {
   name: string;
   description: string;
   command: string;
-  status?: "available" | "unavailable";
+  status?: "available" | "unavailable" | "checking";
   source?: "static" | "registry";
 }
 
@@ -131,13 +131,18 @@ export class BrowserAcpClient {
 
   /**
    * List available ACP providers from the backend.
+   * @param check - If true, check command availability (slower). If false, return immediately with "checking" status.
    */
-  async listProviders(): Promise<AcpProviderInfo[]> {
-    const result = await this.rpc<{ providers?: AcpProviderInfo[] }>(
-      "_providers/list",
-      {}
-    );
-    return Array.isArray(result.providers) ? result.providers : [];
+  async listProviders(check: boolean = false): Promise<AcpProviderInfo[]> {
+    // Use new fast API endpoint
+    const url = check 
+      ? `${this.baseUrl}/api/providers?check=true`
+      : `${this.baseUrl}/api/providers`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    return Array.isArray(data.providers) ? data.providers : [];
   }
 
   /**

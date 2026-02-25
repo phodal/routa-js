@@ -10,6 +10,7 @@ pub mod mcp_routes;
 pub mod mcp_server_mgmt;
 pub mod mcp_tools;
 pub mod notes;
+pub mod providers;
 pub mod rpc;
 pub mod sessions;
 pub mod skills;
@@ -37,6 +38,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/skills/clone", skills_clone::router())
         .nest("/api/skills/upload", skills_upload::router())
         .nest("/api/sessions", sessions::router())
+        .nest("/api/providers", providers::router())
         .nest("/api/acp", acp_routes::router())
         .nest("/api/acp", acp_registry::router())
         .nest("/api/mcp", mcp_routes::router())

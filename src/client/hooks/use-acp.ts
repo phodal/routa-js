@@ -98,8 +98,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       const client = new BrowserAcpClient(baseUrl);
 
       await client.initialize();
-      const providers = await client.listProviders();
-
+      
+      // Fast path: Load providers without checking (instant)
+      const fastProviders = await client.listProviders(false);
+      
       client.onUpdate((update) => {
         setState((s) => ({
           ...s,
@@ -112,9 +114,19 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       setState((s) => ({
         ...s,
         connected: true,
-        providers,
+        providers: fastProviders,
         loading: false,
       }));
+
+      // Background: Check provider status and update
+      client.listProviders(true).then((checkedProviders) => {
+        setState((s) => ({
+          ...s,
+          providers: checkedProviders,
+        }));
+      }).catch((err) => {
+        logRuntime("warn", "useAcp.connect", "Failed to check provider status", err);
+      });
     } catch (err) {
       logRuntime("error", "useAcp.connect", "Failed to connect ACP client", err);
       setState((s) => ({

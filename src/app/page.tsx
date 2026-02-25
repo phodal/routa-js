@@ -824,6 +824,9 @@ export default function HomePage() {
                 {acp.providers.length > 0 && (
                   <span className="text-[10px] text-gray-400 dark:text-gray-500">
                     {acp.providers.filter((p) => p.status === "available").length}/{acp.providers.length}
+                    {acp.providers.some((p) => p.status === "checking") && (
+                      <span className="ml-1 inline-block w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    )}
                   </span>
                 )}
               </div>
@@ -840,7 +843,10 @@ export default function HomePage() {
                   <div className="flex items-center gap-2">
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                       acp.providers.find((p) => p.id === acp.selectedProvider)?.status === "available"
-                        ? "bg-green-500" : "bg-gray-400"
+                        ? "bg-green-500" 
+                        : acp.providers.find((p) => p.id === acp.selectedProvider)?.status === "checking"
+                        ? "bg-yellow-500 animate-pulse"
+                        : "bg-gray-400"
                     }`} />
                     <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1 text-left">
                       {acp.providers.find((p) => p.id === acp.selectedProvider)?.name ?? acp.selectedProvider}
@@ -872,7 +878,15 @@ export default function HomePage() {
                         <span className="font-medium truncate flex-1">{provider.name}</span>
                       </button>
                     ))}
-                    {acp.providers.filter((p) => p.status === "available").length === 0 && (
+                    {acp.providers.some((p) => p.status === "checking") && (
+                      <div className="px-3 py-2 text-[10px] text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/10 border-b border-yellow-100 dark:border-yellow-900/20">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block w-2 h-2 border border-yellow-600 dark:border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                          Checking provider availability...
+                        </div>
+                      </div>
+                    )}
+                    {acp.providers.filter((p) => p.status === "available").length === 0 && !acp.providers.some((p) => p.status === "checking") && (
                       <div className="px-3 py-3 text-xs text-gray-400 text-center">
                         No providers available
                       </div>
