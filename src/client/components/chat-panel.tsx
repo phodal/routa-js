@@ -1042,6 +1042,14 @@ export function ChatPanel({
   const setupProviderDropdownRef = useRef<HTMLDivElement>(null);
   const setupProviderButtonRef = useRef<HTMLButtonElement>(null);
   const [setupProviderDropdownPos, setSetupProviderDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
+  const [setupModel, setSetupModel] = useState("");
+  const [setupModelDropdownOpen, setSetupModelDropdownOpen] = useState(false);
+  const [setupModelModels, setSetupModelModels] = useState<string[]>([]);
+  const [setupModelLoading, setSetupModelLoading] = useState(false);
+  const [setupModelFilter, setSetupModelFilter] = useState("");
+  const setupModelBtnRef = useRef<HTMLButtonElement>(null);
+  const setupModelDropdownRef = useRef<HTMLDivElement>(null);
+  const [setupModelDropdownPos, setSetupModelDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1061,11 +1069,31 @@ export function ChatPanel({
     };
   }, [setupProviderDropdownOpen]);
 
+  // Close setup model dropdown on click outside
+  useEffect(() => {
+    if (!setupModelDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (setupModelDropdownRef.current && !setupModelDropdownRef.current.contains(e.target as Node) &&
+          setupModelBtnRef.current && !setupModelBtnRef.current.contains(e.target as Node)) {
+        setSetupModelDropdownOpen(false);
+        setSetupModelFilter("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [setupModelDropdownOpen]);
+
+  // Reset setup model when provider changes
+  useEffect(() => {
+    setSetupModel("");
+    setSetupModelModels([]);
+  }, [acp.selectedProvider]);
+
   const handleStartSession = useCallback(async () => {
     if (!setupInput.trim()) return;
-    await handleSend(setupInput, {});
+    await handleSend(setupInput, { model: setupModel || undefined });
     setSetupInput("");
-  }, [setupInput, handleSend]);
+  }, [setupInput, handleSend, setupModel]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
@@ -1406,6 +1434,87 @@ export function ChatPanel({
                     );
                   })()}
                 </div>
+                {/* Model selector for setup view — shown for providers that support it */}
+                {(acp.selectedProvider === "opencode" || acp.selectedProvider === "gemini") && (
+                  <div ref={setupModelDropdownRef}>
+                    <button
+                      ref={setupModelBtnRef}
+                      type="button"
+                      onClick={async () => {
+                        if (!setupModelDropdownOpen && setupModelBtnRef.current) {
+                          const rect = setupModelBtnRef.current.getBoundingClientRect();
+                          setSetupModelDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top });
+                        }
+                        if (!setupModelDropdownOpen && setupModelModels.length === 0) {
+                          setSetupModelLoading(true);
+                          const models = await acp.listProviderModels(acp.selectedProvider);
+                          setSetupModelModels(models);
+                          setSetupModelLoading(false);
+                        }
+                        setSetupModelDropdownOpen((v) => !v);
+                        setSetupModelFilter("");
+                      }}
+                      className="flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent transition-colors"
+                    >
+                      <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span className="truncate max-w-[120px]">{setupModel ? setupModel.split("/").pop() : "Default model"}</span>
+                      {setupModelLoading
+                        ? <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                        : <svg className={`w-3 h-3 text-gray-400 transition-transform ${setupModelDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                      }
+                    </button>
+                    {setupModelDropdownOpen && setupModelDropdownPos && typeof document !== "undefined" &&
+                      createPortal(
+                        <div
+                          className="fixed w-72 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999] flex flex-col"
+                          style={{ left: setupModelDropdownPos.left, bottom: setupModelDropdownPos.bottom, maxHeight: "300px" }}
+                        >
+                          <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                            <input
+                              autoFocus
+                              type="text"
+                              value={setupModelFilter}
+                              onChange={(e) => setSetupModelFilter(e.target.value)}
+                              placeholder="Filter models..."
+                              className="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-transparent outline-none focus:ring-1 focus:ring-indigo-500 text-gray-800 dark:text-gray-200"
+                            />
+                          </div>
+                          <div className="overflow-y-auto flex-1">
+                            <button
+                              type="button"
+                              onClick={() => { setSetupModel(""); setSetupModelDropdownOpen(false); }}
+                              className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${!setupModel ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300" : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"}`}
+                            >
+                              <span className="font-medium">Default model</span>
+                            </button>
+                            {setupModelModels
+                              .filter((m) => !setupModelFilter || m.toLowerCase().includes(setupModelFilter.toLowerCase()))
+                              .map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => { setSetupModel(m); setSetupModelDropdownOpen(false); setSetupModelFilter(""); }}
+                                  className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${m === setupModel ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300" : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"}`}
+                                >
+                                  <span className="text-gray-400 dark:text-gray-500 font-mono text-[10px] shrink-0">{m.split("/")[0]}</span>
+                                  <span className="font-medium truncate">{m.split("/").slice(1).join("/") || m}</span>
+                                </button>
+                              ))
+                            }
+                            {setupModelModels.length === 0 && !setupModelLoading && (
+                              <div className="px-3 py-3 text-xs text-gray-400 text-center">No models found</div>
+                            )}
+                          </div>
+                        </div>,
+                        document.body
+                      )
+                    }
+                  </div>
+                )}
                 <button
                   onClick={handleStartSession}
                   disabled={!setupInput.trim() || !connected}
