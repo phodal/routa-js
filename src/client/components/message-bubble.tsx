@@ -18,7 +18,6 @@ export function MessageBubble({message}: { message: ChatMessage }) {
                 return (
                     <TaskBubble
                         content={message.content}
-                        toolName={message.toolName}
                         toolStatus={message.toolStatus}
                         rawInput={message.toolRawInput}
                     />
@@ -137,7 +136,7 @@ function formatToolInputInline(rawInput?: Record<string, unknown>, maxLen = 60):
  * Get tool icon based on tool kind.
  * Returns an SVG path for different tool categories.
  */
-function getToolIcon(kind?: string): React.ReactNode {
+function getToolIcon(kind?: string, toolName?: string): React.ReactNode {
     switch (kind) {
         // Shell/Bash - Terminal icon
         case "shell":
@@ -182,8 +181,16 @@ function getToolIcon(kind?: string): React.ReactNode {
                 </svg>
             );
 
-        // Default - Tool icon
+        // Default - show abbreviated tool name
         default:
+            if (toolName) {
+                const abbr = toolName.slice(0, 2).toUpperCase();
+                return (
+                    <span className="w-3 h-3 text-[8px] font-bold leading-none flex items-center justify-center">
+                        {abbr}
+                    </span>
+                );
+            }
             return (
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -240,6 +247,15 @@ function getToolStyling(kind?: string): { bgClass: string; borderClass: string; 
     }
 }
 
+function extractOutputFromContent(content: string, toolName?: string): string {
+    const outputMarker = "\n\nOutput:\n";
+    const idx = content.indexOf(outputMarker);
+    if (idx >= 0) return content.slice(idx + outputMarker.length);
+    if (toolName && content.startsWith(toolName + "\n\n")) return content.slice(toolName.length + 2);
+    if (content.startsWith("Input:\n") || content.includes("(streaming parameters...)")) return "";
+    return content;
+}
+
 function ToolBubble({
                         content, toolName, toolStatus, toolKind, rawInput,
                     }: {
@@ -249,12 +265,15 @@ function ToolBubble({
     const statusColor =
         toolStatus === "completed" ? "bg-green-500"
             : toolStatus === "failed" ? "bg-red-500"
-                : toolStatus === "in_progress" || toolStatus === "running" ? "bg-yellow-500 animate-pulse"
+                : toolStatus === "in_progress" || toolStatus === "running" || toolStatus === "streaming" ? "bg-yellow-500 animate-pulse"
                     : "bg-gray-400";
 
     const inputPreview = formatToolInputInline(rawInput);
     const styling = getToolStyling(toolKind);
-    const icon = getToolIcon(toolKind);
+    const icon = getToolIcon(toolKind, toolName);
+    const hasInput = rawInput && Object.keys(rawInput).length > 0;
+    const outputText = extractOutputFromContent(content, toolName);
+    const hasOutput = !!outputText;
 
     return (
         <div className="flex flex-col w-full">
@@ -263,9 +282,7 @@ function ToolBubble({
                 onClick={() => setExpanded((e) => !e)}
                 className={`w-full px-2.5 py-1.5 rounded-md border ${styling.bgClass} ${styling.borderClass} flex items-center gap-2 text-left hover:brightness-95 dark:hover:brightness-110 transition-all`}
             >
-                <span className={`shrink-0 ${styling.iconColorClass}`}>
-                    {icon}
-                </span>
+                <span className={`shrink-0 ${styling.iconColorClass}`}>{icon}</span>
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor}`}/>
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1">
                     {toolName ?? "tool"}
@@ -282,10 +299,25 @@ function ToolBubble({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
                 </svg>
             </button>
-            {expanded && content && (
-                <div
-                    className={`mt-1 ml-4 px-2.5 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto rounded-md border ${styling.bgClass} ${styling.borderClass}`}>
-                    {content}
+            {expanded && (hasInput || hasOutput) && (
+                <div className={`mt-1 ml-4 rounded-md border ${styling.bgClass} ${styling.borderClass} overflow-hidden`}>
+                    {hasInput && (
+                        <div className="px-2.5 py-2">
+                            <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Input</div>
+                            <pre className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                {JSON.stringify(rawInput, null, 2)}
+                            </pre>
+                        </div>
+                    )}
+                    {hasInput && hasOutput && <div className={`border-t ${styling.borderClass}`}/>}
+                    {hasOutput && (
+                        <div className="px-2.5 py-2">
+                            <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Output</div>
+                            <div className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                {outputText}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
@@ -293,9 +325,9 @@ function ToolBubble({
 }
 
 function TaskBubble({
-                        content, toolName, toolStatus, rawInput,
+                        content, toolStatus, rawInput,
                     }: {
-    content: string; toolName?: string; toolStatus?: string; rawInput?: Record<string, unknown>;
+    content: string; toolStatus?: string; rawInput?: Record<string, unknown>;
 }) {
     const [expanded, setExpanded] = useState(true);
     const statusColor =
@@ -342,10 +374,10 @@ function TaskBubble({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
                     </svg>
                 </button>
-                {expanded && prompt && (
+                {expanded && (prompt || content) && (
                     <div
                         className="px-3 py-2 border-t border-amber-200/50 dark:border-amber-800/30 text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-32 overflow-y-auto">
-                        {prompt}
+                        {prompt || content}
                     </div>
                 )}
             </div>

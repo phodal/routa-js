@@ -633,7 +633,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                           )}
                         </div>
                         {/* Input parameters table */}
-                        {trace.tool?.input != null && (
+                        {trace.tool != null && (
                           <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
                             <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
                               <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
