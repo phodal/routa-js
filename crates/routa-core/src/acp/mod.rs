@@ -397,6 +397,12 @@ pub fn get_presets() -> Vec<AcpPreset> {
             description: "Moonshot AI's Kimi CLI".to_string(),
         },
         AcpPreset {
+            name: "kiro".to_string(),
+            command: "kiro-cli".to_string(),
+            args: vec!["acp".to_string()],
+            description: "Amazon Kiro AI coding agent".to_string(),
+        },
+        AcpPreset {
             name: "claude".to_string(),
             command: "claude".to_string(),
             args: vec!["--acp".to_string()],

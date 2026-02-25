@@ -787,6 +787,14 @@ export default function HomePage() {
         >
           MCP Tools
         </a>
+
+        {/* Traces link */}
+        <a
+          href="/traces"
+          className="hidden md:inline-flex px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-900/20 text-[11px] font-medium text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+        >
+          Traces
+        </a>
       </header>
 
       {/* ─── Main Area ────────────────────────────────────────────── */}

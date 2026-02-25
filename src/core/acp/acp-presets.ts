@@ -117,6 +117,14 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     description: "Moonshot AI's Kimi CLI",
     envBinOverride: "KIMI_BIN",
   },
+  {
+    id: "kiro",
+    name: "Kiro",
+    command: "kiro-cli",
+    args: ["acp"],
+    description: "Amazon Kiro AI coding agent",
+    envBinOverride: "KIRO_BIN",
+  },
   // Claude Code uses a non-standard API and requires separate handling
   {
     id: "claude",

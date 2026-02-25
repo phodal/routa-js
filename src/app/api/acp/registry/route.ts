@@ -14,13 +14,17 @@ import {
   getRegistryAgent,
   clearRegistryCache,
   detectPlatformTarget,
+  type RegistryAgent,
 } from "@/core/acp/acp-registry";
 import {
   listAgentsWithStatus,
   isNpxAvailable,
   isUvxAvailable,
   buildAgentCommand,
+  type DistributionType,
 } from "@/core/acp/acp-installer";
+import { ACP_AGENT_PRESETS, resolveCommand } from "@/core/acp/acp-presets";
+import { which } from "@/core/acp/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -56,13 +60,53 @@ export async function GET(request: NextRequest) {
     }
 
     // List all agents with status
-    const [agents, npxAvailable, uvxAvailable] = await Promise.all([
+    const [registryAgents, npxAvailable, uvxAvailable] = await Promise.all([
       listAgentsWithStatus(),
       isNpxAvailable(),
       isUvxAvailable(),
     ]);
 
     const platform = detectPlatformTarget();
+
+    // Build a set of registry agent IDs for deduplication
+    const registryIds = new Set(registryAgents.map((a) => a.agent.id));
+
+    // Add built-in presets that are NOT in the registry (so they still appear in the install panel)
+    const builtinAgents: Array<{
+      agent: RegistryAgent;
+      installed: boolean;
+      distributionTypes: DistributionType[];
+      source: "builtin";
+    }> = [];
+
+    for (const preset of ACP_AGENT_PRESETS) {
+      if (preset.nonStandardApi) continue; // skip claude (non-standard)
+      if (registryIds.has(preset.id)) continue; // registry version takes precedence
+      const cmd = resolveCommand(preset);
+      const resolved = await which(cmd);
+      builtinAgents.push({
+        agent: {
+          id: preset.id,
+          name: preset.name,
+          version: preset.version ?? "",
+          description: preset.description,
+          repository: preset.repository,
+          authors: [],
+          license: preset.license ?? "",
+          icon: preset.icon,
+          distribution: {},
+        },
+        installed: resolved !== null,
+        distributionTypes: [],
+        source: "builtin",
+      });
+    }
+
+    // Merge: registry agents first, then built-in extras
+    const agents = [
+      ...registryAgents.map((a) => ({ ...a, source: "registry" as const })),
+      ...builtinAgents,
+    ];
 
     return NextResponse.json({
       agents,
