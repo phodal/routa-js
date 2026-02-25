@@ -367,9 +367,50 @@ export default function HomePage() {
     }
   }, [acp]);
 
+  // Check if a session is empty (only has session_start event or no messages)
+  const isSessionEmpty = useCallback(async (sessionId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/history`);
+      const data = await res.json();
+      const history = data?.history ?? [];
+      
+      // Empty if no history or only has session_start notification
+      if (history.length === 0) return true;
+      
+      // Check if only session_start exists (no user messages)
+      const hasUserMessage = history.some((item: any) => 
+        item?.update?.sessionUpdate === "user_message"
+      );
+      
+      return !hasUserMessage;
+    } catch (e) {
+      console.error("Failed to check session emptiness", e);
+      return false;
+    }
+  }, []);
+
+  // Delete empty session if it exists
+  const deleteEmptySession = useCallback(async (sessionId: string | null) => {
+    if (!sessionId) return;
+    
+    const isEmpty = await isSessionEmpty(sessionId);
+    if (isEmpty) {
+      console.log(`[deleteEmptySession] Deleting empty session: ${sessionId}`);
+      try {
+        await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+      } catch (e) {
+        console.error("Failed to delete empty session", e);
+      }
+    }
+  }, [isSessionEmpty]);
+
   const handleCreateSession = useCallback(
     async (provider: string) => {
       await ensureConnected();
+      
+      // Delete previous empty session before creating new one
+      await deleteEmptySession(activeSessionId);
+      
       const cwd = repoSelection?.path ?? undefined;
       // Always pass the selected role - don't skip CRAFTER
       const role = selectedAgent;
@@ -382,19 +423,23 @@ export default function HomePage() {
         bumpRefresh();
       }
     },
-    [acp, ensureConnected, bumpRefresh, repoSelection, selectedAgent]
+    [acp, ensureConnected, bumpRefresh, repoSelection, selectedAgent, activeSessionId, deleteEmptySession]
   );
 
   const handleSelectSession = useCallback(
     async (sessionId: string) => {
       await ensureConnected();
+      
+      // Delete previous empty session before switching
+      await deleteEmptySession(activeSessionId);
+      
       acp.selectSession(sessionId);
       setActiveSessionId(sessionId);
       // Don't clear tasks here - let onTasksDetected update them when history loads
       // This prevents the right sidebar from disappearing during session switch
       bumpRefresh();
     },
-    [acp, ensureConnected, bumpRefresh]
+    [acp, ensureConnected, bumpRefresh, activeSessionId, deleteEmptySession]
   );
 
   const ensureSessionForChat = useCallback(async (cwd?: string, provider?: string, modeId?: string): Promise<string | null> => {
