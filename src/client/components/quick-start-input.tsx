@@ -5,7 +5,7 @@
  *
  * Features:
  * - Large textarea for task description
- * - Provider selection dropdown
+ * - Provider selection dropdown (grouped by builtin/registry)
  * - Model selection (for supported providers)
  * - Workspace selection
  * - Repository selection
@@ -15,10 +15,10 @@
  * Designed to work both on the home page and in workspace contexts.
  */
 
-import { useState, useRef, useEffect, useCallback, useTransition } from "react";
+import React, { useState, useRef, useEffect, useCallback, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useAcp } from "../hooks/use-acp";
-import { useWorkspaces, useCodebases, type WorkspaceData, type CodebaseData } from "../hooks/use-workspaces";
+import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
 import { RepoPicker, type RepoSelection } from "./repo-picker";
 import { useRouter } from "next/navigation";
 
@@ -83,7 +83,6 @@ export function QuickStartInput({
 
   // Provider dropdown state
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
-  const providerDropdownRef = useRef<HTMLDivElement>(null);
   const providerButtonRef = useRef<HTMLButtonElement>(null);
   const [providerDropdownPos, setProviderDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
 
@@ -94,48 +93,33 @@ export function QuickStartInput({
   const [modelLoading, setModelLoading] = useState(false);
   const [modelFilter, setModelFilter] = useState("");
   const modelBtnRef = useRef<HTMLButtonElement>(null);
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [modelDropdownPos, setModelDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
 
-  // Close provider dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
+    if (!providerDropdownOpen && !modelDropdownOpen) return;
+
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        providerDropdownRef.current &&
-        !providerDropdownRef.current.contains(event.target as Node) &&
-        providerButtonRef.current &&
-        !providerButtonRef.current.contains(event.target as Node)
-      ) {
-        setProviderDropdownOpen(false);
+      // Provider dropdown
+      if (providerDropdownOpen && providerButtonRef.current) {
+        if (!providerButtonRef.current.contains(event.target as Node)) {
+          setProviderDropdownOpen(false);
+        }
+      }
+      // Model dropdown
+      if (modelDropdownOpen && modelBtnRef.current) {
+        if (!modelBtnRef.current.contains(event.target as Node)) {
+          setModelDropdownOpen(false);
+          setModelFilter("");
+        }
       }
     };
 
-    if (providerDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [providerDropdownOpen]);
-
-  // Close model dropdown on click outside
-  useEffect(() => {
-    if (!modelDropdownOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        modelDropdownRef.current &&
-        !modelDropdownRef.current.contains(e.target as Node) &&
-        modelBtnRef.current &&
-        !modelBtnRef.current.contains(e.target as Node)
-      ) {
-        setModelDropdownOpen(false);
-        setModelFilter("");
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [modelDropdownOpen]);
+  }, [providerDropdownOpen, modelDropdownOpen]);
 
   // Reset model when provider changes
   useEffect(() => {
@@ -151,7 +135,7 @@ export function QuickStartInput({
     const wsId = selectedWorkspaceId ?? undefined;
 
     // Create session
-    const result = await acp.createSession(cwd, undefined, model ? undefined : undefined, selectedRole, wsId, model || undefined);
+    const result = await acp.createSession(cwd, undefined, undefined, selectedRole, wsId, model || undefined);
 
     if (result?.sessionId) {
       // Send the initial prompt
@@ -166,7 +150,15 @@ export function QuickStartInput({
       onSessionCreated?.(result.sessionId);
       setInput("");
     }
-  }, [input, acp, repoSelection, selectedWorkspaceId, selectedRole, model, router, onSessionCreated]);
+  }, [input, acp, repoSelection, selectedWorkspaceId, selectedRole, model, router, onSessionCreated, startTransition]);
+
+  const selectedProviderInfo = acp.providers.find((p) => p.id === acp.selectedProvider);
+
+  // Group providers by source and availability (same as tiptap-input)
+  const builtinAvailable = acp.providers.filter((p) => p.source === "static" && p.status === "available");
+  const builtinUnavailable = acp.providers.filter((p) => p.source === "static" && p.status !== "available");
+  const registryAvailable = acp.providers.filter((p) => p.source === "registry" && p.status === "available");
+  const registryUnavailable = acp.providers.filter((p) => p.source === "registry" && p.status !== "available");
 
   return (
     <div className={`flex flex-col gap-4 ${compact ? "max-w-xl" : "max-w-2xl"} mx-auto`}>
@@ -203,73 +195,204 @@ export function QuickStartInput({
             <span className="text-[11px] text-gray-400 dark:text-gray-500 mr-1">⌘↵</span>
 
             {/* Provider selector */}
-            {acp.providers.length > 0 && (() => {
-              const providerInfo = acp.providers.find((p) => p.id === acp.selectedProvider);
-              return (
-                <div className="relative">
-                  <button
-                    ref={providerButtonRef}
-                    type="button"
-                    onClick={() => {
-                      if (providerDropdownOpen) {
-                        setProviderDropdownOpen(false);
-                      } else {
-                        const rect = providerButtonRef.current?.getBoundingClientRect();
-                        if (rect) {
-                          setProviderDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top });
-                        }
-                        setProviderDropdownOpen(true);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${providerInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
-                      <span className="truncate max-w-[120px]">{providerInfo?.name ?? "Select..."}</span>
-                      <svg className={`w-3 h-3 text-gray-400 transition-transform ${providerDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
+            <div>
+              <button
+                ref={providerButtonRef}
+                type="button"
+                onClick={() => {
+                  if (providerDropdownOpen) {
+                    setProviderDropdownOpen(false);
+                  } else {
+                    const rect = providerButtonRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      setProviderDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
+                    }
+                    setProviderDropdownOpen(true);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${selectedProviderInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
+                <span className="truncate max-w-[120px]">{selectedProviderInfo?.name ?? "Select..."}</span>
+                <svg className={`w-3 h-3 text-gray-400 transition-transform ${providerDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-                    {/* Provider dropdown */}
-                    {providerDropdownOpen && providerDropdownPos && typeof document !== "undefined" &&
-                      createPortal(
-                        <ProviderDropdown
-                          ref={providerDropdownRef}
-                          providers={acp.providers}
-                          selectedProvider={acp.selectedProvider}
-                          onSelect={(id) => {
-                            acp.setProvider(id);
-                            setProviderDropdownOpen(false);
-                          }}
-                          position={providerDropdownPos}
-                        />,
-                        document.body
-                      )}
-                  </div>
-                );
-              })()}
+              {/* Provider dropdown */}
+              {providerDropdownOpen && providerDropdownPos && typeof document !== "undefined" &&
+                createPortal(
+                  <div
+                    className="fixed w-72 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999]"
+                    style={{ left: providerDropdownPos.left, bottom: providerDropdownPos.bottom }}
+                  >
+                    {/* Builtin Available */}
+                    {builtinAvailable.length > 0 && (
+                      <div className="py-1">
+                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                          Built-in ({builtinAvailable.length})
+                        </div>
+                        {builtinAvailable.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              acp.setProvider(p.id);
+                              setProviderDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
+                              p.id === acp.selectedProvider
+                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                            <span className="font-medium truncate flex-1">{p.name}</span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Registry Available */}
+                    {registryAvailable.length > 0 && (
+                      <div className={`py-1 ${builtinAvailable.length > 0 ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
+                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                          ACP Registry ({registryAvailable.length})
+                        </div>
+                        {registryAvailable.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              acp.setProvider(p.id);
+                              setProviderDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
+                              p.id === acp.selectedProvider
+                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                            <span className="font-medium truncate flex-1">{p.name}</span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Builtin Unavailable */}
+                    {builtinUnavailable.length > 0 && (
+                      <div className={`py-1 ${(builtinAvailable.length > 0 || registryAvailable.length > 0) ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
+                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                          Built-in - Not Installed ({builtinUnavailable.length})
+                        </div>
+                        {builtinUnavailable.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              acp.setProvider(p.id);
+                              setProviderDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
+                              p.id === acp.selectedProvider
+                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                            <span className="font-medium truncate flex-1">{p.name}</span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Registry Unavailable */}
+                    {registryUnavailable.length > 0 && (
+                      <div className="py-1 border-t border-gray-100 dark:border-gray-800">
+                        <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                          ACP Registry - Not Installed ({registryUnavailable.length})
+                        </div>
+                        {registryUnavailable.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              acp.setProvider(p.id);
+                              setProviderDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
+                              p.id === acp.selectedProvider
+                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                            <span className="font-medium truncate flex-1">{p.name}</span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Loading or empty state */}
+                    {acp.providers.length === 0 && (
+                      <div className="px-3 py-3 text-xs text-gray-400 text-center">
+                        Connecting to providers...
+                      </div>
+                    )}
+
+                    {/* No available providers message */}
+                    {acp.providers.length > 0 && builtinAvailable.length === 0 && registryAvailable.length === 0 && (
+                      <div className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+                        {builtinUnavailable.length > 0 || registryUnavailable.length > 0 ? (
+                          <>
+                            <p className="font-medium mb-1">No providers available</p>
+                            <p className="text-[10px] opacity-75">
+                              {acp.providers.some((p) => p.id === "opencode-sdk")
+                                ? "Configure OPENCODE_SERVER_URL environment variable to use OpenCode SDK"
+                                : "Install a provider to get started"}
+                            </p>
+                          </>
+                        ) : (
+                          "Loading providers..."
+                        )}
+                      </div>
+                    )}
+                  </div>,
+                  document.body
+                )}
+            </div>
 
             {/* Model selector */}
             {(acp.selectedProvider === "opencode" || acp.selectedProvider === "gemini") && (
-              <div ref={modelDropdownRef}>
+              <div>
                 <button
                   ref={modelBtnRef}
                   type="button"
                   onClick={async () => {
                     if (!modelDropdownOpen && modelBtnRef.current) {
                       const rect = modelBtnRef.current.getBoundingClientRect();
-                      setModelDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top });
+                      setModelDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
                     }
                     if (!modelDropdownOpen && modelModels.length === 0) {
                       setModelLoading(true);
-                      const models = await acp.listProviderModels(acp.selectedProvider);
-                      setModelModels(models);
-                      setModelLoading(false);
+                      try {
+                        const models = await acp.listProviderModels(acp.selectedProvider);
+                        setModelModels(models);
+                      } catch (e) {
+                        console.error("Failed to load models:", e);
+                      } finally {
+                        setModelLoading(false);
+                      }
                     }
                     setModelDropdownOpen((v) => !v);
                     setModelFilter("");
                   }}
-                  className="flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent transition-colors"
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent transition-colors"
                 >
                   <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -284,15 +407,59 @@ export function QuickStartInput({
                 </button>
                 {modelDropdownOpen && modelDropdownPos && typeof document !== "undefined" &&
                   createPortal(
-                    <ModelDropdown
-                      ref={modelDropdownRef}
-                      models={modelModels}
-                      selectedModel={model}
-                      filter={modelFilter}
-                      onFilterChange={setModelFilter}
-                      onSelect={(m) => { setModel(m); setModelDropdownOpen(false); setModelFilter(""); }}
-                      position={modelDropdownPos}
-                    />,
+                    <div
+                      className="fixed w-72 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999] flex flex-col"
+                      style={{ left: modelDropdownPos.left, bottom: modelDropdownPos.bottom, maxHeight: "320px" }}
+                    >
+                      {/* Search */}
+                      <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={modelFilter}
+                          onChange={(e) => setModelFilter(e.target.value)}
+                          placeholder="Filter models..."
+                          className="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-transparent outline-none focus:ring-1 focus:ring-indigo-500 text-gray-800 dark:text-gray-200"
+                        />
+                      </div>
+                      <div className="overflow-y-auto flex-1">
+                        {/* Default option */}
+                        <button
+                          type="button"
+                          onClick={() => { setModel(""); setModelDropdownOpen(false); }}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                            !model
+                              ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                              : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                          }`}
+                        >
+                          <span className="font-medium">Default model</span>
+                        </button>
+                        {modelModels
+                          .filter((m) => !modelFilter || m.toLowerCase().includes(modelFilter.toLowerCase()))
+                          .map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => { setModel(m); setModelDropdownOpen(false); setModelFilter(""); }}
+                              className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2 ${
+                                m === model
+                                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                  : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
+                              }`}
+                            >
+                              <span className="text-gray-400 dark:text-gray-500 font-mono text-[10px] shrink-0">
+                                {m.split("/")[0]}
+                              </span>
+                              <span className="font-medium truncate">{m.split("/").slice(1).join("/") || m}</span>
+                            </button>
+                          ))
+                        }
+                        {modelModels.length === 0 && !modelLoading && (
+                          <div className="px-3 py-3 text-xs text-gray-400 text-center">No models found</div>
+                        )}
+                      </div>
+                    </div>,
                     document.body
                   )
                 }
@@ -329,7 +496,7 @@ export function QuickStartInput({
             </select>
           </div>
         )}
-        <div className={hideWorkspace ? "" : ""}>
+        <div>
           <label className="block text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Repository</label>
           <RepoPicker value={repoSelection} onChange={setRepoSelection} />
         </div>
@@ -392,222 +559,3 @@ export function QuickStartInput({
     </div>
   );
 }
-
-// ─── Provider Dropdown Component ─────────────────────────────────────────
-
-interface ProviderDropdownProps {
-  providers: Array<{ id: string; name: string; status?: string; source?: string; command: string }>;
-  selectedProvider: string | null;
-  onSelect: (id: string) => void;
-  position: { left: number; bottom: number };
-}
-
-const ProviderDropdown = React.forwardRef<HTMLDivElement, ProviderDropdownProps>(
-  ({ providers, selectedProvider, onSelect, position }, ref) => {
-    const availableProviders = providers.filter((p) => p.status === "available");
-    const unavailableProviders = providers.filter((p) => p.status !== "available");
-    const builtinAvailable = availableProviders.filter((p) => p.source === "static");
-    const registryAvailable = availableProviders.filter((p) => p.source === "registry");
-    const builtinUnavailable = unavailableProviders.filter((p) => p.source === "static");
-    const registryUnavailable = unavailableProviders.filter((p) => p.source === "registry");
-
-    return (
-      <div
-        ref={ref}
-        className="fixed w-64 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999]"
-        style={{ left: position.left, bottom: position.bottom }}
-      >
-        <>
-          {/* Builtin Available */}
-          {builtinAvailable.length > 0 && (
-            <div className="py-1">
-              <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                Built-in ({builtinAvailable.length})
-              </div>
-              {builtinAvailable.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onSelect(p.id)}
-                  className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
-                    p.id === selectedProvider
-                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                  <span className="font-medium truncate flex-1">{p.name}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Registry Available */}
-          {registryAvailable.length > 0 && (
-            <div className={`py-1 ${builtinAvailable.length > 0 ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
-              <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                ACP Registry ({registryAvailable.length})
-              </div>
-              {registryAvailable.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onSelect(p.id)}
-                  className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors ${
-                    p.id === selectedProvider
-                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                  <span className="font-medium truncate flex-1">{p.name}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Builtin Unavailable */}
-          {builtinUnavailable.length > 0 && (
-            <div className={`py-1 ${(builtinAvailable.length > 0 || registryAvailable.length > 0) ? "border-t border-gray-100 dark:border-gray-800" : ""}`}>
-              <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                Built-in - Not Installed ({builtinUnavailable.length})
-              </div>
-              {builtinUnavailable.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onSelect(p.id)}
-                  className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
-                    p.id === selectedProvider
-                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-                  <span className="font-medium truncate flex-1">{p.name}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Registry Unavailable */}
-          {registryUnavailable.length > 0 && (
-            <div className="py-1 border-t border-gray-100 dark:border-gray-800">
-              <div className="px-3 py-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                ACP Registry - Not Installed ({registryUnavailable.length})
-              </div>
-              {registryUnavailable.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onSelect(p.id)}
-                  className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-xs transition-colors opacity-60 ${
-                    p.id === selectedProvider
-                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-400"
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-                  <span className="font-medium truncate flex-1">{p.name}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[140px]">{p.command}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* No available providers message */}
-          {providers.length > 0 && builtinAvailable.length === 0 && registryAvailable.length === 0 && (
-            <div className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 text-center">
-              {builtinUnavailable.length > 0 || registryUnavailable.length > 0 ? (
-                <>
-                  <p className="font-medium mb-1">No providers available</p>
-                  <p className="text-[10px] opacity-75">
-                    {providers.some((p) => p.id === "opencode-sdk")
-                      ? "Configure OPENCODE_SERVER_URL environment variable to use OpenCode SDK"
-                      : "Install a provider to get started"}
-                  </p>
-                </>
-              ) : (
-                "Loading providers..."
-              )}
-            </div>
-          )}
-        </>
-      </div>
-    );
-  }
-);
-ProviderDropdown.displayName = "ProviderDropdown";
-
-// ─── Model Dropdown Component ─────────────────────────────────────────────
-
-interface ModelDropdownProps {
-  models: string[];
-  selectedModel: string;
-  filter: string;
-  onFilterChange: (filter: string) => void;
-  onSelect: (model: string) => void;
-  position: { left: number; bottom: number };
-}
-
-const ModelDropdown = React.forwardRef<HTMLDivElement, ModelDropdownProps>(
-  ({ models, selectedModel, filter, onFilterChange, onSelect, position }, ref) => {
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-      inputRef.current?.focus();
-    }, []);
-
-    return (
-      <div
-        ref={ref}
-        className="fixed w-72 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999] flex flex-col"
-        style={{ left: position.left, bottom: position.bottom, maxHeight: "300px" }}
-      >
-        <div className="p-2 border-b border-gray-100 dark:border-gray-800">
-          <input
-            ref={inputRef}
-            type="text"
-            value={filter}
-            onChange={(e) => onFilterChange(e.target.value)}
-            placeholder="Filter models..."
-            className="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-transparent outline-none focus:ring-1 focus:ring-indigo-500 text-gray-800 dark:text-gray-200"
-          />
-        </div>
-        <div className="overflow-y-auto flex-1">
-          <button
-            type="button"
-            onClick={() => onSelect("")}
-            className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${!selectedModel ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300" : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"}`}
-          >
-            <span className="font-medium">Default model</span>
-          </button>
-          {models
-            .filter((m) => !filter || m.toLowerCase().includes(filter.toLowerCase()))
-            .map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => onSelect(m)}
-                className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${m === selectedModel ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300" : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"}`}
-              >
-                <span className="text-gray-400 dark:text-gray-500 font-mono text-[10px] shrink-0">{m.split("/")[0]}</span>
-                <span className="font-medium truncate">{m.split("/").slice(1).join("/") || m}</span>
-              </button>
-            ))
-          }
-          {models.length === 0 && (
-            <div className="px-3 py-3 text-xs text-gray-400 text-center">No models found</div>
-          )}
-        </div>
-      </div>
-    );
-  }
-);
-ModelDropdown.displayName = "ModelDropdown";
-
-// Need to import React for forwardRef
-import React from "react";
