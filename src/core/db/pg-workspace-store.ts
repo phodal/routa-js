@@ -13,11 +13,8 @@ export interface WorkspaceStore {
   list(): Promise<Workspace[]>;
   listByStatus(status: WorkspaceStatus): Promise<Workspace[]>;
   updateTitle(workspaceId: string, title: string): Promise<void>;
-  updateBranch(workspaceId: string, branch: string): Promise<void>;
   updateStatus(workspaceId: string, status: WorkspaceStatus): Promise<void>;
   delete(workspaceId: string): Promise<void>;
-  /** Get or create the "default" workspace */
-  ensureDefault(): Promise<Workspace>;
 }
 
 export class PgWorkspaceStore implements WorkspaceStore {
@@ -29,8 +26,6 @@ export class PgWorkspaceStore implements WorkspaceStore {
       .values({
         id: workspace.id,
         title: workspace.title,
-        repoPath: workspace.repoPath,
-        branch: workspace.branch,
         status: workspace.status,
         metadata: workspace.metadata,
         createdAt: workspace.createdAt,
@@ -40,8 +35,6 @@ export class PgWorkspaceStore implements WorkspaceStore {
         target: workspaces.id,
         set: {
           title: workspace.title,
-          repoPath: workspace.repoPath,
-          branch: workspace.branch,
           status: workspace.status,
           metadata: workspace.metadata,
           updatedAt: new Date(),
@@ -79,13 +72,6 @@ export class PgWorkspaceStore implements WorkspaceStore {
       .where(eq(workspaces.id, workspaceId));
   }
 
-  async updateBranch(workspaceId: string, branch: string): Promise<void> {
-    await this.db
-      .update(workspaces)
-      .set({ branch, updatedAt: new Date() })
-      .where(eq(workspaces.id, workspaceId));
-  }
-
   async updateStatus(workspaceId: string, status: WorkspaceStatus): Promise<void> {
     await this.db
       .update(workspaces)
@@ -97,28 +83,10 @@ export class PgWorkspaceStore implements WorkspaceStore {
     await this.db.delete(workspaces).where(eq(workspaces.id, workspaceId));
   }
 
-  async ensureDefault(): Promise<Workspace> {
-    const existing = await this.get("default");
-    if (existing) return existing;
-
-    const workspace: Workspace = {
-      id: "default",
-      title: "Default Workspace",
-      status: "active",
-      metadata: {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    await this.save(workspace);
-    return workspace;
-  }
-
   private toModel(row: typeof workspaces.$inferSelect): Workspace {
     return {
       id: row.id,
       title: row.title,
-      repoPath: row.repoPath ?? undefined,
-      branch: row.branch ?? undefined,
       status: row.status as WorkspaceStatus,
       metadata: (row.metadata as Record<string, string>) ?? {},
       createdAt: row.createdAt,
@@ -158,14 +126,6 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     }
   }
 
-  async updateBranch(workspaceId: string, branch: string): Promise<void> {
-    const ws = this.store.get(workspaceId);
-    if (ws) {
-      ws.branch = branch;
-      ws.updatedAt = new Date();
-    }
-  }
-
   async updateStatus(workspaceId: string, status: WorkspaceStatus): Promise<void> {
     const ws = this.store.get(workspaceId);
     if (ws) {
@@ -176,21 +136,5 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
 
   async delete(workspaceId: string): Promise<void> {
     this.store.delete(workspaceId);
-  }
-
-  async ensureDefault(): Promise<Workspace> {
-    const existing = await this.get("default");
-    if (existing) return existing;
-
-    const workspace: Workspace = {
-      id: "default",
-      title: "Default Workspace",
-      status: "active",
-      metadata: {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    await this.save(workspace);
-    return workspace;
   }
 }

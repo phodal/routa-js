@@ -84,9 +84,11 @@ export function createRoutaAcpAgent(
       async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
         const sessionId = uuidv4();
 
-        // Ensure default workspace exists, then use it
-        const workspace = await system.workspaceStore.ensureDefault();
-        const workspaceId = workspace.id;
+        // workspaceId must be provided by the caller
+        const workspaceId = (params as Record<string, unknown>).workspaceId as string;
+        if (!workspaceId) {
+          throw new Error("workspaceId is required to create a session");
+        }
 
         const createResult = await system.tools.createAgent({
           name: `routa-session-${sessionId.slice(0, 8)}`,

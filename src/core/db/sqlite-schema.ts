@@ -16,6 +16,7 @@ import {
   sqliteTable,
   text,
   integer,
+  primaryKey,
 } from "drizzle-orm/sqlite-core";
 
 // ─── Workspaces ─────────────────────────────────────────────────────
@@ -23,10 +24,21 @@ import {
 export const workspaces = sqliteTable("workspaces", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
-  repoPath: text("repo_path"),
-  branch: text("branch"),
   status: text("status").notNull().default("active"),
   metadata: text("metadata", { mode: "json" }).$type<Record<string, string>>().default({}),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
+// ─── Codebases ──────────────────────────────────────────────────────
+
+export const codebases = sqliteTable("codebases", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  repoPath: text("repo_path").notNull(),
+  branch: text("branch"),
+  label: text("label"),
+  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
@@ -137,7 +149,7 @@ export const acpSessions = sqliteTable("acp_sessions", {
   /** User-editable display name */
   name: text("name"),
   cwd: text("cwd").notNull(),
-  workspaceId: text("workspace_id").notNull(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   routaAgentId: text("routa_agent_id"),
   provider: text("provider"),
   role: text("role"),
@@ -181,3 +193,11 @@ export const skills = sqliteTable("skills", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
+
+// ─── Workspace Skills (many-to-many) ────────────────────────────────
+
+export const workspaceSkills = sqliteTable("workspace_skills", {
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  skillId: text("skill_id").notNull().references(() => skills.id, { onDelete: "cascade" }),
+  installedAt: integer("installed_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [primaryKey({ columns: [table.workspaceId, table.skillId] })]);

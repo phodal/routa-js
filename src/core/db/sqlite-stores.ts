@@ -34,8 +34,6 @@ export class SqliteWorkspaceStore implements WorkspaceStore {
       .values({
         id: workspace.id,
         title: workspace.title,
-        repoPath: workspace.repoPath,
-        branch: workspace.branch,
         status: workspace.status,
         metadata: workspace.metadata,
         createdAt: workspace.createdAt,
@@ -45,8 +43,6 @@ export class SqliteWorkspaceStore implements WorkspaceStore {
         target: sqliteSchema.workspaces.id,
         set: {
           title: workspace.title,
-          repoPath: workspace.repoPath,
-          branch: workspace.branch,
           status: workspace.status,
           metadata: workspace.metadata,
           updatedAt: new Date(),
@@ -83,13 +79,6 @@ export class SqliteWorkspaceStore implements WorkspaceStore {
       .where(eq(sqliteSchema.workspaces.id, workspaceId));
   }
 
-  async updateBranch(workspaceId: string, branch: string): Promise<void> {
-    await this.db
-      .update(sqliteSchema.workspaces)
-      .set({ branch, updatedAt: new Date() })
-      .where(eq(sqliteSchema.workspaces.id, workspaceId));
-  }
-
   async updateStatus(workspaceId: string, status: WorkspaceStatus): Promise<void> {
     await this.db
       .update(sqliteSchema.workspaces)
@@ -103,30 +92,112 @@ export class SqliteWorkspaceStore implements WorkspaceStore {
       .where(eq(sqliteSchema.workspaces.id, workspaceId));
   }
 
-  async ensureDefault(): Promise<Workspace> {
-    const existing = await this.get("default");
-    if (existing) return existing;
-
-    const workspace: Workspace = {
-      id: "default",
-      title: "Default Workspace",
-      status: "active",
-      metadata: {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    await this.save(workspace);
-    return workspace;
-  }
-
   private toModel(row: typeof sqliteSchema.workspaces.$inferSelect): Workspace {
     return {
       id: row.id,
       title: row.title,
-      repoPath: row.repoPath ?? undefined,
-      branch: row.branch ?? undefined,
       status: row.status as WorkspaceStatus,
       metadata: (row.metadata as Record<string, string>) ?? {},
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+}
+
+// ─── SQLite Codebase Store ──────────────────────────────────────────────
+
+import type { Codebase } from "../models/codebase";
+import type { CodebaseStore } from "./pg-codebase-store";
+
+export class SqliteCodebaseStore implements CodebaseStore {
+  constructor(private db: SqliteDb) {}
+
+  async add(codebase: Codebase): Promise<void> {
+    await this.db.insert(sqliteSchema.codebases).values({
+      id: codebase.id,
+      workspaceId: codebase.workspaceId,
+      repoPath: codebase.repoPath,
+      branch: codebase.branch,
+      label: codebase.label,
+      isDefault: codebase.isDefault,
+      createdAt: codebase.createdAt,
+      updatedAt: codebase.updatedAt,
+    });
+  }
+
+  async get(codebaseId: string): Promise<Codebase | undefined> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.codebases)
+      .where(eq(sqliteSchema.codebases.id, codebaseId))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<Codebase[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.codebases)
+      .where(eq(sqliteSchema.codebases.workspaceId, workspaceId));
+    return rows.map(this.toModel);
+  }
+
+  async update(codebaseId: string, fields: { branch?: string; label?: string }): Promise<void> {
+    await this.db
+      .update(sqliteSchema.codebases)
+      .set({ ...fields, updatedAt: new Date() })
+      .where(eq(sqliteSchema.codebases.id, codebaseId));
+  }
+
+  async remove(codebaseId: string): Promise<void> {
+    await this.db.delete(sqliteSchema.codebases).where(eq(sqliteSchema.codebases.id, codebaseId));
+  }
+
+  async getDefault(workspaceId: string): Promise<Codebase | undefined> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.codebases)
+      .where(and(eq(sqliteSchema.codebases.workspaceId, workspaceId), eq(sqliteSchema.codebases.isDefault, true)))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
+  async setDefault(workspaceId: string, codebaseId: string): Promise<void> {
+    await this.db
+      .update(sqliteSchema.codebases)
+      .set({ isDefault: false, updatedAt: new Date() })
+      .where(and(eq(sqliteSchema.codebases.workspaceId, workspaceId), eq(sqliteSchema.codebases.isDefault, true)));
+    await this.db
+      .update(sqliteSchema.codebases)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(sqliteSchema.codebases.id, codebaseId));
+  }
+
+  async countByWorkspace(workspaceId: string): Promise<number> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.codebases)
+      .where(eq(sqliteSchema.codebases.workspaceId, workspaceId));
+    return rows.length;
+  }
+
+  async findByRepoPath(workspaceId: string, repoPath: string): Promise<Codebase | undefined> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.codebases)
+      .where(and(eq(sqliteSchema.codebases.workspaceId, workspaceId), eq(sqliteSchema.codebases.repoPath, repoPath)))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
+  private toModel(row: typeof sqliteSchema.codebases.$inferSelect): Codebase {
+    return {
+      id: row.id,
+      workspaceId: row.workspaceId,
+      repoPath: row.repoPath,
+      branch: row.branch ?? undefined,
+      label: row.label ?? undefined,
+      isDefault: row.isDefault,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

@@ -21,10 +21,21 @@ import {
 export const workspaces = pgTable("workspaces", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
-  repoPath: text("repo_path"),
-  branch: text("branch"),
   status: text("status").notNull().default("active"),
   metadata: jsonb("metadata").$type<Record<string, string>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Codebases ──────────────────────────────────────────────────────
+
+export const codebases = pgTable("codebases", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  repoPath: text("repo_path").notNull(),
+  branch: text("branch"),
+  label: text("label"),
+  isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -143,7 +154,7 @@ export const acpSessions = pgTable("acp_sessions", {
   /** User-editable display name */
   name: text("name"),
   cwd: text("cwd").notNull(),
-  workspaceId: text("workspace_id").notNull(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   routaAgentId: text("routa_agent_id"),
   provider: text("provider"),
   role: text("role"),
@@ -187,3 +198,11 @@ export const skills = pgTable("skills", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Workspace Skills (many-to-many) ────────────────────────────────
+
+export const workspaceSkills = pgTable("workspace_skills", {
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  skillId: text("skill_id").notNull().references(() => skills.id, { onDelete: "cascade" }),
+  installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.workspaceId, table.skillId] })]);
