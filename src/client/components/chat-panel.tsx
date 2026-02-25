@@ -1152,6 +1152,11 @@ export function ChatPanel({
           <div className="flex-1 overflow-y-auto min-h-0">
             <div className="max-w-3xl mx-auto px-5 py-5 space-y-2">
               {visibleMessages.length === 0 && (
+                activeSessionId ? (
+                  <div className="text-center py-20 text-sm text-gray-400 dark:text-gray-500">
+                    Send a message to start.
+                  </div>
+                ) : (
                 <div className="flex flex-col items-center justify-center py-16 px-4">
                   {/* Logo / title */}
                   <div className="w-12 h-12 mb-5 rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center">
