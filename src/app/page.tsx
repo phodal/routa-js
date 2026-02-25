@@ -471,9 +471,7 @@ export default function HomePage() {
   /**
    * Call a Routa MCP tool via the /api/mcp endpoint.
    */
-  const mcpSessionRef = useCallback(() => {
-    return { current: null as string | null };
-  }, [])();
+  const mcpSessionRef = useRef<string | null>(null);
 
   const callMcpTool = useCallback(async (toolName: string, args: Record<string, unknown>) => {
     if (!mcpSessionRef.current) {
@@ -495,7 +493,10 @@ export default function HomePage() {
         }),
       });
       const sessionId = initRes.headers.get("mcp-session-id");
-      if (sessionId) mcpSessionRef.current = sessionId;
+      if (sessionId) {
+        mcpSessionRef.current = sessionId;
+        console.log(`[MCP] Session initialized: ${sessionId}`);
+      }
     }
 
     const res = await fetch("/api/mcp", {
@@ -516,7 +517,7 @@ export default function HomePage() {
     const data = await res.json();
     if (data.error) throw new Error(data.error.message || "MCP tool call failed");
     return data.result;
-  }, [mcpSessionRef]);
+  }, []);
 
   const handleConfirmAllTasks = useCallback(() => {
     setRoutaTasks((prev) =>
