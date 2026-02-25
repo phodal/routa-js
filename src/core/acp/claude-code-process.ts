@@ -46,7 +46,12 @@ interface ClaudeStreamDelta {
     thinking?: string;
     partial_json?: string;
     signature?: string;
+    // Extended thinking fields
+    citation?: unknown;
 }
+
+// Stop reasons from Claude API
+type ClaudeStopReason = "end_turn" | "stop_sequence" | "max_tokens" | "tool_use" | string;
 
 interface ClaudeStreamContentBlock {
     type: string;
@@ -55,6 +60,8 @@ interface ClaudeStreamContentBlock {
     id?: string;
     name?: string;
     input?: unknown;
+    // Extended thinking fields
+    signature?: string;
 }
 
 interface ClaudeStreamEvent {
@@ -82,10 +89,22 @@ interface ClaudeOutputMessage {
     type: ClaudeMessageType;
     subtype?: string;
     session_id?: string;
-    message?: { role: string; content: ClaudeContent[] };
+    message?: {
+        role: string;
+        content: ClaudeContent[];
+        // Extended thinking fields
+        stop_reason?: ClaudeStopReason;
+        stop_sequence?: string;
+    };
     event?: ClaudeStreamEvent;
     result?: string;
     is_error?: boolean;
+    // Extended thinking fields for result messages
+    stop_reason?: ClaudeStopReason;
+    usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+    };
 }
 
 // ─── Claude Code Process Config ─────────────────────────────────────────
@@ -127,10 +146,22 @@ export class ClaudeCodeProcess {
     private toolUseInputs = new Map<string, Record<string, unknown>>();
     private renderedToolIds = new Set<string>();
 
+    // Input JSON Streaming: accumulate partial JSON for each tool
+    private toolPartialJson = new Map<string, string>();
+    // Track current streaming tool ID (from content_block_start index)
+    private currentToolId: string | null = null;
+    private streamingBlockIndex: number | null = null;
+
     // Streaming state
     private inThinking = false;
     private inText = false;
+    private inToolUse = false;
     private hasRenderedStreamContent = false;
+
+    // Extended Thinking state
+    private currentReasoningId: string | null = null;
+    private currentReasoningText = "";
+    private currentSignature: string | null = null;
 
     // Resolve/reject for the current prompt
     private promptResolve: ((value: { stopReason: string }) => void) | null = null;
@@ -288,7 +319,16 @@ export class ClaudeCodeProcess {
         // Reset streaming state for this prompt
         this.inThinking = false;
         this.inText = false;
+        this.inToolUse = false;
         this.hasRenderedStreamContent = false;
+        this.toolPartialJson.clear();
+        this.currentToolId = null;
+        this.streamingBlockIndex = null;
+
+        // Reset extended thinking state
+        this.currentReasoningId = null;
+        this.currentReasoningText = "";
+        this.currentSignature = null;
 
         // Build Claude user input
         const userInput = JSON.stringify({
@@ -489,6 +529,9 @@ export class ClaudeCodeProcess {
 
             case "result": {
                 const resultText = msg.result ?? "";
+                // Determine stop reason: from msg.stop_reason, msg.subtype, or default
+                const stopReason: ClaudeStopReason = msg.stop_reason ?? msg.subtype ?? "end_turn";
+
                 if (resultText && !this.hasRenderedStreamContent) {
                     // Result came without streaming - emit as a message
                     this.emitSessionUpdate(sid, {
@@ -497,9 +540,38 @@ export class ClaudeCodeProcess {
                     });
                 }
 
+                // Emit stop_reason event for UI handling
+                this.emitSessionUpdate(sid, {
+                    sessionUpdate: "turn_complete",
+                    stopReason,
+                    usage: msg.usage,
+                    // Include extended thinking state if present
+                    ...(this.currentReasoningText && {
+                        reasoningText: this.currentReasoningText,
+                        reasoningSignature: this.currentSignature,
+                    }),
+                });
+
+                // Handle specific stop reasons
+                switch (stopReason) {
+                    case "max_tokens":
+                        console.warn(`[ClaudeCode] Response truncated: max_tokens reached`);
+                        break;
+                    case "tool_use":
+                        // Tool use is pending - normal flow, handled by tool_call events
+                        break;
+                    case "stop_sequence":
+                        // Explicit stop sequence hit
+                        break;
+                    case "end_turn":
+                    default:
+                        // Normal end of turn
+                        break;
+                }
+
                 // Resolve the prompt promise
                 if (this.promptResolve) {
-                    this.promptResolve({ stopReason: msg.subtype ?? "end_turn" });
+                    this.promptResolve({ stopReason });
                     this.promptResolve = null;
                     this.promptReject = null;
                 }
@@ -521,15 +593,36 @@ export class ClaudeCodeProcess {
                 const block = event.content_block;
                 if (!block) return;
 
+                // Track the streaming block index for input_json_delta correlation
+                this.streamingBlockIndex = event.index ?? null;
+
                 if (block.type === "thinking") {
                     this.inThinking = true;
-                    // ThinkingStart - no specific update needed, chunks will come
+                    // Extended Thinking: emit thinking_start event
+                    this.emitSessionUpdate(sid, {
+                        sessionUpdate: "thinking_start",
+                        blockIndex: event.index,
+                    });
                 } else if (block.type === "text") {
                     this.inText = true;
                 } else if (block.type === "tool_use") {
                     const toolId = block.id ?? "";
                     const toolName = block.name ?? "unknown";
                     this.toolUseNames.set(toolId, toolName);
+                    this.inToolUse = true;
+                    this.currentToolId = toolId;
+                    // Initialize partial JSON accumulator for this tool
+                    this.toolPartialJson.set(toolId, "");
+
+                    // Emit tool_call_start event for streaming UI
+                    const mappedName = mapClaudeToolName(toolName);
+                    this.emitSessionUpdate(sid, {
+                        sessionUpdate: "tool_call_start",
+                        toolCallId: toolId,
+                        toolName: toolName,
+                        kind: mappedName,
+                        status: "streaming",
+                    });
                 }
                 break;
             }
@@ -540,9 +633,18 @@ export class ClaudeCodeProcess {
 
                 if (delta.type === "thinking_delta" && delta.thinking) {
                     this.hasRenderedStreamContent = true;
+                    // Accumulate reasoning text for Extended Thinking
+                    this.currentReasoningText += delta.thinking;
                     this.emitSessionUpdate(sid, {
                         sessionUpdate: "agent_thought_chunk",
                         content: { type: "text", text: delta.thinking },
+                    });
+                } else if (delta.type === "signature_delta" && delta.signature) {
+                    // Extended Thinking: signature for verification
+                    this.currentSignature = delta.signature;
+                    this.emitSessionUpdate(sid, {
+                        sessionUpdate: "thinking_signature",
+                        signature: delta.signature,
                     });
                 } else if (delta.type === "text_delta" && delta.text) {
                     this.hasRenderedStreamContent = true;
@@ -554,8 +656,25 @@ export class ClaudeCodeProcess {
                     });
                 } else if (delta.type === "input_json_delta" && delta.partial_json) {
                     this.hasRenderedStreamContent = true;
-                    // Tool parameter streaming - we could emit tool updates here
-                    // but the full tool_use comes in the "assistant" message
+                    // Input JSON Streaming: accumulate and emit partial tool params
+                    if (this.currentToolId) {
+                        const existing = this.toolPartialJson.get(this.currentToolId) ?? "";
+                        const updated = existing + delta.partial_json;
+                        this.toolPartialJson.set(this.currentToolId, updated);
+
+                        // Try to parse partial JSON for UI preview
+                        const parsedInput = tryParsePartialJson(updated);
+                        const toolName = this.toolUseNames.get(this.currentToolId) ?? "unknown";
+
+                        this.emitSessionUpdate(sid, {
+                            sessionUpdate: "tool_call_params_delta",
+                            toolCallId: this.currentToolId,
+                            partialJson: delta.partial_json,
+                            accumulatedJson: updated,
+                            parsedInput,
+                            title: formatToolTitle(toolName, parsedInput ?? {}),
+                        });
+                    }
                 }
                 break;
             }
@@ -563,10 +682,44 @@ export class ClaudeCodeProcess {
             case "content_block_stop": {
                 if (this.inThinking) {
                     this.inThinking = false;
+                    // Extended Thinking: emit thinking_stop with accumulated reasoning
+                    this.emitSessionUpdate(sid, {
+                        sessionUpdate: "thinking_stop",
+                        reasoningText: this.currentReasoningText,
+                        signature: this.currentSignature,
+                    });
                 }
                 if (this.inText) {
                     this.inText = false;
                 }
+                if (this.inToolUse && this.currentToolId) {
+                    this.inToolUse = false;
+                    // Finalize the tool input from accumulated JSON
+                    const finalJson = this.toolPartialJson.get(this.currentToolId) ?? "";
+                    const parsedInput = tryParsePartialJson(finalJson);
+                    if (parsedInput) {
+                        this.toolUseInputs.set(this.currentToolId, parsedInput);
+                    }
+                    this.currentToolId = null;
+                }
+                this.streamingBlockIndex = null;
+                break;
+            }
+
+            case "message_start": {
+                // Extended Thinking: message_start may contain reasoning_opaque
+                // This is handled at the message level, not stream event
+                break;
+            }
+
+            case "message_delta": {
+                // Extended Thinking: message_delta contains stop_reason
+                // This is handled via the result message type
+                break;
+            }
+
+            case "message_stop": {
+                // Message complete - cleanup handled elsewhere
                 break;
             }
         }
@@ -589,6 +742,83 @@ export class ClaudeCodeProcess {
 }
 
 // ─── Helper Functions ──────────────────────────────────────────────────
+
+/**
+ * Try to parse partial JSON for streaming tool parameters.
+ * Returns the parsed object if valid, null otherwise.
+ * Ported from Copilot SDK's pVe() function.
+ */
+function tryParsePartialJson(partialJson: string): Record<string, unknown> | null {
+    if (!partialJson || partialJson.trim() === "") {
+        return null;
+    }
+
+    // First try direct parse
+    try {
+        const parsed = JSON.parse(partialJson);
+        if (typeof parsed === "object" && parsed !== null) {
+            return parsed as Record<string, unknown>;
+        }
+    } catch {
+        // Try to repair incomplete JSON by closing open braces/brackets
+    }
+
+    // Attempt to repair incomplete JSON
+    let repaired = partialJson.trim();
+
+    // Count open/close braces and brackets
+    let braceCount = 0;
+    let bracketCount = 0;
+    let inString = false;
+    let escape = false;
+
+    for (const char of repaired) {
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (char === "\\") {
+            escape = true;
+            continue;
+        }
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (inString) continue;
+
+        if (char === "{") braceCount++;
+        else if (char === "}") braceCount--;
+        else if (char === "[") bracketCount++;
+        else if (char === "]") bracketCount--;
+    }
+
+    // If in string, close it
+    if (inString) {
+        repaired += '"';
+    }
+
+    // Close open brackets and braces
+    while (bracketCount > 0) {
+        repaired += "]";
+        bracketCount--;
+    }
+    while (braceCount > 0) {
+        repaired += "}";
+        braceCount--;
+    }
+
+    try {
+        const parsed = JSON.parse(repaired);
+        if (typeof parsed === "object" && parsed !== null) {
+            return parsed as Record<string, unknown>;
+        }
+    } catch {
+        // Still invalid - return null
+    }
+
+    return null;
+}
 
 function mapClaudeToolName(claudeToolName: string): string {
     // Handle MCP tool names: mcp__server-name__tool_name -> tool_name

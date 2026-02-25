@@ -743,6 +743,115 @@ export function ChatPanel({
           case "session_info_update":
             break;
 
+          // ─── Input JSON Streaming ───────────────────────────────────
+          case "tool_call_start": {
+            // Tool call streaming started - create placeholder entry
+            const toolCallId = update.toolCallId as string | undefined;
+            const toolName = update.toolName as string | undefined;
+            const toolKind = update.kind as string | undefined;
+            if (toolCallId) {
+              arr.push({
+                id: toolCallId,
+                role: "tool",
+                content: `${toolName ?? "tool"}\n\n(streaming parameters...)`,
+                timestamp: new Date(),
+                toolName: toolName ?? "tool",
+                toolStatus: "streaming",
+                toolCallId,
+                toolKind,
+              });
+            }
+            break;
+          }
+
+          case "tool_call_params_delta": {
+            // Progressive tool parameter streaming
+            const toolCallId = update.toolCallId as string | undefined;
+            const parsedInput = update.parsedInput as Record<string, unknown> | null;
+            const title = update.title as string | undefined;
+            if (toolCallId) {
+              const idx = arr.findIndex((m) => m.toolCallId === toolCallId);
+              if (idx >= 0) {
+                const existing = arr[idx];
+                const inputPreview = parsedInput
+                  ? `Input:\n${JSON.stringify(parsedInput, null, 2)}`
+                  : "(streaming parameters...)";
+                arr[idx] = {
+                  ...existing,
+                  content: `${title ?? existing.toolName ?? "tool"}\n\n${inputPreview}`,
+                  toolRawInput: parsedInput ?? existing.toolRawInput,
+                };
+              }
+            }
+            break;
+          }
+
+          // ─── Extended Thinking Support ──────────────────────────────
+          case "thinking_start": {
+            // Extended thinking block started
+            // Create a new thought message or use existing
+            const thoughtId = `thinking-${uuidv4()}`;
+            streamingThoughtIdRef.current[sid] = thoughtId;
+            arr.push({
+              id: thoughtId,
+              role: "thought",
+              content: "",
+              timestamp: new Date(),
+            });
+            break;
+          }
+
+          case "thinking_stop": {
+            // Extended thinking block completed
+            const reasoningText = update.reasoningText as string | undefined;
+            const thoughtId = streamingThoughtIdRef.current[sid];
+            if (thoughtId && reasoningText) {
+              const idx = arr.findIndex((m) => m.id === thoughtId);
+              if (idx >= 0) {
+                arr[idx] = {
+                  ...arr[idx],
+                  content: reasoningText,
+                };
+              }
+            }
+            streamingThoughtIdRef.current[sid] = null;
+            break;
+          }
+
+          case "thinking_signature": {
+            // Extended thinking signature delta - no UI action needed
+            break;
+          }
+
+          // ─── Stop Reason Handling ───────────────────────────────────
+          case "turn_complete": {
+            const stopReason = update.stopReason as string | undefined;
+            const usage = update.usage as { input_tokens?: number; output_tokens?: number } | undefined;
+            const reasoningText = update.reasoningText as string | undefined;
+
+            // Log usage for debugging
+            if (usage) {
+              console.log(`[ChatPanel] Turn complete: ${stopReason}, tokens: in=${usage.input_tokens}, out=${usage.output_tokens}`);
+            }
+
+            // Handle specific stop reasons
+            if (stopReason === "max_tokens") {
+              // Add truncation warning message (use "info" role since "system" is not a valid MessageRole)
+              arr.push({
+                id: uuidv4(),
+                role: "info",
+                content: "⚠️ Response was truncated due to max tokens limit.",
+                timestamp: new Date(),
+              });
+            }
+
+            // Store reasoning text if present (Extended Thinking)
+            if (reasoningText) {
+              console.log(`[ChatPanel] Extended thinking completed: ${reasoningText.slice(0, 100)}...`);
+            }
+            break;
+          }
+
           default:
             console.log(`[ChatPanel] Unhandled sessionUpdate: ${kind}`);
             break;
