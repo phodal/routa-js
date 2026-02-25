@@ -318,10 +318,26 @@ export async function getAllAvailablePresets(): Promise<AcpAgentPreset[]> {
 /**
  * Get preset by ID, checking both static and registry sources.
  * Static presets take precedence.
+ *
+ * Supports suffixed IDs like "auggie-registry" to explicitly request
+ * the registry version when both built-in and registry versions exist.
  */
 export async function getPresetByIdWithRegistry(
   id: string
 ): Promise<AcpAgentPreset | undefined> {
+  // Handle suffixed IDs (e.g., "auggie-registry")
+  // This allows explicit selection of registry version when both exist
+  const registrySuffix = "-registry";
+  if (id.endsWith(registrySuffix)) {
+    const baseId = id.slice(0, -registrySuffix.length);
+    const registryPreset = await getRegistryPresetById(baseId);
+    // Keep the suffixed ID in the returned preset for consistency
+    if (registryPreset) {
+      return { ...registryPreset, id };
+    }
+    return undefined;
+  }
+
   // Check static presets first
   const staticPreset = getPresetById(id);
   if (staticPreset) {

@@ -498,7 +498,8 @@ export async function POST(request: NextRequest) {
         })
       );
 
-      // Merge registry agents that aren't already covered by static presets
+      // Merge registry agents (including those that overlap with static presets)
+      // For overlapping agents, use a different ID to allow both versions to coexist
       const staticIds = new Set(staticProviders.map((p) => p.id));
       try {
         const registry = await fetchRegistry();
@@ -507,8 +508,6 @@ export async function POST(request: NextRequest) {
         const platform = detectPlatformTarget();
 
         for (const agent of registry.agents) {
-          if (staticIds.has(agent.id)) continue;
-
           const dist = agent.distribution;
           let command = "";
           let status: "available" | "unavailable" = "unavailable";
@@ -530,9 +529,14 @@ export async function POST(request: NextRequest) {
             status = "unavailable";
           }
 
+          // If this agent ID conflicts with a built-in preset, use a suffixed ID
+          // to allow both versions to coexist in the UI
+          const providerId = staticIds.has(agent.id) ? `${agent.id}-registry` : agent.id;
+          const providerName = staticIds.has(agent.id) ? `${agent.name} (Registry)` : agent.name;
+
           staticProviders.push({
-            id: agent.id,
-            name: agent.name,
+            id: providerId,
+            name: providerName,
             description: agent.description,
             command,
             status,

@@ -58,8 +58,12 @@ export interface McpSetupResult {
 // ─── Public API ────────────────────────────────────────────────────────
 
 export function providerSupportsMcp(providerId: string): boolean {
+  // Strip -registry suffix to check base provider ID
+  const baseId = providerId.endsWith("-registry")
+    ? providerId.slice(0, -"-registry".length)
+    : providerId;
   const supported: McpSupportedProvider[] = ["claude", "auggie", "opencode", "codex", "gemini", "kimi", "copilot"];
-  return supported.includes(providerId as McpSupportedProvider);
+  return supported.includes(baseId as McpSupportedProvider);
 }
 
 /**
@@ -80,7 +84,12 @@ export function ensureMcpForProvider(
   // Use the direct endpoint override if the standalone MCP server is running
   const mcpEndpoint = cfg.mcpEndpoint || `${cfg.routaServerUrl}/api/mcp`;
 
-  switch (providerId) {
+  // Strip -registry suffix to get base provider ID for MCP setup
+  const baseId = providerId.endsWith("-registry")
+    ? providerId.slice(0, -"-registry".length)
+    : providerId;
+
+  switch (baseId) {
     case "opencode":
       return ensureMcpForOpenCode(mcpEndpoint, cfg.workspaceId);
     case "auggie":

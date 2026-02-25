@@ -71,7 +71,8 @@ async fn acp_rpc(
                 }));
             }
 
-            // Merge registry agents that aren't already covered by static presets
+            // Merge registry agents (including those that overlap with static presets)
+            // For overlapping agents, use a different ID to allow both versions to coexist
             let npx_available = shell_env::which("npx").is_some();
             let uvx_available = shell_env::which("uv").is_some();
 
@@ -82,7 +83,7 @@ async fn acp_rpc(
                     if let Some(agents) = registry.get("agents").and_then(|a| a.as_array()) {
                         for agent in agents {
                             let agent_id = agent.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                            if agent_id.is_empty() || static_ids.contains(agent_id) {
+                            if agent_id.is_empty() {
                                 continue;
                             }
 
@@ -118,9 +119,17 @@ async fn acp_rpc(
                                 (agent_id.to_string(), "unavailable")
                             };
 
+                            // If this agent ID conflicts with a built-in preset, use a suffixed ID
+                            // to allow both versions to coexist in the UI
+                            let (provider_id, provider_name) = if static_ids.contains(agent_id) {
+                                (format!("{}-registry", agent_id), format!("{} (Registry)", name))
+                            } else {
+                                (agent_id.to_string(), name.to_string())
+                            };
+
                             providers.push(serde_json::json!({
-                                "id": agent_id,
-                                "name": name,
+                                "id": provider_id,
+                                "name": provider_name,
                                 "description": desc,
                                 "command": command,
                                 "status": status,

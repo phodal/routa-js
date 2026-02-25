@@ -416,7 +416,21 @@ const ACP_REGISTRY_URL: &str = "https://cdn.agentclientprotocol.com/registry/v1/
 
 /// Get a preset by ID, checking both static presets and registry.
 /// Static presets take precedence.
+///
+/// Supports suffixed IDs like "auggie-registry" to explicitly request
+/// the registry version when both built-in and registry versions exist.
 pub async fn get_preset_by_id_with_registry(id: &str) -> Result<AcpPreset, String> {
+    // Handle suffixed IDs (e.g., "auggie-registry")
+    // This allows explicit selection of registry version when both exist
+    const REGISTRY_SUFFIX: &str = "-registry";
+    if id.ends_with(REGISTRY_SUFFIX) {
+        let base_id = &id[..id.len() - REGISTRY_SUFFIX.len()];
+        let mut preset = get_registry_preset(base_id).await?;
+        // Keep the suffixed ID in the returned preset for consistency
+        preset.name = id.to_string();
+        return Ok(preset);
+    }
+
     // Check static presets first
     if let Some(preset) = get_presets().into_iter().find(|p| p.name == id) {
         return Ok(preset);

@@ -85,7 +85,11 @@ export async function buildConfigFromPreset(
 
   // Append --cwd if the preset uses positional cwd (like opencode)
   // For others, we rely on the process cwd
-  if (preset.id === "opencode") {
+  // Strip -registry suffix when checking preset ID
+  const baseId = preset.id.endsWith("-registry")
+    ? preset.id.slice(0, -"-registry".length)
+    : preset.id;
+  if (baseId === "opencode") {
     args.push("--cwd", cwd);
   }
 
