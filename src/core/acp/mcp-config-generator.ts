@@ -57,7 +57,7 @@ export function generateRoutaMcpConfig(config: RoutaMcpConfig): McpServerConfig 
     type: "http",
     url: mcpEndpoint,
     env: {
-      ROUTA_WORKSPACE_ID: workspaceId,
+      ROUTA_WORKSPACE_ID: workspaceId ?? "",
     },
   };
 }

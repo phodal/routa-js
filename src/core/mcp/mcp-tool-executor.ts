@@ -285,7 +285,6 @@ export async function executeMcpTool(
         await workspaceTools.setWorkspaceTitle({
           workspaceId: (args.workspaceId as string) ?? workspace,
           title: args.title as string,
-          renameBranch: args.renameBranch as boolean | undefined,
         })
       );
     case "list_workspaces":
@@ -297,8 +296,6 @@ export async function executeMcpTool(
         await workspaceTools.createWorkspace({
           id: args.id as string,
           title: args.title as string,
-          repoPath: args.repoPath as string | undefined,
-          branch: args.branch as string | undefined,
         })
       );
 

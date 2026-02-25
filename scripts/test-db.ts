@@ -46,16 +46,11 @@ async function testWorkspaceStore() {
   const store = new PgWorkspaceStore(db);
 
   try {
-    const ws = await store.ensureDefault();
-    if (ws.id !== "default") throw new Error(`Expected id 'default', got '${ws.id}'`);
-    ok("ensureDefault() creates default workspace");
-  } catch (e) { fail("ensureDefault()", e); }
-
-  try {
+    await store.save({ id: "default", title: "Default", status: "active", metadata: {}, createdAt: new Date(), updatedAt: new Date() });
     const ws = await store.get("default");
     if (!ws) throw new Error("default workspace not found");
-    ok("get('default') returns the workspace");
-  } catch (e) { fail("get('default')", e); }
+    ok("save() + get('default') round-trip");
+  } catch (e) { fail("save() + get('default')", e); }
 
   const testWsId = `test-ws-${uuidv4().slice(0, 8)}`;
   try {

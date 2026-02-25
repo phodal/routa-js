@@ -753,7 +753,6 @@ Note: taskId must be a UUID from create_task, not a task name.`,
       {
         workspaceId: z.string().optional().describe("Workspace ID (uses default if omitted)"),
         title: z.string().describe("New workspace title"),
-        renameBranch: z.boolean().optional().describe("Also rename the Git branch to match (default: false)"),
       },
       async (params) => {
         if (!this.workspaceTools) {
@@ -762,7 +761,6 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         const result = await this.workspaceTools.setWorkspaceTitle({
           workspaceId: params.workspaceId ?? this.workspaceId,
           title: params.title,
-          renameBranch: params.renameBranch,
         });
         return this.toMcpResult(result);
       }

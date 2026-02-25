@@ -13,11 +13,12 @@ import { useAgentsRpc } from "../hooks/use-agents-rpc";
 
 interface AgentPanelProps {
   refreshKey?: number;
+  workspaceId?: string;
 }
 
-export function AgentPanel({ refreshKey }: AgentPanelProps) {
+export function AgentPanel({ refreshKey, workspaceId = "" }: AgentPanelProps) {
   const { agents, loading, fetchAgents, createAgent: createAgentRpc } =
-    useAgentsRpc();
+    useAgentsRpc(workspaceId);
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentRole, setNewAgentRole] = useState("CRAFTER");
 

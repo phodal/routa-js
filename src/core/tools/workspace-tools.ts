@@ -282,7 +282,6 @@ export class WorkspaceTools {
   async setWorkspaceTitle(params: {
     workspaceId: string;
     title: string;
-    renameBranch?: boolean;
   }): Promise<ToolResult> {
     if (!this.workspaceStore) {
       return errorResult("Workspace store not configured.");
@@ -295,29 +294,6 @@ export class WorkspaceTools {
 
     const oldTitle = workspace.title;
     await this.workspaceStore.updateTitle(params.workspaceId, params.title);
-
-    // Optionally rename the Git branch
-    if (params.renameBranch && workspace.repoPath) {
-      const branchSlug = params.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "");
-
-      try {
-        await execFileAsync("git", ["branch", "-m", branchSlug], {
-          cwd: workspace.repoPath,
-          timeout: 10000,
-        });
-        await this.workspaceStore.updateBranch(params.workspaceId, branchSlug);
-      } catch (err) {
-        return successResult({
-          workspaceId: params.workspaceId,
-          title: params.title,
-          oldTitle,
-          branchRenameError: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
 
     // Emit workspace update event
     if (this.eventBus) {
@@ -356,27 +332,10 @@ export class WorkspaceTools {
     const tasks = await this.taskStore.listByWorkspace(params.workspaceId);
     const notes = await this.noteStore.listByWorkspace(params.workspaceId);
 
-    // Get current Git branch if possible
-    let currentBranch: string | undefined;
-    const cwd = workspace.repoPath ?? this.defaultCwd;
-    if (cwd) {
-      try {
-        const { stdout } = await execFileAsync("git", ["branch", "--show-current"], {
-          cwd,
-          timeout: 5000,
-        });
-        currentBranch = stdout.trim();
-      } catch {
-        // ignore
-      }
-    }
-
     return successResult({
       workspace: {
         id: workspace.id,
         title: workspace.title,
-        repoPath: workspace.repoPath,
-        branch: currentBranch ?? workspace.branch,
         status: workspace.status,
         metadata: workspace.metadata,
         createdAt: workspace.createdAt.toISOString(),
@@ -422,7 +381,6 @@ export class WorkspaceTools {
         id: ws.id,
         title: ws.title,
         status: ws.status,
-        branch: ws.branch,
         createdAt: ws.createdAt.toISOString(),
       }))
     );
@@ -433,8 +391,6 @@ export class WorkspaceTools {
   async createWorkspace(params: {
     id: string;
     title: string;
-    repoPath?: string;
-    branch?: string;
   }): Promise<ToolResult> {
     if (!this.workspaceStore) {
       return errorResult("Workspace store not configured.");
