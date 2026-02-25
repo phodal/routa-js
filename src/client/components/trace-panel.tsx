@@ -641,7 +641,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                               </span>
                             </div>
                             <div className="px-2 py-1.5 bg-white dark:bg-gray-900/40">
-                              <ToolInputTable input={trace.tool.input} />
+                              <ToolInputTable input={trace.tool} />
                             </div>
                           </div>
                         )}
