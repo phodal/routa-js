@@ -944,6 +944,24 @@ export function TiptapInput({
                     Connecting...
                   </div>
                 )}
+
+                {/* No available providers message */}
+                {providers.length > 0 && builtinAvailable.length === 0 && registryAvailable.length === 0 && (
+                  <div className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+                    {builtinUnavailable.length > 0 || registryUnavailable.length > 0 ? (
+                      <>
+                        <p className="font-medium mb-1">No providers available</p>
+                        <p className="text-[10px] opacity-75">
+                          {providers.some(p => p.id === "opencode-sdk")
+                            ? "Configure OPENCODE_SERVER_URL environment variable to use OpenCode SDK"
+                            : "Install a provider to get started"}
+                        </p>
+                      </>
+                    ) : (
+                      "Loading providers..."
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

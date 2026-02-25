@@ -3,9 +3,12 @@
     "allow": [
       "Bash(node:*)",
       "Bash(python3:*)",
-      "Bash(WS_ID=\"default\")",
-      "Bash(__NEW_LINE_5afbd0ec70b17e29__ echo \"\")",
-      "Bash(gh issue create:*)"
+      "Bash(gh issue create:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(git push:*)"
     ]
   }
 }

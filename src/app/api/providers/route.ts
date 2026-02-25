@@ -59,33 +59,39 @@ export async function GET(request: NextRequest) {
  * Fast: Return all providers without checking command availability
  */
 async function getProvidersWithoutChecking(): Promise<ProviderInfo[]> {
+  const providers: ProviderInfo[] = [];
+
+  // In serverless environments (Vercel), only show OpenCode SDK
+  // CLI-based providers are not supported in serverless
+  if (isServerlessEnvironment()) {
+    const sdkConfigured = isOpencodeServerConfigured();
+    providers.push({
+      id: "opencode-sdk",
+      name: "OpenCode SDK",
+      description: sdkConfigured
+        ? "Connect to remote OpenCode server (configured)"
+        : "Connect to remote OpenCode server - Set OPENCODE_SERVER_URL environment variable",
+      command: "sdk",
+      status: sdkConfigured ? "available" : "unavailable",
+      source: "static",
+    });
+    console.log("[Providers API] Serverless environment: only OpenCode SDK is available");
+    return providers;
+  }
+
+  // Non-serverless: show all CLI-based providers
   const allPresets = [...getStandardPresets()];
   const claudePreset = getPresetById("claude");
   if (claudePreset) allPresets.push(claudePreset);
 
-  const providers: ProviderInfo[] = allPresets.map((p) => ({
+  providers.push(...allPresets.map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,
     command: p.command,
     status: "checking" as const,
     source: "static" as const,
-  }));
-
-  // Add OpenCode SDK in serverless
-  if (isServerlessEnvironment()) {
-    const sdkConfigured = isOpencodeServerConfigured();
-    providers.unshift({
-      id: "opencode-sdk",
-      name: "OpenCode SDK",
-      description: sdkConfigured
-        ? "Connect to remote OpenCode server (configured)"
-        : "Connect to remote OpenCode server (set OPENCODE_SERVER_URL)",
-      command: "sdk",
-      status: sdkConfigured ? "available" : "unavailable",
-      source: "static",
-    });
-  }
+  })));
 
   // Add registry agents (without checking)
   try {
@@ -130,6 +136,27 @@ async function getProvidersWithoutChecking(): Promise<ProviderInfo[]> {
  * Slow: Check all provider command availability
  */
 async function getProvidersWithChecking(): Promise<ProviderInfo[]> {
+  const providers: ProviderInfo[] = [];
+
+  // In serverless environments (Vercel), only show OpenCode SDK
+  // CLI-based providers are not supported in serverless
+  if (isServerlessEnvironment()) {
+    const sdkConfigured = isOpencodeServerConfigured();
+    providers.push({
+      id: "opencode-sdk",
+      name: "OpenCode SDK",
+      description: sdkConfigured
+        ? "Connect to remote OpenCode server (configured)"
+        : "Connect to remote OpenCode server - Set OPENCODE_SERVER_URL environment variable",
+      command: "sdk",
+      status: sdkConfigured ? "available" : "unavailable",
+      source: "static",
+    });
+    console.log("[Providers API] Serverless environment: only OpenCode SDK is available");
+    return providers;
+  }
+
+  // Non-serverless: check all CLI-based providers
   const allPresets = [...getStandardPresets()];
   const claudePreset = getPresetById("claude");
   if (claudePreset) allPresets.push(claudePreset);
@@ -196,22 +223,7 @@ async function getProvidersWithChecking(): Promise<ProviderInfo[]> {
     console.warn("[Providers API] Failed to fetch registry:", err);
   }
 
-  const providers = staticProviders;
-
-  // Add OpenCode SDK in serverless
-  if (isServerlessEnvironment()) {
-    const sdkConfigured = isOpencodeServerConfigured();
-    providers.unshift({
-      id: "opencode-sdk",
-      name: "OpenCode SDK",
-      description: sdkConfigured
-        ? "Connect to remote OpenCode server (configured)"
-        : "Connect to remote OpenCode server (set OPENCODE_SERVER_URL)",
-      command: "sdk",
-      status: sdkConfigured ? "available" : "unavailable",
-      source: "static",
-    });
-  }
+  providers.push(...staticProviders);
 
   // Sort: available first, then alphabetical
   providers.sort((a, b) => {
