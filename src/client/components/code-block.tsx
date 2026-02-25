@@ -20,6 +20,7 @@
 import { useState, useMemo } from "react";
 import { CodeViewer } from "./codemirror";
 import { common, createLowlight } from "lowlight";
+import { toHtml } from "hast-util-to-html";
 
 const lowlight = createLowlight(common);
 
@@ -142,6 +143,7 @@ export function CodeBlock({
   if (variant === "simple" || codeContent.length < 50) {
     // Use lowlight to highlight the code
     const highlighted = lowlight.highlight(detectedLanguage, codeContent);
+    const html = toHtml(highlighted);
 
     return (
       <div className={`code-block-simple ${className}`}>
@@ -166,7 +168,7 @@ export function CodeBlock({
           </button>
         </div>
         <pre className={`language-${detectedLanguage}`}>
-          <code dangerouslySetInnerHTML={{ __html: highlighted.toString() }} />
+          <code dangerouslySetInnerHTML={{ __html: html }} />
         </pre>
       </div>
     );

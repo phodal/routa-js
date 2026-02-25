@@ -639,7 +639,141 @@ body {
   border-radius: 0;
 }
 
+/* ─── Lowlight Syntax Highlighting Classes ─────────────────────────────────── */
+
+/* Light theme colors */
+.code-block-simple .hljs-keyword {
+  color: #d73a49;
+}
+
+.code-block-simple .hljs-string {
+  color: #032f62;
+}
+
+.code-block-simple .hljs-number {
+  color: #005cc5;
+}
+
+.code-block-simple .hljs-comment {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.code-block-simple .hljs-function {
+  color: #6f42c1;
+}
+
+.code-block-simple .hljs-title {
+  color: #6f42c1;
+}
+
+.code-block-simple .hljs-params {
+  color: #24292e;
+}
+
+.code-block-simple .hljs-built_in {
+  color: #005cc5;
+}
+
+.code-block-simple .hljs-operator {
+  color: #d73a49;
+}
+
+.code-block-simple .hljs-punctuation {
+  color: #24292e;
+}
+
+.code-block-simple .hljs-property {
+  color: #005cc5;
+}
+
+.code-block-simple .hljs-tag {
+  color: #22863a;
+}
+
+.code-block-simple .hljs-attr {
+  color: #6f42c1;
+}
+
+.code-block-simple .hljs-variable {
+  color: #e36209;
+}
+
+.code-block-simple .hljs-literal {
+  color: #005cc5;
+}
+
+.code-block-simple .hljs-class {
+  color: #6f42c1;
+}
+
 @media (prefers-color-scheme: dark) {
+  /* Dark theme syntax highlighting */
+  .code-block-simple .hljs-keyword {
+    color: #ff7b72;
+  }
+
+  .code-block-simple .hljs-string {
+    color: #a5d6ff;
+  }
+
+  .code-block-simple .hljs-number {
+    color: #79c0ff;
+  }
+
+  .code-block-simple .hljs-comment {
+    color: #8b949e;
+    font-style: italic;
+  }
+
+  .code-block-simple .hljs-function {
+    color: #d2a8ff;
+  }
+
+  .code-block-simple .hljs-title {
+    color: #d2a8ff;
+  }
+
+  .code-block-simple .hljs-params {
+    color: #c9d1d9;
+  }
+
+  .code-block-simple .hljs-built_in {
+    color: #79c0ff;
+  }
+
+  .code-block-simple .hljs-operator {
+    color: #ff7b72;
+  }
+
+  .code-block-simple .hljs-punctuation {
+    color: #c9d1d9;
+  }
+
+  .code-block-simple .hljs-property {
+    color: #79c0ff;
+  }
+
+  .code-block-simple .hljs-tag {
+    color: #7ee787;
+  }
+
+  .code-block-simple .hljs-attr {
+    color: #79c0ff;
+  }
+
+  .code-block-simple .hljs-variable {
+    color: #ffa657;
+  }
+
+  .code-block-simple .hljs-literal {
+    color: #79c0ff;
+  }
+
+  .code-block-simple .hljs-class {
+    color: #d2a8ff;
+  }
+
   .left-resize-handle .resize-indicator {
     background: #4b5563;
   }
