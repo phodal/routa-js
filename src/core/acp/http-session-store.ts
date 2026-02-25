@@ -13,7 +13,9 @@
 import {
   createTraceRecord,
   withConversation,
+  withTool,
   recordTrace,
+  type TraceRecord,
 } from "@/core/trace";
 
 export interface RoutaSessionRecord {
@@ -102,6 +104,8 @@ class HttpSessionStore {
   private messageHistory = new Map<string, SessionUpdateNotification[]>();
   /** Buffer for accumulating agent message chunks before tracing */
   private agentMessageBuffer = new Map<string, string>();
+  /** Buffer for accumulating agent thought chunks before tracing */
+  private agentThoughtBuffer = new Map<string, string>();
 
   upsertSession(record: RoutaSessionRecord) {
     this.sessions.set(record.sessionId, record);
@@ -120,9 +124,11 @@ class HttpSessionStore {
 
   deleteSession(sessionId: string): boolean {
     this.flushAgentBuffer(sessionId); // Trace any remaining buffered content
+    this.flushThoughtBuffer(sessionId); // Trace any remaining thought content
     this.messageHistory.delete(sessionId);
     this.pendingNotifications.delete(sessionId);
     this.agentMessageBuffer.delete(sessionId);
+    this.agentThoughtBuffer.delete(sessionId);
     // Detach SSE if connected
     this.sseControllers.delete(sessionId);
     return this.sessions.delete(sessionId);
@@ -141,10 +147,32 @@ class HttpSessionStore {
         {
           role: "assistant",
           contentPreview: accumulated.slice(0, 200),
+          fullContent: accumulated,
         }
       );
       recordTrace(sessionRecord?.cwd ?? process.cwd(), agentTrace);
       this.agentMessageBuffer.set(sessionId, "");
+    }
+  }
+
+  /**
+   * Flush and trace any remaining buffered agent thought content.
+   * Call this when a prompt completes or session ends.
+   */
+  flushThoughtBuffer(sessionId: string): void {
+    const accumulated = this.agentThoughtBuffer.get(sessionId);
+    if (accumulated && accumulated.length > 0) {
+      const sessionRecord = this.sessions.get(sessionId);
+      const thoughtTrace = withConversation(
+        createTraceRecord(sessionId, "agent_thought", { provider: sessionRecord?.provider ?? "unknown" }),
+        {
+          role: "assistant",
+          contentPreview: accumulated.slice(0, 200),
+          fullContent: accumulated,
+        }
+      );
+      recordTrace(sessionRecord?.cwd ?? process.cwd(), thoughtTrace);
+      this.agentThoughtBuffer.set(sessionId, "");
     }
   }
 
@@ -212,42 +240,97 @@ class HttpSessionStore {
     history.push(notification);
     this.messageHistory.set(sessionId, history);
 
-    // ── Trace: agent_message - accumulate chunks and trace periodically ──
+    // ── Trace recording for various event types ──
     const update = notification.update as Record<string, unknown> | undefined;
     const sessionUpdate = update?.sessionUpdate;
-    if (sessionUpdate === "agent_message_chunk") {
+    const sessionRecord = this.sessions.get(sessionId);
+    const cwd = sessionRecord?.cwd ?? process.cwd();
+    const provider = sessionRecord?.provider ?? "unknown";
+
+    if (sessionUpdate === "agent_thought_chunk") {
+      // Accumulate thought chunks in buffer
       const content = update?.content as { type?: string; text?: string } | undefined;
       const text = content?.text ?? "";
-      // Accumulate chunks in buffer
+      const existing = this.agentThoughtBuffer.get(sessionId) ?? "";
+      const accumulated = existing + text;
+      this.agentThoughtBuffer.set(sessionId, accumulated);
+      // Trace when buffer reaches 100+ chars
+      if (accumulated.length >= 100) {
+        const thoughtTrace = withConversation(
+          createTraceRecord(sessionId, "agent_thought", { provider }),
+          {
+            role: "assistant",
+            contentPreview: accumulated.slice(0, 200),
+            fullContent: accumulated,
+          }
+        );
+        recordTrace(cwd, thoughtTrace);
+        this.agentThoughtBuffer.set(sessionId, ""); // Reset buffer
+      }
+    } else if (sessionUpdate === "agent_message_chunk") {
+      // Accumulate message chunks in buffer
+      const content = update?.content as { type?: string; text?: string } | undefined;
+      const text = content?.text ?? "";
       const existing = this.agentMessageBuffer.get(sessionId) ?? "";
       const accumulated = existing + text;
       this.agentMessageBuffer.set(sessionId, accumulated);
       // Trace when buffer reaches 100+ chars (captures meaningful segments)
       if (accumulated.length >= 100) {
-        const sessionRecord = this.sessions.get(sessionId);
         const agentTrace = withConversation(
-          createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider ?? "unknown" }),
+          createTraceRecord(sessionId, "agent_message", { provider }),
           {
             role: "assistant",
             contentPreview: accumulated.slice(0, 200),
+            fullContent: accumulated,
           }
         );
-        recordTrace(sessionRecord?.cwd ?? process.cwd(), agentTrace);
+        recordTrace(cwd, agentTrace);
         this.agentMessageBuffer.set(sessionId, ""); // Reset buffer
       }
     } else if (sessionUpdate === "agent_message") {
       // Full message (non-streaming) - trace immediately
       const content = update?.content as { type?: string; text?: string } | undefined;
       const text = content?.text ?? "";
-      const sessionRecord = this.sessions.get(sessionId);
       const agentTrace = withConversation(
-        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider ?? "unknown" }),
+        createTraceRecord(sessionId, "agent_message", { provider }),
         {
           role: "assistant",
           contentPreview: text.slice(0, 200),
+          fullContent: text,
         }
       );
-      recordTrace(sessionRecord?.cwd ?? process.cwd(), agentTrace);
+      recordTrace(cwd, agentTrace);
+    } else if (sessionUpdate === "tool_call") {
+      // Tool call - trace immediately
+      const toolCallId = update?.toolCallId as string | undefined;
+      const kind = update?.kind as string | undefined;
+      const title = update?.title as string | undefined;
+      const rawInput = update?.rawInput as Record<string, unknown> | undefined;
+
+      let toolTrace = createTraceRecord(sessionId, "tool_call", { provider });
+      toolTrace = withTool(toolTrace, {
+        name: kind ?? title ?? "unknown",
+        toolCallId,
+        status: "running",
+        input: rawInput,
+      });
+      recordTrace(cwd, toolTrace);
+    } else if (sessionUpdate === "tool_call_update") {
+      // Tool result - trace immediately
+      const toolCallId = update?.toolCallId as string | undefined;
+      const kind = update?.kind as string | undefined;
+      const title = update?.title as string | undefined;
+      const rawOutput = update?.rawOutput as string | undefined;
+      const status = update?.status as string | undefined;
+
+      let toolResultTrace = createTraceRecord(sessionId, "tool_result", { provider });
+      toolResultTrace = withTool(toolResultTrace, {
+        name: kind ?? title ?? "unknown",
+        toolCallId,
+        status: status ?? "completed",
+        output: rawOutput,
+      });
+      recordTrace(cwd, toolResultTrace);
     }
 
     const controller = this.sseControllers.get(sessionId);

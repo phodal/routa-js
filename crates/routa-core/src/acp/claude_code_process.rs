@@ -294,6 +294,7 @@ impl ClaudeCodeProcess {
                                     turn: None,
                                     role: Some("assistant".to_string()),
                                     content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                                    full_content: Some(agent_msg_buffer.clone()),
                                 });
                                 let writer = TraceWriter::new(&cwd_clone);
                                 let _ = writer.append_safe(&record).await;
@@ -326,6 +327,7 @@ impl ClaudeCodeProcess {
                         turn: None,
                         role: Some("assistant".to_string()),
                         content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                        full_content: Some(agent_msg_buffer.clone()),
                     });
                     let writer = TraceWriter::new(&cwd_clone);
                     let _ = writer.append_safe(&record).await;

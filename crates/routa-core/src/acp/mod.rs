@@ -269,6 +269,7 @@ impl AcpManager {
             turn: None,
             role: Some("user".to_string()),
             content_preview: Some(truncate_content(text, 500)),
+            full_content: None,
         });
 
         managed.trace_writer.append_safe(&trace).await;

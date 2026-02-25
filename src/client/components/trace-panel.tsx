@@ -461,9 +461,9 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                           Role: {selectedTrace.conversation.role}
                         </p>
                       )}
-                      {selectedTrace.conversation.contentPreview && (
+                      {(selectedTrace.conversation.fullContent || selectedTrace.conversation.contentPreview) && (
                         <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                          {selectedTrace.conversation.contentPreview}
+                          {selectedTrace.conversation.fullContent || selectedTrace.conversation.contentPreview}
                         </p>
                       )}
                     </div>

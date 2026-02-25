@@ -184,6 +184,10 @@ pub struct TraceConversation {
     /// Message content (truncated for storage)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_preview: Option<String>,
+
+    /// Full content (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_content: Option<String>,
 }
 
 /// VCS (Git) context for the trace.

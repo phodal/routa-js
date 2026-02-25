@@ -20,7 +20,7 @@ use tokio::process::{Child, ChildStdin};
 use tokio::sync::{broadcast, Mutex, oneshot};
 
 use crate::trace::{
-    TraceRecord, TraceWriter, TraceEventType, Contributor, TraceConversation,
+    TraceRecord, TraceWriter, TraceEventType, Contributor, TraceConversation, TraceTool,
 };
 
 /// Callback type for session/update notifications from the agent.
@@ -146,6 +146,8 @@ impl AcpProcess {
             let mut lines = reader.lines();
             // Buffer for accumulating agent message chunks
             let mut agent_msg_buffer = String::new();
+            // Buffer for accumulating agent thought chunks
+            let mut agent_thought_buffer = String::new();
 
             while let Ok(Some(line)) = lines.next_line().await {
                 let line = line.trim().to_string();
@@ -229,20 +231,68 @@ impl AcpProcess {
                         }
                     }
 
-                    // ── Trace: agent_message - accumulate chunks ────────────────
+                    // ── Trace: various event types ─────────────────────────────
                     if let Some(params) = msg.get("params") {
                         if let Some(update) = params.get("update") {
                             let session_update = update.get("sessionUpdate")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("");
-                            if session_update == "agent_message_chunk" || session_update == "agent_message" {
-                                let text = update.get("content")
-                                    .and_then(|c| c.get("text"))
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("");
-                                agent_msg_buffer.push_str(text);
-                                // Trace when buffer reaches 100+ chars (captures meaningful segments)
-                                if agent_msg_buffer.len() >= 100 {
+
+                            match session_update {
+                                "agent_thought_chunk" => {
+                                    // Accumulate thought chunks
+                                    let text = update.get("content")
+                                        .and_then(|c| c.get("text"))
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("");
+                                    agent_thought_buffer.push_str(text);
+                                    // Trace when buffer reaches 100+ chars
+                                    if agent_thought_buffer.len() >= 100 {
+                                        let record = TraceRecord::new(
+                                            &our_sid,
+                                            TraceEventType::AgentThought,
+                                            Contributor::new(&provider_clone, None),
+                                        ).with_conversation(TraceConversation {
+                                            turn: None,
+                                            role: Some("assistant".to_string()),
+                                            content_preview: Some(agent_thought_buffer[..agent_thought_buffer.len().min(200)].to_string()),
+                                            full_content: Some(agent_thought_buffer.clone()),
+                                        });
+                                        let writer = TraceWriter::new(&cwd_clone);
+                                        let _ = writer.append_safe(&record).await;
+                                        agent_thought_buffer.clear();
+                                    }
+                                }
+                                "agent_message_chunk" => {
+                                    // Accumulate message chunks
+                                    let text = update.get("content")
+                                        .and_then(|c| c.get("text"))
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("");
+                                    agent_msg_buffer.push_str(text);
+                                    // Trace when buffer reaches 100+ chars
+                                    if agent_msg_buffer.len() >= 100 {
+                                        let record = TraceRecord::new(
+                                            &our_sid,
+                                            TraceEventType::AgentMessage,
+                                            Contributor::new(&provider_clone, None),
+                                        ).with_conversation(TraceConversation {
+                                            turn: None,
+                                            role: Some("assistant".to_string()),
+                                            content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                                            full_content: Some(agent_msg_buffer.clone()),
+                                        });
+                                        let writer = TraceWriter::new(&cwd_clone);
+                                        let _ = writer.append_safe(&record).await;
+                                        agent_msg_buffer.clear();
+                                    }
+                                }
+                                "agent_message" => {
+                                    // Full message - trace immediately
+                                    let text = update.get("content")
+                                        .and_then(|c| c.get("text"))
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("");
                                     let record = TraceRecord::new(
                                         &our_sid,
                                         TraceEventType::AgentMessage,
@@ -250,12 +300,67 @@ impl AcpProcess {
                                     ).with_conversation(TraceConversation {
                                         turn: None,
                                         role: Some("assistant".to_string()),
-                                        content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                                        content_preview: Some(text[..text.len().min(200)].to_string()),
+                                        full_content: Some(text.to_string()),
                                     });
                                     let writer = TraceWriter::new(&cwd_clone);
                                     let _ = writer.append_safe(&record).await;
-                                    agent_msg_buffer.clear();
                                 }
+                                "tool_call" => {
+                                    // Tool call - trace immediately
+                                    let tool_call_id = update.get("toolCallId")
+                                        .and_then(|v| v.as_str());
+                                    let kind = update.get("kind")
+                                        .and_then(|v| v.as_str())
+                                        .or_else(|| update.get("title").and_then(|v| v.as_str()))
+                                        .unwrap_or("unknown");
+                                    let raw_input = update.get("rawInput").cloned();
+
+                                    let record = TraceRecord::new(
+                                        &our_sid,
+                                        TraceEventType::ToolCall,
+                                        Contributor::new(&provider_clone, None),
+                                    ).with_tool(TraceTool {
+                                        name: kind.to_string(),
+                                        tool_call_id: tool_call_id.map(|s| s.to_string()),
+                                        status: Some("running".to_string()),
+                                        input: raw_input,
+                                        output: None,
+                                    });
+                                    let writer = TraceWriter::new(&cwd_clone);
+                                    let _ = writer.append_safe(&record).await;
+                                }
+                                "tool_call_update" => {
+                                    // Tool result - trace immediately
+                                    let tool_call_id = update.get("toolCallId")
+                                        .and_then(|v| v.as_str());
+                                    let kind = update.get("kind")
+                                        .and_then(|v| v.as_str())
+                                        .or_else(|| update.get("title").and_then(|v| v.as_str()))
+                                        .unwrap_or("unknown");
+                                    let raw_output = update.get("rawOutput")
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| serde_json::Value::String(s.to_string()))
+                                        .or_else(|| update.get("rawOutput").cloned());
+                                    let status = update.get("status")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("completed");
+
+                                    let record = TraceRecord::new(
+                                        &our_sid,
+                                        TraceEventType::ToolResult,
+                                        Contributor::new(&provider_clone, None),
+                                    ).with_tool(TraceTool {
+                                        name: kind.to_string(),
+                                        tool_call_id: tool_call_id.map(|s| s.to_string()),
+                                        status: Some(status.to_string()),
+                                        input: None,
+                                        output: raw_output,
+                                    });
+                                    let writer = TraceWriter::new(&cwd_clone);
+                                    let _ = writer.append_safe(&record).await;
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -280,6 +385,23 @@ impl AcpProcess {
                     turn: None,
                     role: Some("assistant".to_string()),
                     content_preview: Some(agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string()),
+                    full_content: Some(agent_msg_buffer.clone()),
+                });
+                let writer = TraceWriter::new(&cwd_clone);
+                let _ = writer.append_safe(&record).await;
+            }
+
+            // Flush any remaining buffered agent thought content
+            if !agent_thought_buffer.is_empty() {
+                let record = TraceRecord::new(
+                    &our_sid,
+                    TraceEventType::AgentThought,
+                    Contributor::new(&provider_clone, None),
+                ).with_conversation(TraceConversation {
+                    turn: None,
+                    role: Some("assistant".to_string()),
+                    content_preview: Some(agent_thought_buffer[..agent_thought_buffer.len().min(200)].to_string()),
+                    full_content: Some(agent_thought_buffer.clone()),
                 });
                 let writer = TraceWriter::new(&cwd_clone);
                 let _ = writer.append_safe(&record).await;
