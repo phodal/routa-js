@@ -225,6 +225,21 @@ class HttpSessionStore {
     const history = this.messageHistory.get(sessionId) ?? [];
     history.push(notification);
     this.messageHistory.set(sessionId, history);
+
+    // ── Trace: user_message ───────────────────────────────────────────────
+    const sessionRecord = this.sessions.get(sessionId);
+    const cwd = sessionRecord?.cwd ?? process.cwd();
+    const provider = sessionRecord?.provider ?? "unknown";
+
+    const userTrace = withConversation(
+      createTraceRecord(sessionId, "user_message", { provider }),
+      {
+        role: "user",
+        contentPreview: prompt.slice(0, 200),
+        fullContent: prompt,
+      }
+    );
+    recordTrace(cwd, userTrace);
   }
 
   /**

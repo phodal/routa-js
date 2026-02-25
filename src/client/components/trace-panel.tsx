@@ -24,8 +24,8 @@ export function TracePanel({ sessionId }: TracePanelProps) {
   const [traces, setTraces] = useState<TraceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTrace, setSelectedTrace] = useState<TraceRecord | null>(null);
   const [filter, setFilter] = useState<string>("all");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<{
     totalDays: number;
     totalFiles: number;
@@ -111,6 +111,26 @@ export function TracePanel({ sessionId }: TracePanelProps) {
     return trace.eventType === filter;
   });
 
+  const toggleExpand = useCallback((traceId: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(traceId)) {
+        next.delete(traceId);
+      } else {
+        next.add(traceId);
+      }
+      return next;
+    });
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setExpandedIds(new Set(filteredTraces.map(t => t.id)));
+  }, [filteredTraces]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedIds(new Set());
+  }, []);
+
   const eventTypeColors: Record<string, string> = {
     session_start: "text-green-600 dark:text-green-400",
     session_end: "text-red-600 dark:text-red-400",
@@ -124,11 +144,37 @@ export function TracePanel({ sessionId }: TracePanelProps) {
   const eventTypeLabels: Record<string, string> = {
     session_start: "Session Start",
     session_end: "Session End",
-    user_message: "User Message",
-    agent_message: "Agent Message",
-    agent_thought: "Agent Thought",
-    tool_call: "Tool Call",
+    user_message: "User",
+    agent_message: "Agent",
+    agent_thought: "Thought",
+    tool_call: "Tool",
     tool_result: "Tool Result",
+  };
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const getTraceContent = (trace: TraceRecord) => {
+    // Conversation content
+    if (trace.conversation) {
+      return trace.conversation.fullContent || trace.conversation.contentPreview || "";
+    }
+    // Tool content
+    if (trace.tool) {
+      if (trace.eventType === "tool_call") {
+        return `Calling: ${trace.tool.name}`;
+      }
+      if (trace.eventType === "tool_result") {
+        const output = trace.tool.output;
+        if (typeof output === "string") {
+          return output.slice(0, 200);
+        }
+        return JSON.stringify(output)?.slice(0, 200) || "";
+      }
+    }
+    return "";
   };
 
   return (
@@ -238,6 +284,19 @@ export function TracePanel({ sessionId }: TracePanelProps) {
         >
           Thoughts
         </button>
+        <div className="flex-1" />
+        <button
+          onClick={expandAll}
+          className="px-2 py-1 text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
+        >
+          Expand All
+        </button>
+        <button
+          onClick={collapseAll}
+          className="px-2 py-1 text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
+        >
+          Collapse All
+        </button>
       </div>
 
       {/* Error state */}
@@ -271,308 +330,176 @@ export function TracePanel({ sessionId }: TracePanelProps) {
         </div>
       )}
 
-      {/* Trace list */}
+      {/* Trace table */}
       <div className="flex-1 overflow-y-auto">
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {filteredTraces.map((trace) => (
-            <div
-              key={trace.id}
-              onClick={() => setSelectedTrace(trace)}
-              className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors ${
-                selectedTrace?.id === trace.id ? "bg-blue-50 dark:bg-blue-900/10" : ""
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                {/* Event type badge */}
-                <div
-                  className={`shrink-0 mt-0.5 w-2 h-2 rounded-full ${
-                    eventTypeColors[trace.eventType] || "bg-gray-400"
-                  }`}
-                />
+          {filteredTraces.map((trace) => {
+            const isExpanded = expandedIds.has(trace.id);
+            const content = getTraceContent(trace);
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+            return (
+              <div
+                key={trace.id}
+                className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+              >
+                <div
+                  onClick={() => toggleExpand(trace.id)}
+                  className="px-4 py-2 cursor-pointer flex items-start gap-3"
+                >
+                  {/* Timestamp */}
+                  <div className="shrink-0 w-16 text-[10px] text-gray-400 dark:text-gray-500 font-mono text-right pt-0.5">
+                    {formatTime(trace.timestamp)}
+                  </div>
+
+                  {/* Event type badge */}
+                  <div className="shrink-0 pt-0.5">
                     <span
-                      className={`text-[11px] font-medium uppercase ${
+                      className={`text-[10px] font-medium uppercase ${
                         eventTypeColors[trace.eventType] || "text-gray-500"
                       }`}
                     >
                       {eventTypeLabels[trace.eventType] || trace.eventType}
                     </span>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                      {new Date(trace.timestamp).toLocaleTimeString()}
-                    </span>
                   </div>
 
-                  {/* Conversation preview */}
-                  {trace.conversation?.contentPreview && (
-                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                      {trace.conversation.contentPreview}
-                    </p>
-                  )}
-
-                  {/* Tool info */}
-                  {trace.tool && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <code className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-700 dark:text-gray-300">
-                        {trace.tool.name}
-                      </code>
-                      {trace.tool.status && (
-                        <span
-                          className={`text-[10px] ${
-                            trace.tool.status === "completed"
-                              ? "text-green-600 dark:text-green-400"
-                              : trace.tool.status === "failed"
-                                ? "text-red-600 dark:text-red-400"
-                                : "text-yellow-600 dark:text-yellow-400"
-                          }`}
-                        >
-                          {trace.tool.status}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Files affected */}
-                  {trace.files && trace.files.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <svg
-                        className="w-3 h-3 text-gray-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        />
-                      </svg>
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                        {trace.files.map((f) => f.path).join(", ")}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Contributor info */}
-                  <div className="flex items-center gap-2 mt-1">
-                    {trace.contributor.provider && (
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                        {trace.contributor.provider}
-                      </span>
-                    )}
-                    {trace.contributor.model && (
-                      <>
-                        <span className="text-gray-300 dark:text-gray-700">•</span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                          {trace.contributor.model}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Trace detail modal */}
-      {selectedTrace && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          onClick={() => setSelectedTrace(null)}
-        >
-          <div
-            className="relative w-full max-w-2xl max-h-[80vh] bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`text-[11px] font-medium uppercase ${
-                    eventTypeColors[selectedTrace.eventType] || "text-gray-500"
-                  }`}
-                >
-                  {eventTypeLabels[selectedTrace.eventType] || selectedTrace.eventType}
-                </span>
-                <span className="text-[10px] text-gray-400">
-                  {selectedTrace.id.slice(0, 8)}
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedTrace(null)}
-                className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-4 overflow-y-auto max-h-[calc(80vh-60px)]">
-              <div className="space-y-4">
-                {/* Timestamp */}
-                <div>
-                  <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Timestamp
-                  </label>
-                  <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
-                    {new Date(selectedTrace.timestamp).toISOString()}
-                  </p>
-                </div>
-
-                {/* Session ID */}
-                <div>
-                  <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Session ID
-                  </label>
-                  <p className="text-xs text-gray-700 dark:text-gray-300 mt-1 font-mono">
-                    {selectedTrace.sessionId}
-                  </p>
-                </div>
-
-                {/* Contributor */}
-                {selectedTrace.contributor && (
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Contributor
-                    </label>
-                    <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
-                      {selectedTrace.contributor.provider}
-                      {selectedTrace.contributor.model && ` / ${selectedTrace.contributor.model}`}
-                    </p>
-                  </div>
-                )}
-
-                {/* Conversation */}
-                {selectedTrace.conversation && (
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Conversation
-                    </label>
-                    <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-900/50 rounded-md">
-                      {selectedTrace.conversation.role && (
-                        <p className="text-[10px] text-gray-400 mb-1">
-                          Role: {selectedTrace.conversation.role}
-                        </p>
-                      )}
-                      {(selectedTrace.conversation.fullContent || selectedTrace.conversation.contentPreview) && (
-                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                          {selectedTrace.conversation.fullContent || selectedTrace.conversation.contentPreview}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Tool */}
-                {selectedTrace.tool && (
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Tool Call
-                    </label>
-                    <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-900/50 rounded-md">
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {selectedTrace.tool.name}
+                  {/* Content preview (one line) */}
+                  <div className="flex-1 min-w-0">
+                    {trace.conversation && (
+                      <p className="text-xs text-gray-700 dark:text-gray-300 truncate">
+                        {trace.conversation.contentPreview || trace.conversation.fullContent || ""}
                       </p>
-                      {selectedTrace.tool.status && (
-                        <p className="text-[10px] text-gray-400 mt-1">
-                          Status: {selectedTrace.tool.status}
-                        </p>
-                      )}
-                      {selectedTrace.tool.input != null && (
-                        <details className="mt-2">
-                          <summary className="text-[10px] text-gray-400 cursor-pointer">
-                            Input
-                          </summary>
-                          <pre className="text-[10px] text-gray-700 dark:text-gray-300 mt-1 overflow-x-auto">
-                            {JSON.stringify(selectedTrace.tool.input, null, 2)}
-                          </pre>
-                        </details>
-                      )}
-                      {selectedTrace.tool.output != null && (
-                        <details className="mt-2">
-                          <summary className="text-[10px] text-gray-400 cursor-pointer">
-                            Output
-                          </summary>
-                          <pre className="text-[10px] text-gray-700 dark:text-gray-300 mt-1 overflow-x-auto">
-                            {typeof selectedTrace.tool.output === "string"
-                              ? selectedTrace.tool.output
-                              : JSON.stringify(selectedTrace.tool.output, null, 2)}
-                          </pre>
-                        </details>
-                      )}
-                    </div>
+                    )}
+                    {trace.tool && (
+                      <div className="flex items-center gap-2">
+                        <code className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-700 dark:text-gray-300">
+                          {trace.tool.name}
+                        </code>
+                        {trace.tool.status && (
+                          <span
+                            className={`text-[10px] ${
+                              trace.tool.status === "completed"
+                                ? "text-green-600 dark:text-green-400"
+                                : trace.tool.status === "failed"
+                                  ? "text-red-600 dark:text-red-400"
+                                  : "text-yellow-600 dark:text-yellow-400"
+                            }`}
+                          >
+                            {trace.tool.status}
+                          </span>
+                        )}
+                        {trace.tool.output && typeof trace.tool.output === "string" ? (
+                          <span className="text-[10px] text-gray-400 truncate max-w-xs">
+                            {trace.tool.output.slice(0, 100)}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {/* Files */}
-                {selectedTrace.files && selectedTrace.files.length > 0 && (
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Files Affected
-                    </label>
-                    <div className="mt-1 space-y-1">
-                      {selectedTrace.files.map((file, idx) => (
-                        <div
-                          key={idx}
-                          className="p-2 bg-gray-50 dark:bg-gray-900/50 rounded-md"
-                        >
-                          <p className="text-xs text-gray-700 dark:text-gray-300 font-mono">
-                            {file.path}
+                  {/* Expand/collapse icon */}
+                  <div className="shrink-0 pt-0.5">
+                    <svg
+                      className={`w-4 h-4 text-gray-400 transition-transform ${
+                        isExpanded ? "rotate-90" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Expanded content */}
+                {isExpanded && (
+                  <div
+                    className="px-4 pb-3 pl-20"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-md border border-gray-100 dark:border-gray-800">
+                      {/* Full conversation content */}
+                      {trace.conversation && (
+                        <div className="mb-3">
+                          <div className="text-[10px] text-gray-400 mb-1">Content</div>
+                          <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+                            {trace.conversation.fullContent || trace.conversation.contentPreview || ""}
                           </p>
-                          {file.ranges && file.ranges.length > 0 && (
-                            <p className="text-[10px] text-gray-400 mt-1">
-                              Lines: {file.ranges.map((r) => `${r.startLine}-${r.endLine}`).join(", ")}
-                            </p>
+                        </div>
+                      )}
+
+                      {/* Tool details */}
+                      {trace.tool && (
+                        <div className="mb-3">
+                          <div className="text-[10px] text-gray-400 mb-1">Tool: {trace.tool.name}</div>
+                          {trace.tool.status && (
+                            <div className="text-[10px] text-gray-400 mb-1">
+                              Status: {trace.tool.status}
+                            </div>
                           )}
-                          {file.operation && (
-                            <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
-                              {file.operation}
-                            </span>
+                          {trace.tool.input != null && (
+                            <details className="mt-2">
+                              <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-300">
+                                Input
+                              </summary>
+                              <pre className="text-[10px] text-gray-700 dark:text-gray-300 mt-1 overflow-x-auto whitespace-pre-wrap break-words">
+                                {JSON.stringify(trace.tool.input, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                          {trace.tool.output != null && (
+                            <details className="mt-2">
+                              <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-300">
+                                Output
+                              </summary>
+                              <pre className="text-[10px] text-gray-700 dark:text-gray-300 mt-1 overflow-x-auto whitespace-pre-wrap break-words">
+                                {typeof trace.tool.output === "string"
+                                  ? trace.tool.output
+                                  : JSON.stringify(trace.tool.output, null, 2)}
+                              </pre>
+                            </details>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* VCS */}
-                {selectedTrace.vcs && (
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Version Control
-                    </label>
-                    <div className="mt-1 text-xs text-gray-700 dark:text-gray-300">
-                      {(selectedTrace.vcs.revision || selectedTrace.vcs.gitSha) && (
-                        <p>SHA: {(selectedTrace.vcs.revision || selectedTrace.vcs.gitSha)?.slice(0, 8)}</p>
                       )}
-                      {selectedTrace.vcs.branch && <p>Branch: {selectedTrace.vcs.branch}</p>}
-                    </div>
-                  </div>
-                )}
 
-                {/* Metadata */}
-                {selectedTrace.metadata && Object.keys(selectedTrace.metadata).length > 0 && (
-                  <div>
-                    <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Metadata
-                    </label>
-                    <pre className="mt-1 p-2 bg-gray-50 dark:bg-gray-900/50 rounded-md text-[10px] text-gray-700 dark:text-gray-300 overflow-x-auto">
-                      {JSON.stringify(selectedTrace.metadata, null, 2)}
-                    </pre>
+                      {/* Files affected */}
+                      {trace.files && trace.files.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-[10px] text-gray-400 mb-1">Files Affected</div>
+                          {trace.files.map((file, idx) => (
+                            <div key={idx} className="text-xs">
+                              <span className="font-mono text-gray-700 dark:text-gray-300">
+                                {file.path}
+                              </span>
+                              {file.ranges && file.ranges.length > 0 && (
+                                <span className="text-[10px] text-gray-400 ml-2">
+                                  (lines: {file.ranges.map((r) => `${r.startLine}-${r.endLine}`).join(", ")})
+                                </span>
+                              )}
+                              {file.operation && (
+                                <span className="inline-block ml-2 px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                                  {file.operation}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Metadata */}
+                      <div className="text-[10px] text-gray-400">
+                        ID: {trace.id.slice(0, 8)} • Provider: {trace.contributor.provider}
+                        {trace.contributor.model && ` • Model: ${trace.contributor.model}`}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 }

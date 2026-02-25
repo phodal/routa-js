@@ -117,8 +117,8 @@ export class TraceReader {
       }
     }
 
-    // Sort by timestamp (newest first) and apply pagination
-    traces.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    // Sort by timestamp (oldest first for chronological reading) and apply pagination
+    traces.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     const offset = query.offset ?? 0;
     const limit = query.limit ?? traces.length;
