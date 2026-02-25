@@ -437,7 +437,7 @@ interface ProviderItem {
   name: string;
   description: string;
   command: string;
-  status?: "available" | "unavailable";
+  status?: "available" | "unavailable" | "checking";
   /** Source of the provider: "static" for builtin, "registry" for ACP registry */
   source?: "static" | "registry";
 }
