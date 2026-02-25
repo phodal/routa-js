@@ -96,7 +96,6 @@ export default function HomePage() {
   // ── Mobile sidebar toggle ──────────────────────────────────────────
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
-  const [showProviderDropdown, setShowProviderDropdown] = useState(false);
   const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -146,18 +145,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // Close provider dropdown when clicking outside
-  useEffect(() => {
-    if (!showProviderDropdown) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-provider-dropdown]')) {
-        setShowProviderDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showProviderDropdown]);
 
   // Load repo skills when repo selection changes
   useEffect(() => {
@@ -830,14 +817,17 @@ export default function HomePage() {
           loading={workspacesHook.loading}
         />
 
-        {/* Codebase picker */}
+        {/* Codebase picker (top bar, only when multiple codebases) */}
         {codebases.length > 1 && (
           <>
             <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
             <CodebasePicker
               codebases={codebases}
               selectedRepoPath={repoSelection?.path ?? null}
-              onSelect={handleCodebaseSelect}
+              onSelect={(path) => {
+                const cb = codebases.find((c) => c.repoPath === path);
+                setRepoSelection({ path, branch: cb?.branch ?? "", name: cb?.label ?? path.split("/").pop() ?? "" });
+              }}
             />
           </>
         )}
@@ -958,109 +948,38 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Provider summary + New Session */}
-          <div className="p-3 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Provider
-                </label>
-                {acp.providers.length > 0 && (
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                    {acp.providers.filter((p) => p.status === "available").length}/{acp.providers.length}
-                    {acp.providers.some((p) => p.status === "checking") && (
-                      <span className="ml-1 inline-block w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-                    )}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Provider selector */}
-            {acp.selectedProvider && (
-              <div className="relative mb-2" data-provider-dropdown>
-                <button
-                  type="button"
-                  onClick={() => setShowProviderDropdown(!showProviderDropdown)}
-                  className="w-full px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                      acp.providers.find((p) => p.id === acp.selectedProvider)?.status === "available"
-                        ? "bg-green-500" 
-                        : acp.providers.find((p) => p.id === acp.selectedProvider)?.status === "checking"
-                        ? "bg-yellow-500 animate-pulse"
-                        : "bg-gray-400"
-                    }`} />
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1 text-left">
-                      {acp.providers.find((p) => p.id === acp.selectedProvider)?.name ?? acp.selectedProvider}
-                    </span>
-                    <svg className={`w-3 h-3 text-gray-400 transition-transform ${showProviderDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Provider dropdown */}
-                {showProviderDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-50 max-h-64 overflow-y-auto">
-                    {acp.providers.filter((p) => p.status === "available").map((provider) => (
-                      <button
-                        key={provider.id}
-                        type="button"
-                        onClick={() => {
-                          acp.setProvider(provider.id);
-                          setShowProviderDropdown(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 flex items-center gap-2 text-xs transition-colors ${
-                          provider.id === acp.selectedProvider
-                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300"
-                        }`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                        <span className="font-medium truncate flex-1">{provider.name}</span>
-                      </button>
-                    ))}
-                    {acp.providers.some((p) => p.status === "checking") && (
-                      <div className="px-3 py-2 text-[10px] text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/10 border-b border-yellow-100 dark:border-yellow-900/20">
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-block w-2 h-2 border border-yellow-600 dark:border-yellow-400 border-t-transparent rounded-full animate-spin" />
-                          Checking provider availability...
-                        </div>
-                      </div>
-                    )}
-                    {acp.providers.filter((p) => p.status === "available").length === 0 && !acp.providers.some((p) => p.status === "checking") && (
-                      <div className="px-3 py-3 text-xs text-gray-400 text-center">
-                        No providers available
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={() => handleCreateSession(acp.selectedProvider)}
-              disabled={acp.providers.length === 0 || !acp.selectedProvider}
-              className="w-full px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              + New Session
-            </button>
-
-            {/* Codebase picker */}
+          {/* Workspace section */}
+          <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+            <div className="px-1 mb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Workspace</div>
+            <WorkspaceSwitcher
+              workspaces={workspacesHook.workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              onSelect={handleWorkspaceSelect}
+              onCreate={handleWorkspaceCreate}
+              loading={workspacesHook.loading}
+            />
             {codebases.length > 0 && (
-              <div className="mt-2">
+              <div className="mt-1">
+                <div className="px-1 mb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Repository</div>
                 <CodebasePicker
                   codebases={codebases}
                   selectedRepoPath={repoSelection?.path ?? null}
-                  onSelect={(path) => {
-                    const cb = codebases.find((c) => c.repoPath === path);
-                    setRepoSelection({ path, branch: cb?.branch ?? "", name: cb?.label ?? path.split("/").pop() ?? "" });
-                  }}
+                  onSelect={handleCodebaseSelect}
                 />
               </div>
             )}
+          </div>
+
+          {/* Sessions header + New Session */}
+          <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
+            <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sessions</span>
+            <button
+              onClick={() => handleCreateSession(acp.selectedProvider)}
+              disabled={acp.providers.length === 0 || !acp.selectedProvider}
+              className="px-2 py-0.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              + New
+            </button>
           </div>
 
           {/* Sessions + Skills */}
