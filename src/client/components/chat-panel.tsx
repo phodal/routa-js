@@ -19,6 +19,7 @@ import {type TaskInfo, TaskProgressBar, type FileChangesSummary} from "./task-pr
 import {MessageBubble} from "@/client/components/message-bubble";
 import {TracePanel} from "@/client/components/trace-panel";
 import {type ChecklistItem, parseChecklist} from "../utils/checklist-parser";
+import type {WorkspaceData, CodebaseData} from "../hooks/use-workspaces";
 import {
   type FileChangesState,
   createFileChangesState,
@@ -78,15 +79,18 @@ interface ChatPanelProps {
   onEnsureSession: (cwd?: string, provider?: string, modeId?: string) => Promise<string | null>;
   onSelectSession: (sessionId: string) => Promise<void>;
   skills?: SkillSummary[];
-  /** Skills discovered from the selected repo */
   repoSkills?: SkillSummary[];
   onLoadSkill?: (name: string) => Promise<string | null>;
   repoSelection: RepoSelection | null;
   onRepoChange: (selection: RepoSelection | null) => void;
-  /** Called when @@@task blocks are detected in Routa agent responses */
   onTasksDetected?: (tasks: ParsedTask[]) => void;
-  /** Current agent role – ROUTA mode hides provider mode chips */
   agentRole?: string;
+  onAgentRoleChange?: (role: string) => void;
+  onCreateSession?: (provider: string) => void;
+  workspaces?: WorkspaceData[];
+  activeWorkspaceId?: string | null;
+  onWorkspaceChange?: (id: string) => void;
+  codebases?: CodebaseData[];
 }
 
 // ─── Main Component ────────────────────────────────────────────────────
@@ -99,10 +103,16 @@ export function ChatPanel({
   skills = [],
   repoSkills = [],
   agentRole,
+  onAgentRoleChange,
+  onCreateSession,
   onLoadSkill,
   repoSelection,
   onRepoChange,
   onTasksDetected,
+  workspaces = [],
+  activeWorkspaceId,
+  onWorkspaceChange,
+  codebases = [],
 }: ChatPanelProps) {
   const { connected, loading, error, authError, updates, prompt, clearAuthError } = acp;
   const [sessions, setSessions] = useState<Array<{
@@ -1142,29 +1152,107 @@ export function ChatPanel({
           <div className="flex-1 overflow-y-auto min-h-0">
             <div className="max-w-3xl mx-auto px-5 py-5 space-y-2">
               {visibleMessages.length === 0 && (
-                <div className="text-center py-20">
-                  <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-blue-500/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <div className="flex flex-col items-center justify-center py-16 px-4">
+                  {/* Logo / title */}
+                  <div className="w-12 h-12 mb-5 rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                   </div>
-                  <div className="text-sm text-gray-400 dark:text-gray-500 mb-6">
-                    {connected
-                      ? activeSessionId
-                        ? "Send a message to start."
-                        : "Select or create a session from the sidebar."
-                      : "Connect via the top bar to get started."}
-                  </div>
+                  <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">Start a session</h2>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mb-8">Configure your workspace and agent, then send a message.</p>
 
-                  {/* ── Repo Picker in center when no messages ── */}
-                  {connected && (
-                    <div className="inline-block text-left">
-                      <RepoPicker
-                        value={repoSelection}
-                        onChange={handleRepoChange}
-                      />
+                  <div className="w-full max-w-sm space-y-3">
+                    {/* Workspace */}
+                    {workspaces.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Workspace</label>
+                        <select
+                          value={activeWorkspaceId ?? ""}
+                          onChange={(e) => onWorkspaceChange?.(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        >
+                          {workspaces.map((ws) => (
+                            <option key={ws.id} value={ws.id}>{ws.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Repository */}
+                    {codebases.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Repository</label>
+                        <select
+                          value={repoSelection?.path ?? ""}
+                          onChange={(e) => {
+                            const cb = codebases.find((c) => c.repoPath === e.target.value);
+                            if (cb) onRepoChange({ path: cb.repoPath, branch: cb.branch ?? "", name: cb.label ?? cb.repoPath.split("/").pop() ?? "" });
+                          }}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        >
+                          {codebases.map((cb) => (
+                            <option key={cb.id} value={cb.repoPath}>{cb.label ?? cb.repoPath.split("/").pop()}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Agent type */}
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Agent</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(["CRAFTER", "ROUTA", "GATE", "DEVELOPER"] as const).map((role) => (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => onAgentRoleChange?.(role)}
+                            className={`py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                              agentRole === role
+                                ? "bg-indigo-600 border-indigo-600 text-white"
+                                : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                            }`}
+                          >
+                            {role}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
+
+                    {/* Provider */}
+                    {acp.providers.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Provider</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {acp.providers.filter((p) => p.status === "available").map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => acp.setProvider(p.id)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                                acp.selectedProvider === p.id
+                                  ? "bg-green-600 border-green-600 text-white"
+                                  : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-green-400 hover:text-green-600 dark:hover:text-green-400"
+                              }`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                              {p.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Session button */}
+                    <button
+                      type="button"
+                      onClick={() => onCreateSession?.(acp.selectedProvider ?? "")}
+                      disabled={!acp.selectedProvider || acp.providers.length === 0}
+                      className="w-full py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-2"
+                    >
+                      + New Session
+                    </button>
+                  </div>
                 </div>
               )}
               {visibleMessages.map((msg) => (

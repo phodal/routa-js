@@ -1041,6 +1041,12 @@ export default function HomePage() {
             onRepoChange={setRepoSelection}
             onTasksDetected={handleTasksDetected}
             agentRole={selectedAgent}
+            onAgentRoleChange={(role) => handleAgentChange(role as AgentRole)}
+            onCreateSession={handleCreateSession}
+            workspaces={workspacesHook.workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onWorkspaceChange={handleWorkspaceSelect}
+            codebases={codebases}
           />
         </main>
 
