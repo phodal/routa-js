@@ -504,32 +504,29 @@ export default function HomePage() {
     setRoutaTasks(tasks);
 
     // Auto-save tasks to Notes system for collaborative editing
+    const sessionId = activeSessionId ?? "";
     for (const task of tasks) {
+      const taskContent = [
+        task.objective && `## Objective\n${task.objective}`,
+        task.scope && `## Scope\n${task.scope}`,
+        task.definitionOfDone && `## Definition of Done\n${task.definitionOfDone}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       try {
         await notesHook.createNote({
           noteId: `task-${task.id}`,
           title: task.title,
-          content: [
-            task.objective && `## Objective\n${task.objective}`,
-            task.scope && `## Scope\n${task.scope}`,
-            task.definitionOfDone && `## Definition of Done\n${task.definitionOfDone}`,
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
+          content: taskContent,
           type: "task",
-          metadata: { taskStatus: "PENDING" },
+          metadata: { taskStatus: "PENDING", custom: { sessionId } },
         });
       } catch {
         // Note may already exist, try updating
         await notesHook.updateNote(`task-${task.id}`, {
           title: task.title,
-          content: [
-            task.objective && `## Objective\n${task.objective}`,
-            task.scope && `## Scope\n${task.scope}`,
-            task.definitionOfDone && `## Definition of Done\n${task.definitionOfDone}`,
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
+          content: taskContent,
+          metadata: { custom: { sessionId } },
         });
       }
     }
@@ -538,7 +535,7 @@ export default function HomePage() {
     if (tasks.length > 0) {
       setTaskPanelMode("collab");
     }
-  }, [notesHook]);
+  }, [notesHook, activeSessionId]);
 
   /**
    * Call a Routa MCP tool via the /api/mcp endpoint.
@@ -770,7 +767,13 @@ export default function HomePage() {
     setConcurrency(n);
   }, []);
 
-  const hasCollabNotes = notesHook.notes.some((n) => n.metadata.type === "task" || n.metadata.type === "spec");
+  // Filter notes for the active session (notes without a sessionId are shown for all sessions for backwards compat)
+  const sessionNotes = notesHook.notes.filter((n) => {
+    const noteSessionId = n.metadata.custom?.sessionId;
+    if (!noteSessionId) return true;
+    return noteSessionId === (activeSessionId ?? "");
+  });
+  const hasCollabNotes = sessionNotes.some((n) => n.metadata.type === "task" || n.metadata.type === "spec");
   const showTaskPanel = true; // Always show right sidebar
 
   return (
@@ -1050,7 +1053,7 @@ export default function HomePage() {
             {/* When collaborative notes exist, show Collab Edit directly; otherwise show TaskPanel */}
             {hasCollabNotes ? (
               <CollaborativeTaskEditor
-                notes={notesHook.notes}
+                notes={sessionNotes}
                 connected={notesHook.connected}
                 onUpdateNote={notesHook.updateNote}
                 onDeleteNote={notesHook.deleteNote}

@@ -133,11 +133,38 @@ function formatToolInputInline(rawInput?: Record<string, unknown>, maxLen = 60):
 }
 
 /**
+ * Normalize tool kind from any provider (Claude Code, OpenCode, etc.)
+ * to a canonical kind used for icon/styling.
+ */
+function normalizeToolKind(kind?: string): string | undefined {
+    if (!kind) return undefined;
+    const k = kind.toLowerCase();
+    // Shell / command execution
+    if (k === "shell" || k === "bash" || k.includes("run_command") || k.includes("execute_command") || k.includes("run_terminal")) return "shell";
+    // File read
+    if (k === "read-file" || k === "read_file" || k === "ls" || k === "list_directory") return "read-file";
+    // File write
+    if (k === "write-file" || k === "write_file" || k === "create_file") return "write-file";
+    // File edit
+    if (k === "edit-file" || k === "edit_file" || k === "patch_file" || k === "str_replace") return "edit-file";
+    // Glob / file search
+    if (k === "glob" || k === "find_files" || k === "search_files" || k === "list_files") return "glob";
+    // Grep / code search
+    if (k === "grep" || k === "search_code" || k === "search_text" || k === "ripgrep") return "grep";
+    // Web
+    if (k === "web-search" || k === "web_search" || k === "search_web") return "web-search";
+    if (k === "web-fetch" || k === "web_fetch" || k === "fetch_url" || k === "http_get") return "web-fetch";
+    // Task / agent delegation
+    if (k === "task" || k.includes("delegate_task") || k.includes("spawn_agent")) return "task";
+    return kind;
+}
+
+/**
  * Get tool icon based on tool kind.
  * Returns an SVG path for different tool categories.
  */
 function getToolIcon(kind?: string, toolName?: string): React.ReactNode {
-    switch (kind) {
+    switch (normalizeToolKind(kind)) {
         // Shell/Bash - Terminal icon
         case "shell":
             return (
@@ -204,7 +231,7 @@ function getToolIcon(kind?: string, toolName?: string): React.ReactNode {
  * Get styling based on tool kind for visual distinction.
  */
 function getToolStyling(kind?: string): { bgClass: string; borderClass: string; iconColorClass: string } {
-    switch (kind) {
+    switch (normalizeToolKind(kind)) {
         case "shell":
             return {
                 bgClass: "bg-slate-50 dark:bg-slate-900/30",

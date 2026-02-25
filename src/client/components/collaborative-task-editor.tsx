@@ -130,6 +130,20 @@ export function CollaborativeTaskEditor({
             <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex-1">
               Spec
             </span>
+            {onDeleteNote && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteNote(specNote.id);
+                }}
+                title="Delete spec"
+                className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
             <svg
               className={`w-3.5 h-3.5 text-blue-400 transition-transform ${specExpanded ? "rotate-180" : ""}`}
               fill="none"
@@ -473,6 +487,20 @@ function TaskNoteCard({
               )}
           </div>
         </div>
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete task"
+            className="p-0.5 rounded text-gray-300 dark:text-gray-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
         <svg
           className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 mt-0.5 ${
             expanded ? "rotate-180" : ""
