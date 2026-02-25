@@ -48,6 +48,7 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(true);
 
   const handleSkillClick = useCallback(
     async (name: string) => {
@@ -69,50 +70,35 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
     <div>
       {/* Section header */}
       <div className="px-3 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          className="flex items-center gap-1.5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+        >
+          <svg className={`w-3 h-3 text-gray-400 transition-transform ${collapsed ? "" : "rotate-90"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
           <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
-          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            Skills
-          </span>
+          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Skills</span>
           {allDisplaySkills.length > 0 && (
             <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-full">
               {allDisplaySkills.length}
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowCatalogModal(true)}
-            className="text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
-            title="Browse skill catalog"
-          >
-            Catalog
-          </button>
-          <button
-            onClick={() => setShowCloneModal(true)}
-            className="text-[11px] text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 transition-colors"
-            title="Clone skills from GitHub"
-          >
-            Clone
-          </button>
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="text-[11px] text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-            title="Upload skill zip"
-          >
-            Upload
-          </button>
-          <button
-            onClick={reloadFromDisk}
-            disabled={loading}
-            className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 transition-colors"
-          >
-            {loading ? "..." : "Reload"}
-          </button>
-        </div>
+        </button>
+        {!collapsed && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowCatalogModal(true)} className="text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400 transition-colors" title="Browse skill catalog">Catalog</button>
+            <button onClick={() => setShowCloneModal(true)} className="text-[11px] text-green-600 hover:text-green-700 dark:text-green-400 transition-colors" title="Clone skills from GitHub">Clone</button>
+            <button onClick={() => setShowUploadModal(true)} className="text-[11px] text-blue-500 hover:text-blue-600 dark:text-blue-400 transition-colors" title="Upload skill zip">Upload</button>
+            <button onClick={reloadFromDisk} disabled={loading} className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 transition-colors">{loading ? "..." : "Reload"}</button>
+          </div>
+        )}
       </div>
+
+      {!collapsed && (
+        <>
 
       {error && (
         <div className="mx-3 mb-2 px-2 py-1.5 rounded-md bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[11px]">
@@ -222,6 +208,8 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
       {/* Upload Modal */}
       {showUploadModal && (
         <SkillUploadModal onClose={() => setShowUploadModal(false)} onUploaded={reloadFromDisk} />
+      )}
+        </>
       )}
     </div>
   );
