@@ -1,0 +1,96 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+
+export interface WorkspaceData {
+  id: string;
+  title: string;
+  status: "active" | "archived";
+  metadata: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CodebaseData {
+  id: string;
+  workspaceId: string;
+  repoPath: string;
+  branch?: string;
+  label?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UseWorkspacesReturn {
+  workspaces: WorkspaceData[];
+  loading: boolean;
+  fetchWorkspaces: () => Promise<void>;
+  createWorkspace: (title: string) => Promise<WorkspaceData | null>;
+  archiveWorkspace: (id: string) => Promise<void>;
+}
+
+export function useWorkspaces(): UseWorkspacesReturn {
+  const [workspaces, setWorkspaces] = useState<WorkspaceData[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchWorkspaces = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/workspaces?status=active");
+      if (!res.ok) return;
+      const data = await res.json();
+      setWorkspaces(data.workspaces ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const createWorkspace = useCallback(async (title: string): Promise<WorkspaceData | null> => {
+    const res = await fetch("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    await fetchWorkspaces();
+    return data.workspace ?? null;
+  }, [fetchWorkspaces]);
+
+  const archiveWorkspace = useCallback(async (id: string): Promise<void> => {
+    await fetch(`/api/workspaces/${id}/archive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+    await fetchWorkspaces();
+  }, [fetchWorkspaces]);
+
+  useEffect(() => {
+    fetchWorkspaces();
+  }, [fetchWorkspaces]);
+
+  return { workspaces, loading, fetchWorkspaces, createWorkspace, archiveWorkspace };
+}
+
+export function useCodebases(workspaceId: string): {
+  codebases: CodebaseData[];
+  fetchCodebases: () => Promise<void>;
+} {
+  const [codebases, setCodebases] = useState<CodebaseData[]>([]);
+
+  const fetchCodebases = useCallback(async () => {
+    if (!workspaceId) return;
+    const res = await fetch(`/api/workspaces/${workspaceId}/codebases`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setCodebases(data.codebases ?? []);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    fetchCodebases();
+  }, [fetchCodebases]);
+
+  return { codebases, fetchCodebases };
+}

@@ -17,6 +17,9 @@ import {SessionPanel} from "@/client/components/session-panel";
 import {type CrafterAgent, TaskPanel} from "@/client/components/task-panel";
 import {CollaborativeTaskEditor} from "@/client/components/collaborative-task-editor";
 import {AgentInstallPanel} from "@/client/components/agent-install-panel";
+import {WorkspaceSwitcher} from "@/client/components/workspace-switcher";
+import {CodebasePicker} from "@/client/components/codebase-picker";
+import {useWorkspaces, useCodebases} from "@/client/hooks/use-workspaces";
 import {useAcp} from "@/client/hooks/use-acp";
 import {useSkills} from "@/client/hooks/use-skills";
 import {useNotes} from "@/client/hooks/use-notes";
@@ -33,6 +36,37 @@ export default function HomePage() {
   const [showAgentToast, setShowAgentToast] = useState(false);
   const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const [routaTasks, setRoutaTasks] = useState<ParsedTask[]>([]);
+
+  // ── Workspace state ───────────────────────────────────────────────────
+  const workspacesHook = useWorkspaces();
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const { codebases } = useCodebases(activeWorkspaceId ?? "");
+
+  // Auto-select first workspace on load
+  useEffect(() => {
+    if (!activeWorkspaceId && workspacesHook.workspaces.length > 0) {
+      setActiveWorkspaceId(workspacesHook.workspaces[0].id);
+    }
+  }, [workspacesHook.workspaces, activeWorkspaceId]);
+
+  // Auto-select default codebase as repo when workspace changes
+  useEffect(() => {
+    if (codebases.length === 0) return;
+    const def = codebases.find((c) => c.isDefault) ?? codebases[0];
+    setRepoSelection({ path: def.repoPath, branch: def.branch ?? "", name: def.label ?? def.repoPath.split("/").pop() ?? "" });
+  }, [codebases]);
+
+  const handleWorkspaceSelect = useCallback((wsId: string) => {
+    setActiveWorkspaceId(wsId);
+    setActiveSessionId(null);
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  const handleWorkspaceCreate = useCallback(async (title: string) => {
+    const ws = await workspacesHook.createWorkspace(title);
+    if (ws) handleWorkspaceSelect(ws.id);
+  }, [workspacesHook, handleWorkspaceSelect]);
+
   const acp = useAcp();
   const skillsHook = useSkills();
   // Use activeSessionId as workspaceId to isolate notes per session
@@ -781,6 +815,18 @@ export default function HomePage() {
         {/* Separator */}
         <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
 
+        {/* Workspace switcher */}
+        <WorkspaceSwitcher
+          workspaces={workspacesHook.workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          onSelect={handleWorkspaceSelect}
+          onCreate={handleWorkspaceCreate}
+          loading={workspacesHook.loading}
+        />
+
+        {/* Separator */}
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
+
         {/* Agent selector */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500 dark:text-gray-400 hidden md:inline">Agent:</span>
@@ -957,6 +1003,7 @@ export default function HomePage() {
               selectedSessionId={activeSessionId}
               onSelect={handleSelectSession}
               refreshKey={refreshKey}
+              workspaceId={activeWorkspaceId ?? undefined}
               onSessionDeleted={(deletedId) => {
                 if (activeSessionId === deletedId) {
                   setActiveSessionId(null);

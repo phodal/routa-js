@@ -19,6 +19,7 @@ interface SessionPanelProps {
   onSelect: (sessionId: string) => void;
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
+  workspaceId?: string;
 }
 
 export function SessionPanel({
@@ -26,6 +27,7 @@ export function SessionPanel({
   onSelect,
   refreshKey,
   onSessionDeleted,
+  workspaceId,
 }: SessionPanelProps) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,7 +50,10 @@ export function SessionPanel({
   const fetchSessions = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/sessions", { cache: "no-store" });
+      const url = workspaceId
+        ? `/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}`
+        : "/api/sessions";
+      const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
       setSessions(Array.isArray(data?.sessions) ? data.sessions : []);
     } catch (e) {
@@ -56,7 +61,7 @@ export function SessionPanel({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     fetchSessions();
