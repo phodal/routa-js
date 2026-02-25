@@ -482,17 +482,21 @@ export function ChatPanel({
                 if (c.text) contentParts.push(c.text);
               }
             }
-            arr.push({
-              id: toolCallId ?? uuidv4(),
-              role: "tool",
-              content: contentParts.join("\n\n") || title,
-              timestamp: new Date(),
-              toolName: title,
-              toolStatus: status,
-              toolCallId,
-              toolKind,
-              toolRawInput: rawInput,
-            });
+            // Avoid duplicates if the same tool_call event is replayed (e.g. on reconnect)
+            const alreadyExists = toolCallId && arr.some((m) => m.toolCallId === toolCallId);
+            if (!alreadyExists) {
+              arr.push({
+                id: toolCallId ?? uuidv4(),
+                role: "tool",
+                content: contentParts.join("\n\n") || title,
+                timestamp: new Date(),
+                toolName: title,
+                toolStatus: status,
+                toolCallId,
+                toolKind,
+                toolRawInput: rawInput,
+              });
+            }
             break;
           }
 
@@ -602,7 +606,7 @@ export function ChatPanel({
             const terminalId = update.terminalId as string | undefined;
             const termCommand = update.command as string | undefined;
             const termArgs = update.args as string[] | undefined;
-            if (terminalId) {
+            if (terminalId && !arr.some((m) => m.terminalId === terminalId)) {
               arr.push({
                 id: terminalId,
                 role: "terminal",
