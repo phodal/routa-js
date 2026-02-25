@@ -8,13 +8,17 @@
  * - Supports multiple concurrent sessions with independent SSE streams
  * - Stores user messages for history preservation
  * - Consolidates consecutive agent_message_chunk notifications for efficient storage
+ * - Records Agent Trace with file ranges and VCS context
  */
 
 import {
   createTraceRecord,
   withConversation,
   withTool,
+  withVcs,
   recordTrace,
+  extractFilesFromToolCall,
+  getVcsContextLight,
   type TraceRecord,
 } from "@/core/trace";
 
@@ -329,6 +333,20 @@ class HttpSessionStore {
         status: "running",
         input: rawInput,
       });
+
+      // Extract file ranges from tool parameters
+      const toolName = kind ?? title ?? "unknown";
+      const files = extractFilesFromToolCall(toolName, rawInput);
+      if (files.length > 0) {
+        toolTrace = { ...toolTrace, files };
+      }
+
+      // Add VCS context (lightweight - branch only)
+      const vcs = getVcsContextLight(cwd);
+      if (vcs) {
+        toolTrace = withVcs(toolTrace, vcs);
+      }
+
       recordTrace(cwd, toolTrace);
     } else if (sessionUpdate === "tool_call_update") {
       // Tool result - trace immediately

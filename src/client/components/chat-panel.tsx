@@ -66,6 +66,12 @@ export interface PlanEntry {
   status?: "pending" | "in_progress" | "completed";
 }
 
+interface UsageInfo {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 interface ChatPanelProps {
   acp: UseAcpState & UseAcpActions;
   activeSessionId: string | null;
@@ -123,6 +129,8 @@ export function ChatPanel({
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   // File changes tracked from tool executions
   const [fileChangesState, setFileChangesState] = useState<FileChangesState>(createFileChangesState);
+  // Usage info from the last turn completion
+  const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
 
   // Extract task-type tool calls for TaskProgressBar (existing behavior)
   const delegatedTasks = useMemo<TaskInfo[]>(() => {
@@ -833,6 +841,17 @@ export function ChatPanel({
             const usage = update.usage as { input_tokens?: number; output_tokens?: number } | undefined;
             const reasoningText = update.reasoningText as string | undefined;
 
+            // Capture and store usage info for display in input
+            if (usage && (usage.input_tokens !== undefined || usage.output_tokens !== undefined)) {
+              const inputTokens = usage.input_tokens ?? 0;
+              const outputTokens = usage.output_tokens ?? 0;
+              setUsageInfo({
+                inputTokens,
+                outputTokens,
+                totalTokens: inputTokens + outputTokens,
+              });
+            }
+
             // Log usage for debugging
             if (usage) {
               console.log(`[ChatPanel] Turn complete: ${stopReason}, tokens: in=${usage.input_tokens}, out=${usage.output_tokens}`);
@@ -1185,6 +1204,7 @@ export function ChatPanel({
                   repoSelection={repoSelection}
                   onRepoChange={handleRepoChange}
                   agentRole={agentRole}
+                  usageInfo={usageInfo}
                 />
               </div>
             </div>

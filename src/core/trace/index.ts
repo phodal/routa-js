@@ -7,9 +7,12 @@
  * - Agent responses (messages, thoughts)
  * - Tool calls and results
  * - File modifications
+ * - VCS context (Git revision, branch, repo root)
  */
 
 export * from "./types";
 export * from "./writer";
 export * from "./reader";
+export * from "./file-range-extractor";
+export * from "./vcs-context";
 

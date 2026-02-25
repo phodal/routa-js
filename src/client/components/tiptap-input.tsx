@@ -426,6 +426,12 @@ export interface InputContext {
   files?: FileReference[];
 }
 
+export interface UsageInfo {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 interface ProviderItem {
   id: string;
   name: string;
@@ -461,6 +467,8 @@ interface TiptapInputProps {
   onRepoChange: (selection: RepoSelection | null) => void;
   /** Current agent role – ROUTA hides provider mode chips (Brave/Plan) */
   agentRole?: string;
+  /** Usage info from last completion to display in the input area */
+  usageInfo?: UsageInfo | null;
 }
 
 export function TiptapInput({
@@ -479,6 +487,7 @@ export function TiptapInput({
   activeSessionMode,
   repoSelection,
   onRepoChange,
+  usageInfo,
 }: TiptapInputProps) {
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
@@ -966,6 +975,17 @@ export function TiptapInput({
                 onClick={() => setOpencodeMode("plan")}
                 label="Plan"
               />
+            </div>
+          )}
+
+          {/* Usage indicator (shown when we have usage data) */}
+          {usageInfo && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-[10px] text-gray-500 dark:text-gray-400 font-mono" title={`Input: ${usageInfo.inputTokens.toLocaleString()} tokens\nOutput: ${usageInfo.outputTokens.toLocaleString()} tokens`}>
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span>{usageInfo.totalTokens.toLocaleString()}</span>
+              <span className="text-gray-400 dark:text-gray-500">tokens</span>
             </div>
           )}
 
