@@ -1,24 +1,23 @@
 "use client";
 
 /**
- * Routa JS - Home Page
+ * Workspace Page
  *
- * A clean landing page for starting new conversations.
- * Features:
- * - QuickStartInput component for fast new conversation creation
- * - Recent sessions panel on the right side
- * - Workspace selector if no workspace is pre-selected
+ * This page is shown when navigating to a workspace without a specific session.
+ * It's essentially the same as the home page but with the workspace pre-selected.
  *
- * From here, users can:
- * 1. Start a new conversation (auto-creates session and navigates to /[workspaceId]/[sessionId])
- * 2. Browse and resume recent sessions
- * 3. Create/manage workspaces
+ * Route: /[workspaceId]
+ *
+ * From here users can:
+ * 1. Start a new conversation in this workspace
+ * 2. Browse and resume recent sessions from this workspace
+ * 3. Select a different repository/codebase
  */
 
-import { useCallback, useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { QuickStartInput } from "@/client/components/quick-start-input";
-import { useWorkspaces } from "@/client/hooks/use-workspaces";
+import { useWorkspaces, useCodebases } from "@/client/hooks/use-workspaces";
 import { useAcp } from "@/client/hooks/use-acp";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { SessionPanel } from "@/client/components/session-panel";
@@ -26,23 +25,19 @@ import { SkillPanel } from "@/client/components/skill-panel";
 import { AgentInstallPanel } from "@/client/components/agent-install-panel";
 import { ProtocolBadge } from "@/app/protocol-badge";
 
-export default function HomePage() {
+export default function WorkspacePage() {
   const router = useRouter();
+  const params = useParams();
+  const workspaceId = params.workspaceId as string;
+
   const workspacesHook = useWorkspaces();
   const acp = useAcp();
+  const { codebases } = useCodebases(workspaceId);
 
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
   const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Auto-select first workspace on load
-  useEffect(() => {
-    if (!activeWorkspaceId && workspacesHook.workspaces.length > 0) {
-      setActiveWorkspaceId(workspacesHook.workspaces[0].id);
-    }
-  }, [workspacesHook.workspaces, activeWorkspaceId]);
 
   // Auto-connect on mount
   useEffect(() => {
@@ -51,37 +46,45 @@ export default function HomePage() {
     }
   }, [acp.connected, acp.loading]);
 
+  // Verify workspace exists, redirect to home if not
+  const workspace = workspacesHook.workspaces.find((w) => w.id === workspaceId);
+  useEffect(() => {
+    if (!workspacesHook.loading && !workspace) {
+      router.push("/");
+    }
+  }, [workspace, workspacesHook.loading, router]);
+
   const handleWorkspaceSelect = useCallback((wsId: string) => {
-    setActiveWorkspaceId(wsId);
-    setRefreshKey((k) => k + 1);
-  }, []);
+    router.push(`/${wsId}`);
+  }, [router]);
 
   const handleWorkspaceCreate = useCallback(async (title: string) => {
     const ws = await workspacesHook.createWorkspace(title);
-    if (ws) handleWorkspaceSelect(ws.id);
-  }, [workspacesHook, handleWorkspaceSelect]);
+    if (ws) router.push(`/${ws.id}`);
+  }, [workspacesHook, router]);
 
   const handleSessionClick = useCallback((sessionId: string) => {
-    // Navigate to the workspace/session page
-    if (activeWorkspaceId) {
-      router.push(`/${activeWorkspaceId}/${sessionId}`);
-    } else {
-      // If no workspace selected, try to find the session's workspace
-      // This is a fallback - ideally sessions always have a workspace
-      router.push(`/${sessionId}`);
-    }
-  }, [activeWorkspaceId, router]);
+    router.push(`/${workspaceId}/${sessionId}`);
+  }, [workspaceId, router]);
 
   const handleSessionDeleted = useCallback((deletedId: string) => {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  if (workspacesHook.loading || !workspace) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f1117]">
+        <div className="text-gray-400 dark:text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
       {/* Top Bar */}
       <header className="h-[52px] shrink-0 bg-white dark:bg-[#161922] border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-4 z-10">
-        {/* Logo */}
-        <div className="flex items-center gap-2">
+        {/* Logo - links back to home */}
+        <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <img
             src="/logo.svg"
             alt="Routa"
@@ -92,27 +95,37 @@ export default function HomePage() {
           <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             Routa
           </span>
-        </div>
+        </a>
+
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
 
         {/* Workspace Selector */}
-        {workspacesHook.workspaces.length > 0 && (
+        <div className="flex items-center gap-2">
+          <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+          </svg>
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[150px]">
+            {workspace.title}
+          </span>
+          <WorkspaceSwitcher
+            workspaces={workspacesHook.workspaces}
+            activeWorkspaceId={workspaceId}
+            onSelect={handleWorkspaceSelect}
+            onCreate={handleWorkspaceCreate}
+            loading={workspacesHook.loading}
+            compact
+          />
+        </div>
+
+        {/* Codebase indicator */}
+        {codebases.length > 0 && (
           <>
             <div className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
-            <div className="flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
               </svg>
-              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                {workspacesHook.workspaces.find((w) => w.id === activeWorkspaceId)?.title ?? "Select workspace"}
-              </span>
-              <WorkspaceSwitcher
-                workspaces={workspacesHook.workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={handleWorkspaceSelect}
-                onCreate={handleWorkspaceCreate}
-                loading={workspacesHook.loading}
-                compact
-              />
+              <span>{codebases.length} codebase{codebases.length !== 1 ? "s" : ""}</span>
             </div>
           </>
         )}
@@ -159,33 +172,13 @@ export default function HomePage() {
         {/* Left/Center - Quick Start Input */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto px-5 py-12">
-            {/* Empty Workspace Onboarding */}
-            {!workspacesHook.loading && workspacesHook.workspaces.length === 0 ? (
-              <div className="bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-8 text-center">
-                <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                  </svg>
-                </div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Create your first workspace</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">A workspace organizes your sessions, notes, and codebases for a project.</p>
-                <button
-                  type="button"
-                  onClick={() => handleWorkspaceCreate("My Workspace")}
-                  className="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-                >
-                  Create Workspace
-                </button>
-              </div>
-            ) : (
-              /* Quick Start Input */
-              <QuickStartInput
-                workspaceId={activeWorkspaceId ?? undefined}
-                onSessionCreated={(sessionId) => {
-                  setRefreshKey((k) => k + 1);
-                }}
-              />
-            )}
+            <QuickStartInput
+              workspaceId={workspaceId}
+              hideWorkspace
+              onSessionCreated={(sessionId) => {
+                setRefreshKey((k) => k + 1);
+              }}
+            />
           </div>
         </main>
 
@@ -197,7 +190,7 @@ export default function HomePage() {
               selectedSessionId={null}
               onSelect={handleSessionClick}
               refreshKey={refreshKey}
-              workspaceId={activeWorkspaceId ?? undefined}
+              workspaceId={workspaceId}
               onSessionDeleted={handleSessionDeleted}
             />
           </div>
@@ -265,3 +258,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+import { useRef } from "react";
