@@ -4,7 +4,7 @@
 //! GET /api/providers?check=true - Check provider status (slower, but accurate)
 
 use axum::{
-    extract::Query,
+    extract::{Query, State},
     routing::get,
     Json, Router,
 };
@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
+
+use crate::error::ServerError;
+use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
 struct ProviderInfo {
@@ -48,24 +51,31 @@ fn get_cache() -> &'static Arc<Mutex<Cache>> {
 
 const CACHE_TTL: Duration = Duration::from_secs(30);
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new().route("/", get(list_providers))
 }
 
-async fn list_providers(Query(query): Query<ProvidersQuery>) -> Json<serde_json::Value> {
+async fn list_providers(
+    State(_state): State<AppState>,
+    Query(query): Query<ProvidersQuery>,
+) -> Result<Json<serde_json::Value>, ServerError> {
     // Fast path: return cached or unchecked providers
     if !query.check {
-        let cache = get_cache().lock().unwrap();
-        if let Some(ref providers) = cache.providers {
-            if cache.timestamp.elapsed().unwrap_or(CACHE_TTL) < CACHE_TTL {
-                return Json(serde_json::json!({ "providers": providers }));
+        // Check cache first
+        let _should_return_cached = {
+            let cache = get_cache().lock().unwrap();
+            if let Some(ref providers) = cache.providers {
+                if cache.timestamp.elapsed().unwrap_or(CACHE_TTL) < CACHE_TTL {
+                    // Clone the providers to return after releasing lock
+                    return Ok(Json(serde_json::json!({ "providers": providers })));
+                }
             }
-        }
-        drop(cache);
+            false
+        };
 
         // Return unchecked providers immediately
         let providers = get_providers_without_checking().await;
-        return Json(serde_json::json!({ "providers": providers }));
+        return Ok(Json(serde_json::json!({ "providers": providers })));
     }
 
     // Slow path: check all provider statuses
@@ -78,14 +88,43 @@ async fn list_providers(Query(query): Query<ProvidersQuery>) -> Json<serde_json:
         cache.timestamp = SystemTime::now();
     }
 
-    Json(serde_json::json!({ "providers": providers }))
+    Ok(Json(serde_json::json!({ "providers": providers })))
+}
+
+/// Helper to get command from agent distribution
+fn get_agent_command(agent: &super::acp_registry::RegistryAgent, platform: &str) -> String {
+    // Try npx first
+    if let Some(npx_val) = agent.distribution.get("npx") {
+        if let Some(package) = npx_val.get("package").and_then(|v| v.as_str()) {
+            return format!("npx {}", package);
+        }
+    }
+
+    // Try uvx
+    if let Some(uvx_val) = agent.distribution.get("uvx") {
+        if let Some(package) = uvx_val.get("package").and_then(|v| v.as_str()) {
+            return format!("uvx {}", package);
+        }
+    }
+
+    // Try binary
+    if let Some(binary_val) = agent.distribution.get("binary") {
+        if let Some(platform_bin) = binary_val.get(platform) {
+            if let Some(cmd) = platform_bin.get("cmd").and_then(|v| v.as_str()) {
+                return cmd.to_string();
+            }
+        }
+    }
+
+    // Fallback to agent id
+    agent.id.clone()
 }
 
 /// Fast: Return all providers without checking command availability
 async fn get_providers_without_checking() -> Vec<ProviderInfo> {
-    use crate::acp_presets;
+    use crate::acp;
 
-    let presets = acp_presets::get_standard_presets();
+    let presets = acp::get_presets();
     let mut providers: Vec<ProviderInfo> = presets
         .iter()
         .map(|p| ProviderInfo {
@@ -99,24 +138,13 @@ async fn get_providers_without_checking() -> Vec<ProviderInfo> {
         .collect();
 
     // Add registry agents (without checking)
-    if let Ok(registry) = crate::acp_registry::fetch_registry().await {
+    if let Ok(registry) = super::acp_registry::fetch_registry().await {
         let static_ids: HashSet<_> = providers.iter().map(|p| p.id.clone()).collect();
+        let platform = super::acp_registry::detect_platform()
+            .unwrap_or_else(|| "unknown".to_string());
 
         for agent in registry.agents {
-            let command = if let Some(npx) = agent.distribution.npx {
-                format!("npx {}", npx.package)
-            } else if let Some(uvx) = agent.distribution.uvx {
-                format!("uvx {}", uvx.package)
-            } else if let Some(binary) = agent.distribution.binary {
-                let platform = crate::acp_registry::detect_platform_target();
-                if let Some(bin) = binary.get(&platform) {
-                    bin.cmd.clone().unwrap_or_else(|| agent.id.clone())
-                } else {
-                    agent.id.clone()
-                }
-            } else {
-                agent.id.clone()
-            };
+            let command = get_agent_command(&agent, &platform);
 
             let provider_id = if static_ids.contains(&agent.id) {
                 format!("{}-registry", agent.id)
@@ -146,9 +174,9 @@ async fn get_providers_without_checking() -> Vec<ProviderInfo> {
 
 /// Slow: Check all provider command availability
 async fn get_providers_with_checking() -> Vec<ProviderInfo> {
-    use crate::{acp_presets, shell_env};
+    use crate::{acp, shell_env};
 
-    let presets = acp_presets::get_standard_presets();
+    let presets = acp::get_presets();
     let mut providers: Vec<ProviderInfo> = Vec::new();
 
     // Check static presets
@@ -171,35 +199,32 @@ async fn get_providers_with_checking() -> Vec<ProviderInfo> {
     // Add registry agents with checking
     let static_ids: HashSet<_> = providers.iter().map(|p| p.id.clone()).collect();
 
-    if let Ok(registry) = crate::acp_registry::fetch_registry().await {
+    if let Ok(registry) = super::acp_registry::fetch_registry().await {
         let npx_available = shell_env::which("npx").is_some();
         let uvx_available = shell_env::which("uv").is_some();
-        let platform = crate::acp_registry::detect_platform_target();
+        let platform = super::acp_registry::detect_platform()
+            .unwrap_or_else(|| "unknown".to_string());
 
         for agent in registry.agents {
-            let (command, status) = if let Some(npx) = agent.distribution.npx {
-                let cmd = format!("npx {}", npx.package);
-                let status = if npx_available {
+            let (command, status) = if agent.distribution.get("npx").is_some() {
+                let cmd = get_agent_command(&agent, &platform);
+                let status_str = if npx_available {
                     "available"
                 } else {
                     "unavailable"
                 };
-                (cmd, status.to_string())
-            } else if let Some(uvx) = agent.distribution.uvx {
-                let cmd = format!("uvx {}", uvx.package);
-                let status = if uvx_available {
+                (cmd, status_str.to_string())
+            } else if agent.distribution.get("uvx").is_some() {
+                let cmd = get_agent_command(&agent, &platform);
+                let status_str = if uvx_available {
                     "available"
                 } else {
                     "unavailable"
                 };
-                (cmd, status.to_string())
-            } else if let Some(binary) = agent.distribution.binary {
-                if let Some(bin) = binary.get(&platform) {
-                    let cmd = bin.cmd.clone().unwrap_or_else(|| agent.id.clone());
-                    (cmd, "unavailable".to_string())
-                } else {
-                    (agent.id.clone(), "unavailable".to_string())
-                }
+                (cmd, status_str.to_string())
+            } else if agent.distribution.get("binary").is_some() {
+                let cmd = get_agent_command(&agent, &platform);
+                (cmd, "unavailable".to_string())
             } else {
                 (agent.id.clone(), "unavailable".to_string())
             };

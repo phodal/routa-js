@@ -37,22 +37,22 @@ struct RegistryQuery {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct RegistryAgent {
-    id: String,
-    name: String,
-    version: String,
-    description: String,
-    repository: Option<String>,
-    authors: Vec<String>,
-    license: String,
-    icon: Option<String>,
-    distribution: serde_json::Value,
+pub struct RegistryAgent {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub repository: Option<String>,
+    pub authors: Vec<String>,
+    pub license: String,
+    pub icon: Option<String>,
+    pub distribution: serde_json::Value,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct AcpRegistry {
-    version: String,
-    agents: Vec<RegistryAgent>,
+pub struct AcpRegistry {
+    pub version: String,
+    pub agents: Vec<RegistryAgent>,
 }
 
 #[derive(Debug, Serialize)]
@@ -304,7 +304,7 @@ async fn uninstall_agent(
 // ─── Helper Functions ──────────────────────────────────────────────────────
 
 /// Fetch the ACP registry from CDN
-async fn fetch_registry() -> Result<AcpRegistry, ServerError> {
+pub async fn fetch_registry() -> Result<AcpRegistry, ServerError> {
     let response = reqwest::get(ACP_REGISTRY_URL)
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to fetch registry: {}", e)))?;
@@ -359,7 +359,7 @@ fn check_agent_installed(agent: &RegistryAgent, npx_available: bool, uvx_availab
 }
 
 /// Detect the current platform
-fn detect_platform() -> Option<String> {
+pub fn detect_platform() -> Option<String> {
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
 
