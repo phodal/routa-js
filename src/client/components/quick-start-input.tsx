@@ -78,6 +78,13 @@ export function QuickStartInput({
     });
   }, [codebases]);
 
+  // Auto-connect ACP on mount
+  useEffect(() => {
+    if (!acp.connected && !acp.loading) {
+      acp.connect();
+    }
+  }, [acp.connected, acp.loading, acp.connect]);
+
   // Agent role state
   const [selectedRole, setSelectedRole] = useState<AgentRole>(defaultRole);
 
@@ -368,8 +375,8 @@ export function QuickStartInput({
                 )}
             </div>
 
-            {/* Model selector */}
-            {(acp.selectedProvider === "opencode" || acp.selectedProvider === "gemini") && (
+            {/* Model selector - only show for OpenCode provider */}
+            {acp.selectedProvider === "opencode" && (
               <div>
                 <button
                   ref={modelBtnRef}

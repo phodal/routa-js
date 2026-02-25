@@ -124,22 +124,33 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
       // Background task 1: Check local provider status
       client.listProviders(true, false).then((checkedLocalProviders) => {
-        setState((s) => ({
-          ...s,
-          providers: checkedLocalProviders,
-        }));
+        // Only update local providers (source === 'static'), keep existing registry providers
+        setState((s) => {
+          const existingRegistry = s.providers.filter((p) => p.source === "registry");
+          return {
+            ...s,
+            providers: [...checkedLocalProviders, ...existingRegistry],
+          };
+        });
       }).catch((err) => {
         logRuntime("warn", "useAcp.connect", "Failed to check local provider status", err);
       });
 
       // Background task 2: Load registry providers (with timeout protection)
       // This runs in parallel and adds registry providers when ready
-      client.loadRegistryProviders().then((registryProviders) => {
+      client.loadRegistryProviders().then((allProviders) => {
+        // loadRegistryProviders returns ALL providers (local + registry)
+        // Filter to get only registry providers to avoid duplicates
+        const registryProviders = allProviders.filter((p) => p.source === "registry");
         if (registryProviders.length > 0) {
-          setState((s) => ({
-            ...s,
-            providers: [...s.providers, ...registryProviders],
-          }));
+          setState((s) => {
+            // Keep only local providers from current state, add new registry providers
+            const localProviders = s.providers.filter((p) => p.source === "static");
+            return {
+              ...s,
+              providers: [...localProviders, ...registryProviders],
+            };
+          });
         }
       }).catch((err) => {
         // Registry load failed (timeout or network error) - not critical
