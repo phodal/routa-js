@@ -1230,8 +1230,8 @@ export function ChatPanel({
               </div>
             </div>
 
-            {/* ── 2. Workspace + Codebase — always side-by-side ── */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* ── 2. Workspace + Repository — always side-by-side ── */}
+            <div className="grid grid-cols-2 gap-3 items-end">
               <div>
                 <label className="block text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Workspace</label>
                 <select
@@ -1245,19 +1245,8 @@ export function ChatPanel({
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Codebase</label>
-                <select
-                  value={repoSelection?.path ?? (codebases[0]?.repoPath ?? "")}
-                  onChange={(e) => {
-                    const cb = codebases.find((c) => c.repoPath === e.target.value);
-                    if (cb) onRepoChange({ path: cb.repoPath, branch: cb.branch ?? "", name: cb.label ?? cb.repoPath.split("/").pop() ?? "" });
-                  }}
-                  className="w-full px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                >
-                  {codebases.length > 0 ? codebases.map((cb) => (
-                    <option key={cb.id} value={cb.repoPath}>{cb.label ?? cb.repoPath.split("/").pop()}</option>
-                  )) : <option value="">No codebases</option>}
-                </select>
+                <label className="block text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Repository</label>
+                <RepoPicker value={repoSelection} onChange={onRepoChange} />
               </div>
             </div>
 
