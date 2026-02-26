@@ -109,6 +109,10 @@ interface CodeBlockProps {
   showLineNumbers?: boolean;
   /** Additional class name */
   className?: string;
+  /** Wrap long lines instead of horizontal scroll (default: false) */
+  wordWrap?: boolean;
+  /** Show header bar with filename, language, etc. (default: true) */
+  showHeader?: boolean;
 }
 
 export function CodeBlock({
@@ -120,6 +124,8 @@ export function CodeBlock({
   maxHeight = "400px",
   showLineNumbers = true,
   className = "",
+  wordWrap = false,
+  showHeader = true,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const codeContent = code || content || "";
@@ -167,7 +173,7 @@ export function CodeBlock({
             )}
           </button>
         </div>
-        <pre className={`language-${detectedLanguage}`}>
+        <pre className={`language-${detectedLanguage}`} style={wordWrap ? { whiteSpace: "pre-wrap", wordBreak: "break-word" } : undefined}>
           <code dangerouslySetInnerHTML={{ __html: html }} />
         </pre>
       </div>
@@ -183,6 +189,8 @@ export function CodeBlock({
       maxHeight={maxHeight}
       showLineNumbers={showLineNumbers}
       className={className}
+      wordWrap={wordWrap}
+      showHeader={showHeader}
     />
   );
 }

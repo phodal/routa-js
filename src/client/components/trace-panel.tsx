@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TraceRecord } from "@/core/trace";
 import { CodeBlock } from "./code-block";
 import { CodeRetrievalViewer } from "./code-retrieval-viewer";
+import { FileOutputViewer, parseFileOutput } from "./file-output-viewer";
 
 interface TracePanelProps {
   sessionId: string | null;
@@ -119,7 +120,6 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
   // Check if this is a codebase-retrieval output
   // The output is a JSON string containing an array with {type: "text", text: "..."}
   // We need to check if the parsed JSON has this structure
-  const isCodebaseRetrieval = toolName === "codebase-retrieval";
   const isCodebaseRetrievalFormat = parsed &&
     Array.isArray(parsed) &&
     parsed.length > 0 &&
@@ -144,6 +144,34 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
     );
   }
 
+  // Check if this is a search/read tool output with special format
+  // These tools output JSON with an "output" field containing the actual content
+  const isSearchOrRead = toolName === "search" || toolName === "read";
+  const innerOutput = parsed && typeof parsed === "object" && "output" in parsed
+    ? (parsed as { output: string }).output
+    : null;
+
+  if (isSearchOrRead && innerOutput) {
+    const fileOutputParsed = parseFileOutput(innerOutput, toolName);
+    if (fileOutputParsed.kind !== "unknown") {
+      const label = toolName === "search"
+        ? `Search Results (${fileOutputParsed.matchCount ?? fileOutputParsed.searchMatches?.length ?? 0} matches)`
+        : "File Content";
+      return (
+        <div>
+          <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+            <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+              {label}
+            </span>
+          </div>
+          <div className="p-2">
+            <FileOutputViewer output={innerOutput} toolName={toolName} initiallyExpanded={true} />
+          </div>
+        </div>
+      );
+    }
+  }
+
   if (!parsed) {
     // Non-JSON output - use CodeBlock for syntax highlighting
     return (
@@ -163,6 +191,7 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
           language="auto"
           variant="simple"
           className="!border-0 !rounded-none"
+          wordWrap={true}
         />
       </div>
     );
@@ -216,9 +245,10 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
         <CodeBlock
           content={JSON.stringify(parsed, null, 2)}
           language="json"
-          filename="output.json"
           variant={isLarge ? "rich" : "simple"}
           className="!border-0 !rounded-none"
+          wordWrap={true}
+          showHeader={false}
         />
       ) : (
         <pre className="px-2 py-1.5 text-[10px] font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words bg-white dark:bg-gray-900/40">
