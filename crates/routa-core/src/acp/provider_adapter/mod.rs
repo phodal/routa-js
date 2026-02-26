@@ -12,12 +12,12 @@ pub use trace_recorder::TraceRecorder;
 /// Get the appropriate adapter behavior for a provider.
 pub fn get_provider_behavior(provider: &str) -> ProviderBehavior {
     match provider.to_lowercase().as_str() {
-        "claude" | "claude-code" | "claudecode" => ProviderBehavior {
+        "claude" | "claude-code" | "claudecode" | "claude-code-sdk" => ProviderBehavior {
             provider_type: ProviderType::Claude,
             immediate_tool_input: true,  // Claude sends input with tool_call
             streaming: true,
         },
-        "opencode" | "open-code" => ProviderBehavior {
+        "opencode" | "open-code" | "opencode-sdk" => ProviderBehavior {
             provider_type: ProviderType::OpenCode,
             immediate_tool_input: false, // OpenCode sends input in updates
             streaming: true,

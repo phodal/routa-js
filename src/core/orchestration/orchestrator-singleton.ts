@@ -8,6 +8,7 @@
 import { RoutaOrchestrator, OrchestratorConfig } from "./orchestrator";
 import { getRoutaSystem } from "../routa-system";
 import { getAcpProcessManager } from "../acp/processer";
+import { isServerlessEnvironment } from "../acp/api-based-providers";
 
 // Use globalThis to survive HMR in Next.js dev mode
 const GLOBAL_KEY = "__routa_orchestrator__";
@@ -34,9 +35,13 @@ export function initRoutaOrchestrator(
   const system = getRoutaSystem();
   const processManager = getAcpProcessManager();
 
+  // In serverless environments (Vercel), default to claude-code-sdk
+  // In desktop/server environments, default to claude (CLI)
+  const defaultProvider = isServerlessEnvironment() ? "claude-code-sdk" : "claude";
+
   const fullConfig: OrchestratorConfig = {
-    defaultCrafterProvider: config?.defaultCrafterProvider ?? "claude",
-    defaultGateProvider: config?.defaultGateProvider ?? "claude",
+    defaultCrafterProvider: config?.defaultCrafterProvider ?? defaultProvider,
+    defaultGateProvider: config?.defaultGateProvider ?? defaultProvider,
     defaultCwd: config?.defaultCwd ?? process.cwd(),
     serverPort: config?.serverPort ?? process.env.PORT,
   };

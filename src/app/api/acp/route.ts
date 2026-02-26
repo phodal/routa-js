@@ -135,13 +135,18 @@ export async function POST(request: NextRequest) {
 
     // ── session/new ────────────────────────────────────────────────────
     // Spawn an ACP agent process and create a session.
-    // Optional `provider` param selects the agent (default: "opencode").
+    // Optional `provider` param selects the agent.
+    // Default provider: claude-code-sdk in serverless (Vercel), opencode otherwise.
     // For `claude` provider: spawns Claude Code with stream-json + MCP.
     // Supports idempotencyKey to prevent duplicate session creation.
     if (method === "session/new") {
       const p = (params ?? {}) as Record<string, unknown>;
       const cwd = (p.cwd as string | undefined) ?? process.cwd();
-      const provider = (p.provider as string | undefined) ?? "opencode";
+
+      // Determine default provider based on environment
+      const defaultProvider = isServerlessEnvironment() ? "claude-code-sdk" : "opencode";
+      const provider = (p.provider as string | undefined) ?? defaultProvider;
+
       const modeId = (p.modeId as string | undefined) ?? (p.mode as string | undefined);
       const role = (p.role as string | undefined)?.toUpperCase();
       const model = (p.model as string | undefined);

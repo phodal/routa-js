@@ -49,10 +49,12 @@ function normalizeProviderType(provider: string): ProviderType {
     case "claude":
     case "claude-code":
     case "claudecode":
+    case "claude-code-sdk":
       return "claude";
 
     case "opencode":
     case "open-code":
+    case "opencode-sdk":
       return "opencode";
 
     case "kimi":

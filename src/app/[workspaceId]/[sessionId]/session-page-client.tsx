@@ -787,6 +787,122 @@ export function SessionPageClient() {
     setConcurrency(n);
   }, []);
 
+  /**
+   * Execute a single collaborative task note by creating it in the MCP task store
+   * and delegating to a CRAFTER agent.
+   */
+  const handleExecuteNoteTask = useCallback(async (noteId: string): Promise<CrafterAgent | null> => {
+    const note = notesHook.notes.find((n) => n.id === noteId);
+    if (!note) return null;
+
+    // Mark note as in-progress
+    await notesHook.updateNote(noteId, {
+      metadata: { ...note.metadata, taskStatus: "IN_PROGRESS" },
+    });
+
+    try {
+      // 1. Create task in MCP task store
+      const createResult = await callMcpTool("create_task", {
+        title: note.title,
+        objective: note.content || note.title,
+        workspaceId,
+      });
+
+      const resultText = createResult?.content?.[0]?.text ?? "{}";
+      let mcpTaskId: string | undefined;
+      try {
+        const parsed = JSON.parse(resultText);
+        mcpTaskId = parsed.taskId ?? parsed.id;
+      } catch {
+        const m = resultText.match(/"(?:taskId|id)"\s*:\s*"([^"]+)"/);
+        mcpTaskId = m?.[1];
+      }
+
+      let agentId: string | undefined;
+      let childSessionId: string | undefined;
+
+      if (!mcpTaskId) {
+        console.warn("[CollabEditor] Could not extract taskId for note:", noteId);
+        if (sessionId) {
+          await acp.prompt(`Execute task: "${note.title}"\n${note.content}`);
+        }
+      } else {
+        try {
+          const delegateResult = await callMcpTool("delegate_task_to_agent", {
+            taskId: mcpTaskId,
+            callerAgentId: "routa-ui",
+            callerSessionId: sessionId,
+            specialist: "CRAFTER",
+          });
+          const delegateText = delegateResult?.content?.[0]?.text ?? "{}";
+          try {
+            const parsed = JSON.parse(delegateText);
+            agentId = parsed.agentId;
+            childSessionId = parsed.sessionId;
+          } catch {
+            const agentMatch = delegateText.match(/"agentId"\s*:\s*"([^"]+)"/);
+            const sessionMatch = delegateText.match(/"sessionId"\s*:\s*"([^"]+)"/);
+            agentId = agentMatch?.[1];
+            childSessionId = sessionMatch?.[1];
+          }
+        } catch (delegateErr) {
+          console.warn("[CollabEditor] delegate_task_to_agent failed:", delegateErr);
+        }
+      }
+
+      const crafterAgent: CrafterAgent = {
+        id: agentId ?? `crafter-collab-${noteId}`,
+        sessionId: childSessionId ?? "",
+        taskId: noteId,
+        taskTitle: note.title,
+        status: "running",
+        messages: [],
+      };
+
+      setCrafterAgents((prev) => [...prev, crafterAgent]);
+      if (!activeCrafterId) setActiveCrafterId(crafterAgent.id);
+
+      return crafterAgent;
+    } catch (err) {
+      console.error("[CollabEditor] Note task execution failed:", err);
+      await notesHook.updateNote(noteId, {
+        metadata: { ...note.metadata, taskStatus: "PENDING" },
+      });
+      return null;
+    }
+  }, [notesHook, workspaceId, sessionId, acp, callMcpTool, activeCrafterId]);
+
+  /**
+   * Execute all pending collaborative task notes with configurable concurrency.
+   */
+  const handleExecuteAllNoteTasks = useCallback(async (requestedConcurrency: number) => {
+    const pendingNotes = notesHook.notes.filter(
+      (n) => n.metadata.type === "task" && (!n.metadata.taskStatus || n.metadata.taskStatus === "PENDING")
+    );
+    if (pendingNotes.length === 0) return;
+
+    const effectiveConcurrency = Math.min(requestedConcurrency, pendingNotes.length);
+
+    if (effectiveConcurrency <= 1) {
+      for (const note of pendingNotes) {
+        const agent = await handleExecuteNoteTask(note.id);
+        if (agent) setActiveCrafterId(agent.id);
+      }
+    } else {
+      const queue = [...pendingNotes];
+      while (queue.length > 0) {
+        const batch = queue.splice(0, effectiveConcurrency);
+        const results = await Promise.allSettled(batch.map((n) => handleExecuteNoteTask(n.id)));
+        for (const result of results) {
+          if (result.status === "fulfilled" && result.value) {
+            setActiveCrafterId(result.value.id);
+            break;
+          }
+        }
+      }
+    }
+  }, [notesHook, handleExecuteNoteTask]);
+
   // Filter notes for the active session
   const sessionNotes = notesHook.notes.filter((n) => {
     const noteSessionId = n.metadata.custom?.sessionId;
@@ -1098,6 +1214,13 @@ export function SessionPageClient() {
                 onUpdateNote={notesHook.updateNote}
                 onDeleteNote={notesHook.deleteNote}
                 workspaceId={workspaceId}
+                crafterAgents={crafterAgents}
+                activeCrafterId={activeCrafterId}
+                onSelectCrafter={handleSelectCrafter}
+                onExecuteTask={handleExecuteNoteTask}
+                onExecuteAll={handleExecuteAllNoteTasks}
+                concurrency={concurrency}
+                onConcurrencyChange={handleConcurrencyChange}
               />
             ) : (
               <TaskPanel

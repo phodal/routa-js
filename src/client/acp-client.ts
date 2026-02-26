@@ -31,6 +31,13 @@ export interface AcpNewSessionResult {
 
 export interface AcpPromptResult {
   stopReason: string;
+  /** Full response content (for serverless environments where SSE may not work) */
+  content?: string;
+  /** Token usage info */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+  };
 }
 
 export interface AcpProviderInfo {
@@ -186,12 +193,59 @@ export class BrowserAcpClient {
   /**
    * Send a prompt to the session.
    * Content streams via SSE session/update notifications.
+   * In serverless environments, content may also be returned in the response.
    */
   async prompt(sessionId: string, text: string): Promise<AcpPromptResult> {
-    return this.rpc("session/prompt", {
+    const result = await this.rpc<AcpPromptResult>("session/prompt", {
       sessionId,
       prompt: [{ type: "text", text }],
     });
+
+    // In serverless environments, SSE might not work across lambda instances.
+    // If the response includes content directly, emit it as an update notification.
+    if (result.content) {
+      const notification: AcpSessionNotification = {
+        sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: {
+            type: "text",
+            text: result.content,
+          },
+        },
+      };
+
+      for (const handler of this.updateHandlers) {
+        try {
+          handler(notification);
+        } catch (err) {
+          console.error("[AcpClient] Handler error:", err);
+        }
+      }
+
+      // Also emit turn_complete
+      const turnCompleteNotification: AcpSessionNotification = {
+        sessionId,
+        update: {
+          sessionUpdate: "turn_complete",
+          stopReason: result.stopReason,
+          usage: result.usage ? {
+            input_tokens: result.usage.inputTokens,
+            output_tokens: result.usage.outputTokens,
+          } : undefined,
+        },
+      };
+
+      for (const handler of this.updateHandlers) {
+        try {
+          handler(turnCompleteNotification);
+        } catch (err) {
+          console.error("[AcpClient] Handler error:", err);
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

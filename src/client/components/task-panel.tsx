@@ -225,7 +225,7 @@ export function TaskPanel({
 
 // ─── CRAFTERs View ──────────────────────────────────────────────────────
 
-function CraftersView({
+export function CraftersView({
   agents,
   activeCrafterId,
   onSelectCrafter,

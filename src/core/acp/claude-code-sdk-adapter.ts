@@ -110,9 +110,14 @@ export class ClaudeCodeSdkAdapter {
   }
 
   /**
-   * Send a prompt and stream responses using direct Anthropic API
+   * Send a prompt and stream responses using direct Anthropic API.
+   * Returns full response content for serverless environments where SSE may not work.
    */
-  async prompt(text: string): Promise<{ stopReason: string }> {
+  async prompt(text: string): Promise<{
+    stopReason: string;
+    content?: string;
+    usage?: { inputTokens: number; outputTokens: number };
+  }> {
     if (!this._alive || !this.sessionId) {
       throw new Error("No active session");
     }
@@ -145,6 +150,7 @@ export class ClaudeCodeSdkAdapter {
       let stopReason = "end_turn";
       let inputTokens = 0;
       let outputTokens = 0;
+      let fullResponseText = "";  // Collect full response for serverless return
 
       // Build conversation messages
       // For now, we only support single-turn conversations
@@ -169,6 +175,11 @@ export class ClaudeCodeSdkAdapter {
         }
 
         this.handleStreamEvent(event);
+
+        // Collect text for full response
+        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          fullResponseText += event.delta.text;
+        }
 
         // Extract stop reason and usage from message_delta event
         if (event.type === "message_delta" && event.delta) {
@@ -208,7 +219,15 @@ export class ClaudeCodeSdkAdapter {
         },
       }));
 
-      return { stopReason };
+      // Return full response for serverless environments where SSE may not work
+      return {
+        stopReason,
+        content: fullResponseText,
+        usage: {
+          inputTokens,
+          outputTokens,
+        },
+      };
     } catch (error) {
       if (this.currentAbortController?.signal.aborted) {
         return { stopReason: "cancelled" };

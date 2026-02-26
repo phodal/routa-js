@@ -117,10 +117,14 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
       clientRef.current = client;
 
+      // Auto-select first available provider (claude-code-sdk in serverless, or first available)
+      const firstAvailable = localProviders.find((p) => p.status === "available");
+
       setState((s) => ({
         ...s,
         connected: true,
         providers: localProviders,
+        selectedProvider: firstAvailable?.id ?? s.selectedProvider,
         loading: false,
       }));
 
