@@ -33,6 +33,14 @@ export function isServerlessEnvironment(): boolean {
  */
 export const API_BASED_PROVIDERS: ApiBasedProvider[] = [
   {
+    id: 'claude-code-sdk',
+    name: 'Claude Code SDK',
+    description: 'Claude Code via SDK (recommended for Vercel serverless)',
+    requiresApiKey: true,
+    envKeyName: 'ANTHROPIC_AUTH_TOKEN',
+    status: 'requires_config',
+  },
+  {
     id: 'opencode-sdk',
     name: 'OpenCode SDK',
     description: 'Connect to a remote OpenCode server via SDK (recommended for serverless)',
@@ -107,12 +115,17 @@ This is because:
 
 **Alternative Solutions:**
 
-1. **Use OpenCode SDK** (recommended for Vercel):
+1. **Use Claude Code SDK** (recommended for Vercel):
+   - Set ANTHROPIC_AUTH_TOKEN=your-api-token
+   - Optionally set ANTHROPIC_BASE_URL for custom endpoints (e.g., BigModel)
+   - Works natively in serverless environments
+
+2. **Use OpenCode SDK** (alternative for serverless):
    - Run \`opencode serve\` on a VPS or local machine
    - Set OPENCODE_SERVER_URL=http://your-server:4096
    - The SDK connects to your remote OpenCode server
 
-2. **Use API-based providers**:
+3. **Use API-based providers**:
    - Configure API keys in environment variables
    - Use OpenAI API, Anthropic API, Google Gemini API, etc.
    - These work natively in serverless environments
