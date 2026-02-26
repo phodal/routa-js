@@ -118,15 +118,49 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
   const isLarge = output.length > 500;
 
   // Check if this is a codebase-retrieval output
-  // The output is a JSON string containing an array with {type: "text", text: "..."}
-  // We need to check if the parsed JSON has this structure
-  const isCodebaseRetrievalFormat = parsed &&
-    Array.isArray(parsed) &&
-    parsed.length > 0 &&
-    parsed[0]?.type === "text" &&
-    typeof parsed[0]?.text === "string" &&
-    parsed[0].text.includes("Path:") &&
-    parsed[0].text.includes("code sections");
+  // Format 1: JSON array with [{type: "text", text: "..."}]
+  // Format 2: JSON object with {output: "The following code sections..."}
+  // Format 3: Plain text starting with "The following code sections"
+  const isCodebaseRetrievalFormat = (() => {
+    // Format 1: Array format
+    if (parsed && Array.isArray(parsed) && parsed.length > 0 &&
+        parsed[0]?.type === "text" && typeof parsed[0]?.text === "string" &&
+        parsed[0].text.includes("Path:") && parsed[0].text.includes("code sections")) {
+      return true;
+    }
+
+    // Format 2: Object with output field containing code sections
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const outputField = (parsed as Record<string, unknown>).output;
+      if (typeof outputField === "string" &&
+          outputField.includes("Path:") &&
+          outputField.includes("code sections")) {
+        return true;
+      }
+    }
+
+    // Format 3: Plain text or toolName hint
+    if (toolName === "codebase-retrieval" && output.includes("Path:")) {
+      return true;
+    }
+
+    return false;
+  })();
+
+  // Extract the actual content for codebase-retrieval
+  const codeRetrievalContent = useMemo(() => {
+    if (!isCodebaseRetrievalFormat) return output;
+
+    // Format 2: Object with output field
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const outputField = (parsed as Record<string, unknown>).output;
+      if (typeof outputField === "string") {
+        return outputField;
+      }
+    }
+
+    return output;
+  }, [output, parsed, isCodebaseRetrievalFormat]);
 
   // If it's codebase-retrieval with code sections, always use CodeRetrievalViewer
   if (isCodebaseRetrievalFormat) {
@@ -138,7 +172,7 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
           </span>
         </div>
         <div className="p-2">
-          <CodeRetrievalViewer output={output} initiallyExpanded={true} />
+          <CodeRetrievalViewer output={codeRetrievalContent} initiallyExpanded={true} />
         </div>
       </div>
     );
@@ -387,6 +421,54 @@ function groupDisplayBySession(records: DisplayRecord[]): Map<string, DisplayRec
   return map;
 }
 
+/**
+ * Infer actual tool name from input parameters when name is "other" or "unknown".
+ * This handles cases where the ACP provider doesn't send the correct tool name.
+ */
+function inferToolName(name: string, input: unknown): string {
+  if (name !== "other" && name !== "unknown") {
+    return name;
+  }
+
+  if (!input || typeof input !== "object") {
+    return name;
+  }
+
+  const inputObj = input as Record<string, unknown>;
+
+  // codebase-retrieval: has "information_request" parameter
+  if ("information_request" in inputObj) {
+    return "codebase-retrieval";
+  }
+
+  // file read operations
+  if ("file_path" in inputObj && !("content" in inputObj)) {
+    return "read-file";
+  }
+
+  // file write operations
+  if ("file_path" in inputObj && "content" in inputObj) {
+    return "write-file";
+  }
+
+  // shell/bash commands
+  if ("command" in inputObj) {
+    return "shell";
+  }
+
+  // web search
+  if ("query" in inputObj && "num_results" in inputObj) {
+    return "web-search";
+  }
+
+  // web fetch
+  if ("url" in inputObj && !("query" in inputObj)) {
+    return "web-fetch";
+  }
+
+  return name;
+}
+
 /** Merged Tool View - shows tool call input and result output together */
 function MergedToolView({
   merged,
@@ -395,9 +477,10 @@ function MergedToolView({
   merged: MergedToolRecord;
   formatTime: (timestamp: string) => string;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true); // Default expanded
   const { toolCall, toolResult } = merged;
-  const toolName = toolCall.tool?.name ?? "unknown";
+  const rawToolName = toolCall.tool?.name ?? "unknown";
+  const toolName = inferToolName(rawToolName, toolCall.tool?.input);
   const status = toolResult?.tool?.status ?? toolCall.tool?.status ?? "running";
 
   // Parse output for display
