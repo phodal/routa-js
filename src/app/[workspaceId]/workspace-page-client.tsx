@@ -14,9 +14,9 @@
  * 3. Select a different repository/codebase
  */
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { QuickStartInput } from "@/client/components/quick-start-input";
+import { HomeInput } from "@/client/components/home-input";
 import { useWorkspaces, useCodebases } from "@/client/hooks/use-workspaces";
 import { useAcp } from "@/client/hooks/use-acp";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
@@ -197,12 +197,11 @@ export function WorkspacePageClient() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left/Center - Quick Start Input */}
+        {/* Left/Center - Home Input */}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-5 py-12">
-            <QuickStartInput
+          <div className="max-w-3xl mx-auto px-5 py-12">
+            <HomeInput
               workspaceId={workspaceId}
-              hideWorkspace
               onSessionCreated={(sessionId) => {
                 setRefreshKey((k) => k + 1);
               }}
@@ -286,5 +285,3 @@ export function WorkspacePageClient() {
     </div>
   );
 }
-
-import { useRef } from "react";
