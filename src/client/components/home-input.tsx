@@ -99,19 +99,20 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
 
       try {
         const idempotencyKey = `home-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const wsId = selectedWorkspaceId ?? undefined;
         const result = await acp.createSession(
           context.cwd ?? repoSelection?.path,
           context.provider,
           context.mode,
           selectedRole,
-          workspaceId,
+          wsId,
           context.model,
           idempotencyKey
         );
 
         if (result?.sessionId) {
-          const url = workspaceId
-            ? `/${workspaceId}/${result.sessionId}`
+          const url = wsId
+            ? `/${wsId}/${result.sessionId}`
             : `/${result.sessionId}`;
           onSessionCreated?.(result.sessionId);
           router.push(url);
@@ -122,7 +123,7 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
         setIsSubmitting(false);
       }
     },
-    [acp, repoSelection, selectedRole, workspaceId, router, onSessionCreated]
+    [acp, repoSelection, selectedRole, selectedWorkspaceId, router, onSessionCreated]
   );
 
   return (
@@ -176,6 +177,22 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
           onFetchModels={acp.listProviderModels}
         />
       </div>
+
+      {/* Workspace selector */}
+      {workspacesHook.workspaces.length > 0 && (
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <label className="text-xs text-gray-500 dark:text-gray-400">Workspace:</label>
+          <select
+            value={selectedWorkspaceId ?? ""}
+            onChange={(e) => handleWorkspaceChange(e.target.value || null)}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          >
+            {workspacesHook.workspaces.map((ws) => (
+              <option key={ws.id} value={ws.id}>{ws.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Keyboard hint */}
       <div className="mt-3 text-center text-xs text-gray-400 dark:text-gray-500">

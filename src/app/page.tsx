@@ -173,6 +173,10 @@ export default function HomePage() {
               /* Home Input with TiptapInput */
               <HomeInput
                 workspaceId={activeWorkspaceId ?? undefined}
+                onWorkspaceChange={(wsId) => {
+                  setActiveWorkspaceId(wsId);
+                  setRefreshKey((k) => k + 1);
+                }}
                 onSessionCreated={(sessionId) => {
                   setRefreshKey((k) => k + 1);
                 }}
