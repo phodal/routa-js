@@ -120,17 +120,73 @@ function ThoughtBubble({content}: { content: string }) {
 function formatToolInputInline(rawInput?: Record<string, unknown>, maxLen = 60): string {
     if (!rawInput || Object.keys(rawInput).length === 0) return "";
     // For common tools, show the most relevant param
-    const path = rawInput.file_path ?? rawInput.path ?? rawInput.file;
+    const path = rawInput.file_path ?? rawInput.path ?? rawInput.file ?? rawInput.filePath;
     if (typeof path === "string") return path.length > maxLen ? `…${path.slice(-maxLen)}` : path;
     const cmd = rawInput.command;
     if (typeof cmd === "string") return cmd.length > maxLen ? `${cmd.slice(0, maxLen)}…` : cmd;
     const pattern = rawInput.pattern ?? rawInput.glob_pattern ?? rawInput.query;
     if (typeof pattern === "string") return pattern.length > maxLen ? `${pattern.slice(0, maxLen)}…` : pattern;
+    const infoRequest = rawInput.information_request;
+    if (typeof infoRequest === "string") return infoRequest.length > maxLen ? `${infoRequest.slice(0, maxLen)}…` : infoRequest;
     // Fallback: stringify first key-value
     const firstKey = Object.keys(rawInput)[0];
     const firstVal = rawInput[firstKey];
     const str = typeof firstVal === "string" ? firstVal : JSON.stringify(firstVal);
     return str.length > maxLen ? `${str.slice(0, maxLen)}…` : str;
+}
+
+/**
+ * Check if a string looks like a file path (contains path separators or file extension).
+ */
+function looksLikeFilePath(str: string): boolean {
+    if (!str) return false;
+    // Check for path separators or file extensions
+    return str.includes("/") || str.includes("\\") || /\.[a-z]{1,5}$/i.test(str);
+}
+
+/**
+ * Infer the actual tool name from the title, kind, and input parameters.
+ * Handles cases where providers send file paths as the title instead of tool names.
+ */
+function inferToolName(
+    title: string | undefined,
+    kind: string | undefined,
+    rawInput?: Record<string, unknown>
+): string {
+    // If title is a valid tool name (not a file path), use it
+    if (title && !looksLikeFilePath(title)) {
+        return title;
+    }
+
+    // Use kind if available
+    if (kind) {
+        return kind;
+    }
+
+    // Infer from input parameters
+    if (rawInput) {
+        const hasFilePath = "file_path" in rawInput || "path" in rawInput || "filePath" in rawInput;
+        const hasContent = "content" in rawInput || "file_content" in rawInput;
+        const hasCommand = "command" in rawInput;
+        const hasInfoRequest = "information_request" in rawInput;
+        const hasQuery = "query" in rawInput;
+        const hasPattern = "pattern" in rawInput || "glob_pattern" in rawInput;
+        const hasUrl = "url" in rawInput;
+        const hasOldStr = "old_str" in rawInput || "old_str_1" in rawInput;
+
+        if (hasInfoRequest) return "codebase-retrieval";
+        if (hasOldStr && hasFilePath) return "str-replace-editor";
+        if (hasFilePath && hasContent) return "write-file";
+        if (hasFilePath && !hasContent) return "read-file";
+        if (hasCommand) return "shell";
+        if (hasUrl && hasQuery) return "web-search";
+        if (hasUrl) return "web-fetch";
+        if (hasPattern) return "glob";
+        if (hasQuery) return "search";
+    }
+
+    // Fall back to title (even if it's a file path) or "tool"
+    return title ?? "tool";
 }
 
 /**
@@ -299,9 +355,14 @@ function ToolBubble({
                 : toolStatus === "in_progress" || toolStatus === "running" || toolStatus === "streaming" ? "bg-yellow-500 animate-pulse"
                     : "bg-gray-400";
 
+    // Infer the actual tool name - handles cases where providers send file paths as title
+    const displayName = inferToolName(toolName, toolKind, rawInput);
+    // Use inferred name for kind normalization if toolKind is not set
+    const effectiveKind = toolKind ?? displayName;
+
     const inputPreview = formatToolInputInline(rawInput);
-    const styling = getToolStyling(toolKind);
-    const icon = getToolIcon(toolKind, toolName);
+    const styling = getToolStyling(effectiveKind);
+    const icon = getToolIcon(effectiveKind, displayName);
     const hasInput = rawInput && Object.keys(rawInput).length > 0;
     const outputText = extractOutputFromContent(content, toolName);
     const hasOutput = !!outputText;
@@ -316,7 +377,7 @@ function ToolBubble({
                 <span className={`shrink-0 ${styling.iconColorClass}`}>{icon}</span>
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor}`}/>
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex-1">
-                    {toolName ?? "tool"}
+                    {displayName}
                 </span>
                 {inputPreview && (
                     <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate max-w-[40%]">
