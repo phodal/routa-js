@@ -465,6 +465,12 @@ export function SessionPageClient() {
     }
   }, [isSessionEmpty]);
 
+  /** Resolve effective provider: explicit > per-role default > global selection */
+  const resolveProvider = useCallback((explicit?: string) => {
+    const defaults = loadDefaultProviders();
+    return explicit || defaults[selectedAgent] || acp.selectedProvider;
+  }, [selectedAgent, acp.selectedProvider]);
+
   const handleCreateSession = useCallback(
     async (provider: string) => {
       await ensureConnected();
@@ -475,9 +481,7 @@ export function SessionPageClient() {
       const cwd = repoSelection?.path ?? undefined;
       // Always pass the selected role - don't skip CRAFTER
       const role = selectedAgent;
-      // Use configured default provider for this role if caller didn't specify one
-      const defaults = loadDefaultProviders();
-      const effectiveProvider = provider || defaults[role] || acp.selectedProvider;
+      const effectiveProvider = resolveProvider(provider);
       console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, role=${role}`);
       const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId);
       if (result?.sessionId) {
@@ -507,9 +511,7 @@ export function SessionPageClient() {
 
     // Fallback: create a new session
     const role = selectedAgent;
-    // Use configured default provider for this role when no explicit provider given
-    const defaults = loadDefaultProviders();
-    const effectiveProvider = provider ?? defaults[role] ?? acp.selectedProvider;
+    const effectiveProvider = resolveProvider(provider);
     console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${model}`);
     const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, model);
     if (result?.sessionId) {
