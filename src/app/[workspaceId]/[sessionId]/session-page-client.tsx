@@ -488,7 +488,7 @@ export function SessionPageClient() {
         router.push(`/${workspaceId}/${result.sessionId}`);
       }
     },
-    [acp, ensureConnected, repoSelection, selectedAgent, sessionId, deleteEmptySession, workspaceId, router]
+    [acp, ensureConnected, repoSelection, selectedAgent, sessionId, deleteEmptySession, workspaceId, router, resolveProvider]
   );
 
   const handleSelectSession = useCallback(
@@ -519,7 +519,7 @@ export function SessionPageClient() {
       return result.sessionId;
     }
     return null;
-  }, [acp, sessionId, ensureConnected, selectedAgent, workspaceId, router]);
+  }, [acp, sessionId, ensureConnected, selectedAgent, workspaceId, router, resolveProvider]);
 
   const handleLoadSkill = useCallback(async (name: string): Promise<string | null> => {
     const skill = await skillsHook.loadSkill(name, repoSelection?.path);
@@ -1099,7 +1099,7 @@ export function SessionPageClient() {
 
               {/* New session button */}
               <button
-                onClick={() => handleCreateSession(acp.selectedProvider)}
+                onClick={() => handleCreateSession("")}
                 disabled={acp.providers.length === 0 || !acp.selectedProvider}
                 className="p-1.5 rounded-md text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title="New Session"
@@ -1170,7 +1170,7 @@ export function SessionPageClient() {
           <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
             <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sessions</span>
             <button
-              onClick={() => handleCreateSession(acp.selectedProvider)}
+              onClick={() => handleCreateSession("")}
               disabled={acp.providers.length === 0 || !acp.selectedProvider}
               className="px-2 py-0.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -1228,6 +1228,9 @@ export function SessionPageClient() {
             </button>
           </div>
 
+            </>
+          )}
+
           {/* Left sidebar resize handle */}
           <div
             className="left-resize-handle hidden md:block"
@@ -1235,8 +1238,6 @@ export function SessionPageClient() {
           >
             <div className="resize-indicator" />
           </div>
-            </>
-          )}
         </aside>
 
         {/* ─── Chat Area ──────────────────────────────────────────── */}
