@@ -291,6 +291,78 @@ function ToolInputTable({ input }: { input: unknown }) {
   );
 }
 
+/** A merged tool call + result record */
+interface MergedToolRecord {
+  type: "merged_tool";
+  toolCall: TraceRecord;
+  toolResult?: TraceRecord;
+  toolCallId: string;
+}
+
+/** A regular trace record or a merged tool record */
+type DisplayRecord = TraceRecord | MergedToolRecord;
+
+function isMergedTool(record: DisplayRecord): record is MergedToolRecord {
+  return (record as MergedToolRecord).type === "merged_tool";
+}
+
+/**
+ * Merge tool_call and tool_result traces by toolCallId.
+ * Returns a mixed array of regular traces and merged tool records.
+ */
+function mergeToolTraces(traces: TraceRecord[]): DisplayRecord[] {
+  const result: DisplayRecord[] = [];
+  const toolCallMap = new Map<string, { call: TraceRecord; resultIndex: number | null }>();
+  const processedResultIds = new Set<string>();
+
+  // First pass: find all tool_calls and their matching tool_results
+  for (const trace of traces) {
+    if (trace.eventType === "tool_call" && trace.tool?.toolCallId) {
+      toolCallMap.set(trace.tool.toolCallId, { call: trace, resultIndex: null });
+    }
+  }
+
+  // Second pass: match tool_results to their tool_calls
+  for (const trace of traces) {
+    if (trace.eventType === "tool_result" && trace.tool?.toolCallId) {
+      const callEntry = toolCallMap.get(trace.tool.toolCallId);
+      if (callEntry) {
+        processedResultIds.add(trace.id);
+      }
+    }
+  }
+
+  // Build the result array
+  for (const trace of traces) {
+    if (trace.eventType === "tool_call" && trace.tool?.toolCallId) {
+      // Find matching result
+      const matchingResult = traces.find(
+        (t) =>
+          t.eventType === "tool_result" &&
+          t.tool?.toolCallId === trace.tool?.toolCallId
+      );
+      result.push({
+        type: "merged_tool",
+        toolCall: trace,
+        toolResult: matchingResult,
+        toolCallId: trace.tool.toolCallId,
+      });
+    } else if (trace.eventType === "tool_result" && trace.tool?.toolCallId) {
+      // Skip if already merged with a tool_call
+      if (processedResultIds.has(trace.id)) {
+        continue;
+      }
+      // Orphan result (no matching call) - still show it
+      result.push(trace);
+    } else {
+      // All other event types
+      result.push(trace);
+    }
+  }
+
+  return result;
+}
+
 /** Group traces by sessionId, preserving insertion order */
 function groupBySession(traces: TraceRecord[]): Map<string, TraceRecord[]> {
   const map = new Map<string, TraceRecord[]>();
@@ -300,6 +372,159 @@ function groupBySession(traces: TraceRecord[]): Map<string, TraceRecord[]> {
     map.get(sid)!.push(trace);
   }
   return map;
+}
+
+/** Group display records by sessionId */
+function groupDisplayBySession(records: DisplayRecord[]): Map<string, DisplayRecord[]> {
+  const map = new Map<string, DisplayRecord[]>();
+  for (const record of records) {
+    const sid = isMergedTool(record)
+      ? record.toolCall.sessionId || "unknown"
+      : record.sessionId || "unknown";
+    if (!map.has(sid)) map.set(sid, []);
+    map.get(sid)!.push(record);
+  }
+  return map;
+}
+
+/** Merged Tool View - shows tool call input and result output together */
+function MergedToolView({
+  merged,
+  formatTime,
+}: {
+  merged: MergedToolRecord;
+  formatTime: (timestamp: string) => string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { toolCall, toolResult } = merged;
+  const toolName = toolCall.tool?.name ?? "unknown";
+  const status = toolResult?.tool?.status ?? toolCall.tool?.status ?? "running";
+
+  // Parse output for display
+  const rawOutput = toolResult?.tool?.output;
+  const outputStr =
+    rawOutput == null
+      ? ""
+      : typeof rawOutput === "string"
+        ? rawOutput
+        : JSON.stringify(rawOutput, null, 2);
+
+  const hasOutput = !!outputStr;
+
+  return (
+    <div className="px-4 py-2.5 flex gap-3 border-l-2 border-orange-300 dark:border-orange-700">
+      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
+        {formatTime(toolCall.timestamp)}
+      </span>
+      <div className="flex-1 min-w-0">
+        {/* Tool header row with expand toggle */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+          >
+            <svg
+              className={`w-3 h-3 text-gray-400 transition-transform ${expanded ? "rotate-90" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wide">
+              Tool
+            </span>
+          </button>
+          <code className="text-[11px] font-mono font-semibold px-2 py-0.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded border border-orange-100 dark:border-orange-800/40">
+            {toolName}
+          </code>
+          <span
+            className={`text-[10px] font-medium ${
+              status === "completed"
+                ? "text-green-600 dark:text-green-400"
+                : status === "failed"
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-yellow-600 dark:text-yellow-400"
+            }`}
+          >
+            {status}
+          </span>
+          {toolResult && (
+            <span className="text-[9px] text-gray-400 dark:text-gray-500">
+              → {formatTime(toolResult.timestamp)}
+            </span>
+          )}
+        </div>
+
+        {/* Collapsed preview or expanded details */}
+        {!expanded ? (
+          // Collapsed: show brief input summary
+          <div
+            onClick={() => setExpanded(true)}
+            className="cursor-pointer text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            {toolCall.tool?.input
+              ? typeof toolCall.tool.input === "string"
+                ? toolCall.tool.input.slice(0, 100)
+                : JSON.stringify(toolCall.tool.input).slice(0, 100)
+              : "(no input)"}
+            {(toolCall.tool?.input?.toString().length ?? 0) > 100 && "…"}
+          </div>
+        ) : (
+          // Expanded: show full input and output
+          <div className="space-y-2">
+            {/* Input parameters */}
+            {toolCall.tool && (
+              <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
+                <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
+                  <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    Input Parameters
+                  </span>
+                </div>
+                <div className="px-2 py-1.5 bg-white dark:bg-gray-900/40">
+                  <ToolInputTable input={toolCall.tool} />
+                </div>
+              </div>
+            )}
+
+            {/* Files affected */}
+            {toolCall.files && toolCall.files.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {toolCall.files.map((f, i) => (
+                  <span
+                    key={i}
+                    className="text-[9px] font-mono px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded border border-gray-200 dark:border-gray-700"
+                  >
+                    {f.operation && (
+                      <span className="text-blue-500 dark:text-blue-400 mr-1">
+                        {f.operation}
+                      </span>
+                    )}
+                    {f.path}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Output */}
+            {hasOutput && (
+              <div className="rounded-md border border-cyan-200 dark:border-cyan-800/40 overflow-hidden">
+                <ToolOutput output={outputStr} toolName={toolName} />
+              </div>
+            )}
+
+            {/* No output yet */}
+            {!toolResult && (
+              <div className="text-[10px] text-yellow-600 dark:text-yellow-400 italic">
+                ⏳ Waiting for result...
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function TracePanel({ sessionId }: TracePanelProps) {
@@ -388,12 +613,34 @@ export function TracePanel({ sessionId }: TracePanelProps) {
     }
   }, [sessionId]);
 
-  const filteredTraces = useMemo(
-    () => (filter === "all" ? traces : traces.filter((t) => t.eventType === filter)),
-    [traces, filter],
-  );
+  // Merge tool_call and tool_result by toolCallId
+  const mergedRecords = useMemo(() => mergeToolTraces(traces), [traces]);
 
-  const sessionGroups = useMemo(() => groupBySession(filteredTraces), [filteredTraces]);
+  // Filter records based on selected filter
+  const filteredRecords = useMemo(() => {
+    if (filter === "all") return mergedRecords;
+    if (filter === "tools") {
+      // Show only merged tool records
+      return mergedRecords.filter((r) => isMergedTool(r));
+    }
+    // For tool_call or tool_result filters, show the merged view but only matching items
+    if (filter === "tool_call" || filter === "tool_result") {
+      return mergedRecords.filter((r) => {
+        if (isMergedTool(r)) return true; // Show merged tools
+        return r.eventType === filter;
+      });
+    }
+    // For other filters, show non-merged items matching the filter
+    return mergedRecords.filter((r) => {
+      if (isMergedTool(r)) return false;
+      return r.eventType === filter;
+    });
+  }, [mergedRecords, filter]);
+
+  const sessionGroups = useMemo(
+    () => groupDisplayBySession(filteredRecords),
+    [filteredRecords]
+  );
 
 
 
@@ -469,8 +716,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
             { key: "all", label: "All", active: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" },
             { key: "user_message", label: "User", active: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" },
             { key: "agent_message", label: "Agent", active: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300" },
-            { key: "tool_call", label: "Tool Calls", active: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" },
-            { key: "tool_result", label: "Tool Results", active: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300" },
+            { key: "tools", label: "Tools", active: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" },
             { key: "agent_thought", label: "Thoughts", active: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300" },
           ] as const
         ).map(({ key, label, active }) => (
@@ -496,7 +742,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
       )}
 
       {/* Empty state */}
-      {!loading && !error && filteredTraces.length === 0 && (
+      {!loading && !error && filteredRecords.length === 0 && (
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center">
             <svg
@@ -521,7 +767,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
 
       {/* Trace content - grouped by session */}
       <div className="flex-1 overflow-y-auto">
-        {Array.from(sessionGroups.entries()).map(([sid, sessionTraces]) => (
+        {Array.from(sessionGroups.entries()).map(([sid, sessionRecords]) => (
           <div key={sid}>
             {/* Session section header */}
             <div className="sticky top-0 z-10 px-4 py-1.5 bg-gray-100 dark:bg-gray-800/90 backdrop-blur border-y border-gray-200 dark:border-gray-700 flex items-center gap-2">
@@ -532,13 +778,25 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                 {sid.length > 16 ? `${sid.slice(0, 8)}…${sid.slice(-4)}` : sid}
               </span>
               <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500">
-                {sessionTraces.length} events
+                {sessionRecords.length} events
               </span>
             </div>
 
             {/* Events */}
             <div className="divide-y divide-gray-100 dark:divide-gray-800/60">
-              {sessionTraces.map((trace) => {
+              {sessionRecords.map((record) => {
+                /* ── Merged Tool (call + result) ── */
+                if (isMergedTool(record)) {
+                  return (
+                    <MergedToolView
+                      key={record.toolCallId}
+                      merged={record}
+                      formatTime={formatTime}
+                    />
+                  );
+                }
+
+                const trace = record;
 
                 /* ── Session lifecycle ── */
                 if (trace.eventType === "session_start" || trace.eventType === "session_end") {
@@ -632,73 +890,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
                   );
                 }
 
-                /* ── Tool call ── */
-                if (trace.eventType === "tool_call") {
-                  return (
-                    <div key={trace.id} className="px-4 py-2.5 flex gap-3 border-l-2 border-orange-300 dark:border-orange-700">
-                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
-                        {formatTime(trace.timestamp)}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        {/* Tool header row */}
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wide">
-                            Tool
-                          </span>
-                          <code className="text-[11px] font-mono font-semibold px-2 py-0.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded border border-orange-100 dark:border-orange-800/40">
-                            {trace.tool?.name ?? "unknown"}
-                          </code>
-                          {trace.tool?.status && (
-                            <span
-                              className={`text-[10px] font-medium ${
-                                trace.tool.status === "completed"
-                                  ? "text-green-600 dark:text-green-400"
-                                  : trace.tool.status === "failed"
-                                    ? "text-red-600 dark:text-red-400"
-                                    : "text-yellow-600 dark:text-yellow-400"
-                              }`}
-                            >
-                              {trace.tool.status}
-                            </span>
-                          )}
-                        </div>
-                        {/* Input parameters table */}
-                        {trace.tool != null && (
-                          <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-                            <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
-                              <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                                Input Parameters
-                              </span>
-                            </div>
-                            <div className="px-2 py-1.5 bg-white dark:bg-gray-900/40">
-                              <ToolInputTable input={trace.tool} />
-                            </div>
-                          </div>
-                        )}
-                        {/* Files affected */}
-                        {trace.files && trace.files.length > 0 && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {trace.files.map((f, i) => (
-                              <span
-                                key={i}
-                                className="text-[9px] font-mono px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded border border-gray-200 dark:border-gray-700"
-                              >
-                                {f.operation && (
-                                  <span className="text-blue-500 dark:text-blue-400 mr-1">
-                                    {f.operation}
-                                  </span>
-                                )}
-                                {f.path}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-
-                /* ── Tool result ── */
+                /* ── Orphan Tool result (no matching call) ── */
                 if (trace.eventType === "tool_result") {
                   const rawOutput = trace.tool?.output;
                   const outputStr =
