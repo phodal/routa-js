@@ -211,9 +211,9 @@ export function WorkspacePageClient() {
         </main>
 
         {/* Right Sidebar - Recent Sessions & Skills */}
-        <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#13151d] flex flex-col overflow-y-auto hidden lg:flex">
-          {/* Recent Sessions */}
-          <div className="flex-1">
+        <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#13151d] flex flex-col overflow-hidden hidden lg:flex">
+          {/* Recent Sessions - scrollable with max height */}
+          <div className="flex-1 min-h-0 max-h-[50%] overflow-y-auto">
             <SessionPanel
               selectedSessionId={null}
               onSelect={handleSessionClick}
@@ -224,10 +224,10 @@ export function WorkspacePageClient() {
           </div>
 
           {/* Divider */}
-          <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800" />
+          <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800 shrink-0" />
 
-          {/* Skills */}
-          <div className="flex-1">
+          {/* Skills - scrollable, takes remaining space */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <SkillPanel />
           </div>
         </aside>

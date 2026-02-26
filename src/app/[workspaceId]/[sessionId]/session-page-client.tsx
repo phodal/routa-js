@@ -994,8 +994,8 @@ export function SessionPageClient() {
             </button>
           </div>
 
-          {/* Sessions + Skills */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Sessions - scrollable with max height */}
+          <div className="flex-1 min-h-0 max-h-[50%] overflow-y-auto">
             <SessionPanel
               selectedSessionId={sessionId}
               onSelect={handleSelectSession}
@@ -1007,11 +1007,13 @@ export function SessionPageClient() {
                 }
               }}
             />
+          </div>
 
-            {/* Divider */}
-            <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800" />
+          {/* Divider */}
+          <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800 shrink-0" />
 
-            {/* Skills */}
+          {/* Skills - scrollable, takes remaining space */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <SkillPanel
               skillsHook={skillsHook}
             />

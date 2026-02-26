@@ -48,7 +48,7 @@ export function SkillPanel({ skillsHook: externalHook }: SkillPanelProps) {
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   const handleSkillClick = useCallback(
     async (name: string) => {
