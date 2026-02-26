@@ -18,6 +18,7 @@ import type { TraceRecord } from "@/core/trace";
 import { CodeBlock } from "./code-block";
 import { CodeRetrievalViewer } from "./code-retrieval-viewer";
 import { FileOutputViewer, parseFileOutput } from "./file-output-viewer";
+import { MarkdownViewer } from "./markdown/markdown-viewer";
 
 interface TracePanelProps {
   sessionId: string | null;
@@ -178,12 +179,90 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
     );
   }
 
-  // Check if this is a search/read tool output with special format
-  // These tools output JSON with an "output" field containing the actual content
-  const isSearchOrRead = toolName === "search" || toolName === "read";
+  // Extract inner output from JSON wrapper (common pattern: {output: "..."})
   const innerOutput = parsed && typeof parsed === "object" && "output" in parsed
     ? (parsed as { output: string }).output
     : null;
+
+  // Check if content is rich text/markdown (has many newlines, markdown-like patterns)
+  // This is useful for web-fetch results that return HTML converted to markdown
+  const isRichTextContent = useMemo(() => {
+    const contentToCheck = typeof innerOutput === "string" ? innerOutput : output;
+    if (!contentToCheck || contentToCheck.length < 200) return false;
+
+    // Count newlines - rich content typically has many
+    const newlineCount = (contentToCheck.match(/\n/g) || []).length;
+    if (newlineCount < 10) return false;
+
+    // Check for markdown-like patterns
+    const hasMarkdownHeaders = /^#{1,6}\s+/m.test(contentToCheck);
+    const hasMarkdownLinks = /\[.+?\]\(.+?\)/.test(contentToCheck);
+    const hasMarkdownLists = /^[\s]*[-*+]\s+/m.test(contentToCheck);
+    const hasMarkdownBold = /\*\*[^*]+\*\*/.test(contentToCheck);
+    const hasHtmlTags = /<[a-z][^>]*>/i.test(contentToCheck);
+
+    // If it has multiple markdown indicators, treat as rich text
+    const markdownScore = [hasMarkdownHeaders, hasMarkdownLinks, hasMarkdownLists, hasMarkdownBold, hasHtmlTags]
+      .filter(Boolean).length;
+
+    // Also check for web-fetch tool specifically
+    if (toolName === "web-fetch" || toolName === "fetch") {
+      return newlineCount >= 5;
+    }
+
+    return markdownScore >= 2 || (newlineCount > 30 && markdownScore >= 1);
+  }, [output, innerOutput, toolName]);
+
+  // Render rich text content with MarkdownViewer
+  const [richTextExpanded, setRichTextExpanded] = useState(false);
+  const richTextContent = typeof innerOutput === "string" ? innerOutput : output;
+
+  if (isRichTextContent && !isCodebaseRetrievalFormat) {
+    return (
+      <div>
+        <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+          <button
+            onClick={() => setRichTextExpanded(!richTextExpanded)}
+            className="flex items-center gap-1.5 text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <svg
+              className={`w-3 h-3 transition-transform ${richTextExpanded ? "rotate-90" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            Output (Rendered)
+          </button>
+          <span className="text-[9px] text-gray-400 dark:text-gray-500">
+            {richTextContent.length} chars
+          </span>
+        </div>
+        {richTextExpanded ? (
+          <div className="p-3 max-h-[500px] overflow-y-auto bg-white dark:bg-gray-900/40">
+            <MarkdownViewer
+              content={richTextContent}
+              className="text-xs prose prose-sm dark:prose-invert max-w-none"
+            />
+          </div>
+        ) : (
+          <div
+            onClick={() => setRichTextExpanded(true)}
+            className="px-3 py-2 text-[10px] text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40 line-clamp-3"
+          >
+            {richTextContent.slice(0, 200).replace(/\n/g, " ")}
+            {richTextContent.length > 200 && "…"}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Check if this is a search/read tool output with special format
+  // These tools output JSON with an "output" field containing the actual content
+  const isSearchOrRead = toolName === "search" || toolName === "read";
 
   if (isSearchOrRead && innerOutput) {
     const fileOutputParsed = parseFileOutput(innerOutput, toolName);

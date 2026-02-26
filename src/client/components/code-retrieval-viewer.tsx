@@ -25,105 +25,124 @@ interface CodeSection {
 function parseCodeRetrievalOutput(output: string): CodeSection[] {
   const sections: CodeSection[] = [];
 
+  // Helper to extract code sections from text content
+  const extractSectionsFromText = (text: string) => {
+    // Split by "Path:" to find each code section
+    // The format is: "Path: <filepath>\n     1\tcode\n     2\tcode..."
+    const pathMatches = [...text.matchAll(/Path:\s*([^\n]+)/g)];
+
+    if (pathMatches.length > 0) {
+      for (let i = 0; i < pathMatches.length; i++) {
+        const match = pathMatches[i];
+        const path = match[1]?.trim();
+        const pathStart = match.index ?? 0;
+
+        // Get content from after this path to the next path (or end)
+        const nextPathStart = i < pathMatches.length - 1
+          ? (pathMatches[i + 1].index ?? text.length)
+          : text.length;
+
+        // Extract the code section (starts after the path line)
+        const afterPath = text.slice(pathStart + match[0].length, nextPathStart);
+        const lines = afterPath.split("\n");
+
+        // Skip empty lines at the start, find first line with code
+        let firstCodeLine = -1;
+        let startLine = 1;
+        const cleanedLines: string[] = [];
+
+        for (let j = 0; j < lines.length; j++) {
+          const line = lines[j];
+
+          // Match format: "     1\tcode" or "1\tcode"
+          // The line number is separated by a tab
+          const lineMatch = line.match(/^\s*(\d+)\t(.*)$/);
+
+          if (lineMatch) {
+            if (firstCodeLine === -1) {
+              firstCodeLine = j;
+              startLine = parseInt(lineMatch[1], 10);
+            }
+            cleanedLines.push(lineMatch[2]); // Keep the code part
+          } else if (firstCodeLine !== -1 && line.trim() !== "") {
+            // We've started collecting code, but this line doesn't have a line number
+            // Keep it as-is (might be a continuation or blank line in code)
+            cleanedLines.push(line);
+          }
+          // Ignore lines before we find the first code line
+        }
+
+        if (cleanedLines.length > 0) {
+          // Detect language from file extension
+          const ext = path.split(".").pop()?.toLowerCase();
+          const langMap: Record<string, string> = {
+            rs: "rust",
+            ts: "typescript",
+            js: "javascript",
+            jsx: "jsx",
+            tsx: "tsx",
+            py: "python",
+            json: "json",
+            yaml: "yaml",
+            yml: "yaml",
+            md: "markdown",
+            css: "css",
+            html: "html",
+            htm: "html",
+            sql: "sql",
+            go: "go",
+            java: "java",
+            cpp: "cpp",
+            c: "c",
+            h: "c",
+            cs: "csharp",
+            php: "php",
+            rb: "ruby",
+            sh: "bash",
+          };
+
+          sections.push({
+            path,
+            code: cleanedLines.join("\n"),
+            startLine,
+            language: ext && langMap[ext] ? langMap[ext] : "text",
+          });
+        }
+      }
+    }
+  };
+
+  // Format 1: Plain text starting with "The following code sections"
+  if (output.includes("code sections") && output.includes("Path:")) {
+    extractSectionsFromText(output);
+    return sections;
+  }
+
   try {
     // Parse the JSON output
     const parsed = JSON.parse(output);
 
-    // Handle array format
+    // Format 2: Object with "output" field (e.g., {output: "The following..."})
+    if (typeof parsed === "object" && parsed !== null && "output" in parsed) {
+      const text = parsed.output as string;
+      if (typeof text === "string") {
+        extractSectionsFromText(text);
+        return sections;
+      }
+    }
+
+    // Format 3: Array format [{type: "text", text: "..."}]
     const items = Array.isArray(parsed) ? parsed : [parsed];
 
     for (const item of items) {
       if (typeof item === "object" && item !== null && "text" in item) {
         const text = item.text as string;
-
-        // Split by "Path:" to find each code section
-        // The format is: "Path: <filepath>\n     1\tcode\n     2\tcode..."
-        const pathMatches = [...text.matchAll(/Path:\s*([^\n]+)/g)];
-
-        if (pathMatches.length > 0) {
-          for (let i = 0; i < pathMatches.length; i++) {
-            const match = pathMatches[i];
-            const path = match[1]?.trim();
-            const pathStart = match.index ?? 0;
-
-            // Get content from after this path to the next path (or end)
-            const nextPathStart = i < pathMatches.length - 1
-              ? (pathMatches[i + 1].index ?? text.length)
-              : text.length;
-
-            // Extract the code section (starts after the path line)
-            const afterPath = text.slice(pathStart + match[0].length, nextPathStart);
-            const lines = afterPath.split("\n");
-
-            // Skip empty lines at the start, find first line with code
-            let firstCodeLine = -1;
-            let startLine = 1;
-            const cleanedLines: string[] = [];
-
-            for (let j = 0; j < lines.length; j++) {
-              const line = lines[j];
-
-              // Match format: "     1\tcode" or "1\tcode"
-              // The line number is separated by a tab
-              const lineMatch = line.match(/^\s*(\d+)\t(.*)$/);
-
-              if (lineMatch) {
-                if (firstCodeLine === -1) {
-                  firstCodeLine = j;
-                  startLine = parseInt(lineMatch[1], 10);
-                }
-                cleanedLines.push(lineMatch[2]); // Keep the code part
-              } else if (firstCodeLine !== -1 && line.trim() !== "") {
-                // We've started collecting code, but this line doesn't have a line number
-                // Keep it as-is (might be a continuation or blank line in code)
-                cleanedLines.push(line);
-              }
-              // Ignore lines before we find the first code line
-            }
-
-            if (cleanedLines.length > 0) {
-              // Detect language from file extension
-              const ext = path.split(".").pop()?.toLowerCase();
-              const langMap: Record<string, string> = {
-                rs: "rust",
-                ts: "typescript",
-                js: "javascript",
-                jsx: "jsx",
-                tsx: "tsx",
-                py: "python",
-                json: "json",
-                yaml: "yaml",
-                yml: "yaml",
-                md: "markdown",
-                css: "css",
-                html: "html",
-                htm: "html",
-                sql: "sql",
-                go: "go",
-                java: "java",
-                cpp: "cpp",
-                c: "c",
-                h: "c",
-                cs: "csharp",
-                php: "php",
-                rb: "ruby",
-                sh: "bash",
-              };
-
-              sections.push({
-                path,
-                code: cleanedLines.join("\n"),
-                startLine,
-                language: ext && langMap[ext] ? langMap[ext] : "text",
-              });
-            }
-          }
-        }
+        extractSectionsFromText(text);
       }
     }
   } catch (e) {
-    // If JSON parsing fails, return empty
-    console.error("Failed to parse codebase-retrieval output:", e);
+    // If JSON parsing fails, try plain text extraction
+    console.error("Failed to parse codebase-retrieval output as JSON:", e);
   }
 
   return sections;
