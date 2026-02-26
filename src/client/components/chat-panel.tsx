@@ -270,9 +270,9 @@ export function ChatPanel({
             break;
           }
           case "tool_call": {
-            const title = (update.title as string) ?? "tool";
-            const status = (update.status as string) ?? "completed";
             const toolKind = update.kind as string | undefined;
+            const title = (update.title as string) ?? toolKind ?? "tool";
+            const status = (update.status as string) ?? "completed";
             const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
               ? update.rawInput as Record<string, unknown>
               : undefined;
@@ -524,7 +524,8 @@ export function ChatPanel({
             const toolCallId = update.toolCallId as string | undefined;
             const status = update.status as string | undefined;
             const delegatedTaskId = update.delegatedTaskId as string | undefined;
-            const toolName = update.title as string | undefined;
+            const toolKind = update.kind as string | undefined;
+            const toolName = (update.title as string) ?? toolKind;
             const rawOutput = typeof update.rawOutput === "string" ? update.rawOutput : undefined;
             const rawInput = (typeof update.rawInput === "object" && update.rawInput !== null)
               ? update.rawInput as Record<string, unknown>
@@ -559,11 +560,13 @@ export function ChatPanel({
                   ...existing,
                   toolStatus: status ?? existing.toolStatus,
                   toolName: toolName ?? existing.toolName,
-                  toolKind: (update.kind as string) ?? existing.toolKind,
+                  toolKind: toolKind ?? existing.toolKind,
                   // Save delegatedTaskId for matching with task_completion
                   delegatedTaskId: delegatedTaskId ?? existing.delegatedTaskId,
+                  // Update rawInput if provided (for OpenCode deferred input)
+                  toolRawInput: rawInput ?? existing.toolRawInput,
                   content: outputParts.length
-                    ? `${existing.toolName ?? "tool"}\n\nOutput:\n${outputParts.join("\n")}`
+                    ? `${existing.toolName ?? toolName ?? "tool"}\n\nOutput:\n${outputParts.join("\n")}`
                     : existing.content,
                 };
               } else {
@@ -574,6 +577,9 @@ export function ChatPanel({
                   timestamp: new Date(),
                   toolStatus: status ?? "completed",
                   toolCallId,
+                  toolName,
+                  toolKind,
+                  toolRawInput: rawInput,
                   delegatedTaskId,
                 });
               }

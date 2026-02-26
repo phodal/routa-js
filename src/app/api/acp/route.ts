@@ -40,6 +40,8 @@ import {
   withConversation,
   recordTrace,
 } from "@/core/trace";
+import { getDatabaseDriver, getPostgresDatabase } from "@/core/db/index";
+import { PgAcpSessionStore } from "@/core/db/pg-acp-session-store";
 
 export const dynamic = "force-dynamic";
 
@@ -309,6 +311,7 @@ export async function POST(request: NextRequest) {
 
       // Persist session for UI listing
       const workspaceId = (p.workspaceId as string) || "default";
+      const now = new Date();
       store.upsertSession({
         sessionId,
         cwd,
@@ -317,8 +320,33 @@ export async function POST(request: NextRequest) {
         provider,
         role: role ?? "CRAFTER",
         modeId,
-        createdAt: new Date().toISOString(),
+        createdAt: now.toISOString(),
       });
+
+      // Also persist to database for serverless session recovery
+      if (isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
+        try {
+          const db = getPostgresDatabase();
+          const pgStore = new PgAcpSessionStore(db);
+          await pgStore.save({
+            id: sessionId,
+            cwd,
+            workspaceId,
+            routaAgentId: routaAgentId ?? acpSessionId,
+            provider,
+            role: role ?? "CRAFTER",
+            modeId,
+            firstPromptSent: false,
+            messageHistory: [],
+            createdAt: now,
+            updatedAt: now,
+          });
+          console.log(`[ACP Route] Session persisted to database: ${sessionId}`);
+        } catch (err) {
+          console.error(`[ACP Route] Failed to persist session to database:`, err);
+          // Continue anyway - HTTP session store is the primary store
+        }
+      }
 
       console.log(
         `[ACP Route] Session created: ${sessionId} (provider: ${provider}, agent session: ${acpSessionId}, role: ${role ?? "CRAFTER"})`
@@ -422,8 +450,22 @@ export async function POST(request: NextRequest) {
       recordTrace(sessionRecord?.cwd ?? process.cwd(), userMsgTrace);
 
       // ── Claude Code SDK session (serverless) ────────────────────────
-      if (manager.isClaudeCodeSdkSession(sessionId)) {
-        const adapter = manager.getClaudeCodeSdkAdapter(sessionId);
+      // Use async version to check database in serverless cold starts
+      if (await manager.isClaudeCodeSdkSessionAsync(sessionId)) {
+        // Use getOrRecreate to handle serverless cold starts - recreate adapter if needed
+        const adapter = await manager.getOrRecreateClaudeCodeSdkAdapter(
+          sessionId,
+          (msg) => {
+            if (msg.method === "session/update" && msg.params) {
+              const params = msg.params as Record<string, unknown>;
+              store.pushNotification({
+                ...params,
+                sessionId,
+              } as never);
+            }
+          }
+        );
+
         if (!adapter) {
           return jsonrpcResponse(id ?? null, null, {
             code: -32000,
@@ -523,10 +565,23 @@ export async function POST(request: NextRequest) {
 
       if (sessionId) {
         const manager = getAcpProcessManager();
+        const store = getHttpSessionStore();
 
         // Check if Claude Code SDK session
         if (manager.isClaudeCodeSdkSession(sessionId)) {
-          const adapter = manager.getClaudeCodeSdkAdapter(sessionId);
+          // Try to get existing adapter, or recreate for cancel (though cancel is less critical)
+          const adapter = await manager.getOrRecreateClaudeCodeSdkAdapter(
+            sessionId,
+            (msg) => {
+              if (msg.method === "session/update" && msg.params) {
+                const params = msg.params as Record<string, unknown>;
+                store.pushNotification({
+                  ...params,
+                  sessionId,
+                } as never);
+              }
+            }
+          );
           if (adapter) {
             adapter.cancel();
           }

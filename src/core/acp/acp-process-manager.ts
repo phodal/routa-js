@@ -5,6 +5,9 @@ import {ensureMcpForProvider, providerSupportsMcp} from "@/core/acp/mcp-setup";
 import {OpencodeSdkAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl} from "@/core/acp/opencode-sdk-adapter";
 import {ClaudeCodeSdkAdapter, shouldUseClaudeCodeSdkAdapter} from "@/core/acp/claude-code-sdk-adapter";
 import {isServerlessEnvironment} from "@/core/acp/api-based-providers";
+import {getHttpSessionStore} from "@/core/acp/http-session-store";
+import {getDatabaseDriver, getPostgresDatabase} from "@/core/db/index";
+import {PgAcpSessionStore} from "@/core/db/pg-acp-session-store";
 
 /**
  * A managed Claude Code process (separate from standard ACP).
@@ -264,9 +267,85 @@ export class AcpProcessManager {
 
     /**
      * Get the Claude Code SDK adapter for a session.
+     * Returns existing adapter from memory, or undefined if not found.
+     * Use getOrRecreateClaudeCodeSdkAdapter for serverless environments.
      */
     getClaudeCodeSdkAdapter(sessionId: string): ClaudeCodeSdkAdapter | undefined {
         return this.claudeCodeSdkAdapters.get(sessionId)?.adapter;
+    }
+
+    /**
+     * Get or recreate a Claude Code SDK adapter for serverless environments.
+     * If the session exists in HTTP store or database with provider 'claude-code-sdk' but
+     * the adapter is not in memory (due to serverless cold start), recreate it.
+     */
+    async getOrRecreateClaudeCodeSdkAdapter(
+        sessionId: string,
+        onNotification: NotificationHandler
+    ): Promise<ClaudeCodeSdkAdapter | undefined> {
+        // First check if adapter is already in memory
+        const existing = this.claudeCodeSdkAdapters.get(sessionId)?.adapter;
+        if (existing) {
+            return existing;
+        }
+
+        // Check HTTP session store for session metadata
+        const store = getHttpSessionStore();
+        let sessionRecord = store.getSession(sessionId);
+        let cwd = sessionRecord?.cwd;
+        let provider = sessionRecord?.provider;
+
+        // If not in HTTP store (serverless cold start), try to recover from database
+        if (!sessionRecord && isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
+            console.log(`[AcpProcessManager] Session not in HTTP store, checking database: ${sessionId}`);
+            try {
+                const db = getPostgresDatabase();
+                const pgStore = new PgAcpSessionStore(db);
+                const dbSession = await pgStore.get(sessionId);
+                if (dbSession) {
+                    cwd = dbSession.cwd;
+                    provider = dbSession.provider;
+                    console.log(`[AcpProcessManager] Found session in database: provider=${provider}, cwd=${cwd}`);
+
+                    // Restore to HTTP session store for future requests in this instance
+                    store.upsertSession({
+                        sessionId,
+                        cwd: dbSession.cwd,
+                        workspaceId: dbSession.workspaceId,
+                        routaAgentId: dbSession.routaAgentId,
+                        provider: dbSession.provider,
+                        role: dbSession.role,
+                        modeId: dbSession.modeId,
+                        createdAt: dbSession.createdAt.toISOString(),
+                        firstPromptSent: dbSession.firstPromptSent,
+                    });
+                }
+            } catch (err) {
+                console.error(`[AcpProcessManager] Failed to query database:`, err);
+            }
+        }
+
+        if (!cwd || provider !== "claude-code-sdk") {
+            return undefined;
+        }
+
+        // Session exists but adapter not in memory - recreate it
+        console.log(`[AcpProcessManager] Recreating Claude Code SDK adapter for session: ${sessionId}`);
+
+        const adapter = new ClaudeCodeSdkAdapter(cwd, onNotification);
+        await adapter.connect();
+        // Use existing session ID instead of creating new one
+        const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
+
+        this.claudeCodeSdkAdapters.set(sessionId, {
+            adapter,
+            acpSessionId,
+            presetId: "claude-code-sdk",
+            createdAt: new Date(),
+        });
+
+        console.log(`[AcpProcessManager] Claude Code SDK adapter recreated: ${acpSessionId}`);
+        return adapter;
     }
 
     /**
@@ -277,10 +356,56 @@ export class AcpProcessManager {
     }
 
     /**
-     * Check if a session is using Claude Code SDK adapter.
+     * Check if a session is using Claude Code SDK adapter (sync version).
+     * Only checks in-memory and HTTP session store.
+     * Use isClaudeCodeSdkSessionAsync for full serverless support with database check.
      */
     isClaudeCodeSdkSession(sessionId: string): boolean {
-        return this.claudeCodeSdkAdapters.has(sessionId);
+        // First check in-memory
+        if (this.claudeCodeSdkAdapters.has(sessionId)) {
+            return true;
+        }
+
+        // Check HTTP session store (session might exist but adapter not in memory)
+        const store = getHttpSessionStore();
+        const sessionRecord = store.getSession(sessionId);
+        if (sessionRecord?.provider === "claude-code-sdk") {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a session is using Claude Code SDK adapter (async version).
+     * In serverless environments, also checks database for persisted sessions.
+     */
+    async isClaudeCodeSdkSessionAsync(sessionId: string): Promise<boolean> {
+        // First check in-memory
+        if (this.claudeCodeSdkAdapters.has(sessionId)) {
+            return true;
+        }
+
+        // Check HTTP session store
+        const store = getHttpSessionStore();
+        const sessionRecord = store.getSession(sessionId);
+        if (sessionRecord?.provider === "claude-code-sdk") {
+            return true;
+        }
+
+        // In serverless with Postgres, check database
+        if (isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
+            try {
+                const db = getPostgresDatabase();
+                const pgStore = new PgAcpSessionStore(db);
+                const dbSession = await pgStore.get(sessionId);
+                return dbSession?.provider === "claude-code-sdk";
+            } catch (err) {
+                console.error(`[AcpProcessManager] Failed to check session in database:`, err);
+            }
+        }
+
+        return false;
     }
 
     /**
