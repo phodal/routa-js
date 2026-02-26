@@ -22,14 +22,15 @@ interface CodeSection {
   language?: string;
 }
 
-function parseCodeRetrievalOutput(output: string): CodeSection[] {
+export function parseCodeRetrievalOutput(output: string): CodeSection[] {
   const sections: CodeSection[] = [];
 
   // Helper to extract code sections from text content
   const extractSectionsFromText = (text: string) => {
     // Split by "Path:" to find each code section
     // The format is: "Path: <filepath>\n     1\tcode\n     2\tcode..."
-    const pathMatches = [...text.matchAll(/Path:\s*([^\n]+)/g)];
+    // Important: Only match "Path:" at the start of a line to avoid false positives
+    const pathMatches = [...text.matchAll(/^Path:\s*([^\n]+)/gm)];
 
     if (pathMatches.length > 0) {
       for (let i = 0; i < pathMatches.length; i++) {
