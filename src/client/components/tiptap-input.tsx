@@ -587,21 +587,6 @@ export function TiptapInput({
     fileSearchContextRef.current.repoPath = repoSelection?.path ?? null;
   }, [repoSelection?.path]);
 
-  // Insert a skill mention when pendingSkill is set from outside (e.g. skill chip click)
-  useEffect(() => {
-    if (!pendingSkill || !editor) return;
-    editor
-      .chain()
-      .focus()
-      .insertContent({
-        type: "skillMention",
-        attrs: { id: pendingSkill, label: pendingSkill },
-      })
-      .insertContent(" ")
-      .run();
-    onSkillInserted?.();
-  }, [pendingSkill, editor]);
-
   // Use a ref for the send handler so extensions always call the latest version
   const handleSendRef = useRef<() => void>(() => {});
 
@@ -700,6 +685,21 @@ export function TiptapInput({
   });
 
   // Define handleSend AFTER editor is available, using the editor ref pattern
+
+  // Insert a skill mention when pendingSkill is set from outside (e.g. skill chip click)
+  useEffect(() => {
+    if (!pendingSkill || !editor) return;
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: "skillMention",
+        attrs: { id: pendingSkill, label: pendingSkill },
+      })
+      .insertContent(" ")
+      .run();
+    onSkillInserted?.();
+  }, [pendingSkill, editor]);
   const handleSend = useCallback(() => {
     if (!editor || disabled || loading) return;
 
