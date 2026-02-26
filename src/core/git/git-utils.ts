@@ -192,9 +192,22 @@ const CLONE_BASE_DIR = ".routa/repos";
 
 /**
  * Get the base directory for cloned repos.
+ * On serverless environments (Vercel), uses /tmp since the deployment is read-only.
  */
 export function getCloneBaseDir(): string {
   const pathMod = require("path");
+  const os = require("os");
+
+  // Check if we're in a serverless environment (Vercel sets VERCEL env var)
+  const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+  if (isServerless) {
+    // On serverless, use /tmp which is the only writable location
+    // Note: This is ephemeral and won't persist across invocations
+    return pathMod.join(os.tmpdir(), CLONE_BASE_DIR);
+  }
+
+  // On local/traditional servers, use the current directory
   const bridge = getServerBridge();
   return pathMod.join(bridge.env.currentDir(), CLONE_BASE_DIR);
 }
