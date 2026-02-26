@@ -120,9 +120,18 @@ export class ClaudeCodeSdkAdapter {
     const config = getClaudeCodeSdkConfig();
     this.currentAbortController = new AbortController();
 
+    // Debug: Log configuration (mask API key)
+    const maskedKey = config.apiKey
+      ? `${config.apiKey.substring(0, 8)}...${config.apiKey.substring(config.apiKey.length - 4)}`
+      : "undefined";
+    console.log(`[ClaudeCodeSdkAdapter] Config: baseUrl=${config.baseUrl}, model=${config.model}, apiKey=${maskedKey}`);
+
     try {
       // Create Anthropic client with custom configuration
       // BigModel and other providers may require x-api-key header instead of Authorization
+      const isBigModel = config.baseUrl?.includes("bigmodel.cn") ?? false;
+      console.log(`[ClaudeCodeSdkAdapter] isBigModel=${isBigModel}`);
+
       const client = new Anthropic({
         apiKey: config.apiKey,
         baseURL: config.baseUrl,
