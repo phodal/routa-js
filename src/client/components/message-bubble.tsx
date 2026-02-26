@@ -1,8 +1,9 @@
-import React, {useState} from "react";
+import React, {useState, useMemo} from "react";
 import {TerminalBubble} from "@/client/components/terminal/terminal-bubble";
 import {ChatMessage, PlanEntry} from "@/client/components/chat-panel";
 import {MarkdownViewer} from "@/client/components/markdown/markdown-viewer";
 import {CodeViewer} from "@/client/components/codemirror/code-viewer";
+import {TaskProgressBar, TaskInfo} from "@/client/components/task-progress-bar";
 
 export function MessageBubble({message}: { message: ChatMessage }) {
     const {role} = message;
@@ -88,30 +89,27 @@ function AssistantBubble({content}: { content: string }) {
 function ThoughtBubble({content}: { content: string }) {
     const [expanded, setExpanded] = useState(false);
     return (
-        <div className="flex justify-start">
-            <div className="max-w-[90%] w-full">
-                <button type="button" onClick={() => setExpanded((e) => !e)} className="w-full text-left group">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                        <svg
-                            className={`w-3 h-3 text-purple-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-                            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-                        </svg>
-                        <span
-                            className="text-[11px] font-medium text-purple-500 dark:text-purple-400 uppercase tracking-wide">
-              Thinking
-            </span>
-                    </div>
-                    <div
-                        className={`px-3 py-2 rounded-lg bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/50 text-xs text-purple-700 dark:text-purple-300 whitespace-pre-wrap transition-all duration-150 ${
-                            expanded ? "max-h-60 overflow-y-auto" : "max-h-[2.8em] overflow-hidden"
-                        }`}
+        <div className="w-full">
+            <button type="button" onClick={() => setExpanded((e) => !e)} className="w-full text-left group">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                    <svg
+                        className={`w-3 h-3 text-purple-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                     >
-                        {content}
-                    </div>
-                </button>
-            </div>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <span className="text-[11px] font-medium text-purple-500 dark:text-purple-400 uppercase tracking-wide">
+                        Thinking
+                    </span>
+                </div>
+                <div
+                    className={`px-3 py-2 rounded-lg bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/50 text-xs text-purple-700 dark:text-purple-300 whitespace-pre-wrap transition-all duration-150 ${
+                        expanded ? "max-h-60 overflow-y-auto" : "max-h-[2.8em] overflow-hidden"
+                    }`}
+                >
+                    {content}
+                </div>
+            </button>
         </div>
     );
 }
@@ -484,68 +482,40 @@ function TaskBubble({
 }
 
 function PlanBubble({content, entries}: { content: string; entries?: PlanEntry[] }) {
-    const [expanded, setExpanded] = useState(true);
-    const statusIcon = (s?: string) => {
-        switch (s) {
-            case "completed":
-                return "\u2713";
-            case "in_progress":
-                return "\u25CF";
-            default:
-                return "\u25CB";
-        }
-    };
-    const priorityColor = (p?: string) => {
-        switch (p) {
-            case "high":
-                return "text-red-500";
-            case "medium":
-                return "text-yellow-500";
-            default:
-                return "text-gray-400";
-        }
-    };
+    // Convert PlanEntry[] to TaskInfo[] for TaskProgressBar
+    const tasks: TaskInfo[] = useMemo(() => {
+        if (!entries || entries.length === 0) return [];
+        return entries.map((entry, index) => ({
+            id: `plan-${index}`,
+            title: entry.content,
+            status: entry.status === "completed" ? "completed"
+                : entry.status === "in_progress" ? "running"
+                : "pending",
+            // Include priority as description suffix
+            description: entry.priority ? `Priority: ${entry.priority}` : undefined,
+        }));
+    }, [entries]);
 
+    // If we have structured entries, use TaskProgressBar
+    if (entries && entries.length > 0) {
+        return (
+            <div className="w-full">
+                <TaskProgressBar tasks={tasks} />
+            </div>
+        );
+    }
+
+    // Fallback for plain text plan content
     return (
-        <div className="flex justify-start">
-            <div className="max-w-[90%] rounded-lg border border-indigo-100 dark:border-indigo-900/50 overflow-hidden">
-                <button
-                    type="button"
-                    onClick={() => setExpanded((e) => !e)}
-                    className="w-full px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/10 border-b border-indigo-100 dark:border-indigo-900/50 flex items-center gap-2 text-left"
-                >
-                    <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">Plan</span>
-                    <svg
-                        className={`w-3 h-3 text-indigo-400 transition-transform duration-150 ml-auto ${expanded ? "rotate-90" : ""}`}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-                    </svg>
-                </button>
-                {expanded && (
-                    <div className="px-3 py-2 bg-white dark:bg-[#0f1117]">
-                        {entries ? (
-                            <div className="space-y-1">
-                                {entries.map((e, i) => (
-                                    <div key={i} className="flex items-start gap-2 text-xs">
-                    <span
-                        className={`shrink-0 ${e.status === "completed" ? "text-green-500" : e.status === "in_progress" ? "text-blue-500" : "text-gray-400"}`}>
-                      {statusIcon(e.status)}
-                    </span>
-                                        <span className="text-gray-700 dark:text-gray-300">{e.content}</span>
-                                        {e.priority && (
-                                            <span
-                                                className={`ml-auto shrink-0 text-[10px] ${priorityColor(e.priority)}`}>{e.priority}</span>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div
-                                className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{content}</div>
-                        )}
-                    </div>
-                )}
+        <div className="w-full">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#161922] overflow-hidden">
+                <div className="px-3 py-2 flex items-center gap-2 bg-gray-100 dark:bg-[#1a1d2e] border-b border-gray-200 dark:border-gray-700">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Plan</span>
+                </div>
+                <div className="px-3 py-2">
+                    <div className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{content}</div>
+                </div>
             </div>
         </div>
     );
