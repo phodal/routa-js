@@ -148,6 +148,8 @@ impl AcpProcess {
             let mut agent_msg_buffer = String::new();
             // Buffer for accumulating agent thought chunks
             let mut agent_thought_buffer = String::new();
+            // Buffer for pending tool calls awaiting rawInput (OpenCode sends empty rawInput initially)
+            let mut pending_tool_calls: std::collections::HashMap<String, (String, bool)> = std::collections::HashMap::new();
 
             while let Ok(Some(line)) = lines.next_line().await {
                 let line = line.trim().to_string();
@@ -307,7 +309,7 @@ impl AcpProcess {
                                     let _ = writer.append_safe(&record).await;
                                 }
                                 "tool_call" => {
-                                    // Tool call - trace immediately
+                                    // Tool call - OpenCode may send rawInput as empty initially
                                     let tool_call_id = update.get("toolCallId")
                                         .and_then(|v| v.as_str());
                                     let kind = update.get("kind")
@@ -316,28 +318,44 @@ impl AcpProcess {
                                         .unwrap_or("unknown");
                                     let raw_input = update.get("rawInput").cloned();
 
-                                    let record = TraceRecord::new(
-                                        &our_sid,
-                                        TraceEventType::ToolCall,
-                                        Contributor::new(&provider_clone, None),
-                                    ).with_tool(TraceTool {
-                                        name: kind.to_string(),
-                                        tool_call_id: tool_call_id.map(|s| s.to_string()),
-                                        status: Some("running".to_string()),
-                                        input: raw_input,
-                                        output: None,
+                                    // Check if rawInput is empty or null
+                                    let has_input = raw_input.as_ref().map_or(false, |v| {
+                                        if let Some(obj) = v.as_object() {
+                                            !obj.is_empty()
+                                        } else {
+                                            !v.is_null()
+                                        }
                                     });
-                                    let writer = TraceWriter::new(&cwd_clone);
-                                    let _ = writer.append_safe(&record).await;
+
+                                    if has_input {
+                                        // Trace immediately with full input (Claude Code behavior)
+                                        let record = TraceRecord::new(
+                                            &our_sid,
+                                            TraceEventType::ToolCall,
+                                            Contributor::new(&provider_clone, None),
+                                        ).with_tool(TraceTool {
+                                            name: kind.to_string(),
+                                            tool_call_id: tool_call_id.map(|s| s.to_string()),
+                                            status: Some("running".to_string()),
+                                            input: raw_input,
+                                            output: None,
+                                        });
+                                        let writer = TraceWriter::new(&cwd_clone);
+                                        let _ = writer.append_safe(&record).await;
+                                    } else if let Some(id) = tool_call_id {
+                                        // OpenCode behavior: rawInput is empty, wait for tool_call_update
+                                        pending_tool_calls.insert(id.to_string(), (kind.to_string(), false));
+                                    }
                                 }
                                 "tool_call_update" => {
-                                    // Tool result - trace immediately
+                                    // Tool update - may contain rawInput (OpenCode) or just rawOutput (completion)
                                     let tool_call_id = update.get("toolCallId")
                                         .and_then(|v| v.as_str());
                                     let kind = update.get("kind")
                                         .and_then(|v| v.as_str())
                                         .or_else(|| update.get("title").and_then(|v| v.as_str()))
                                         .unwrap_or("unknown");
+                                    let raw_input = update.get("rawInput").cloned();
                                     let raw_output = update.get("rawOutput")
                                         .and_then(|v| v.as_str())
                                         .map(|s| serde_json::Value::String(s.to_string()))
@@ -346,19 +364,59 @@ impl AcpProcess {
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("completed");
 
-                                    let record = TraceRecord::new(
-                                        &our_sid,
-                                        TraceEventType::ToolResult,
-                                        Contributor::new(&provider_clone, None),
-                                    ).with_tool(TraceTool {
-                                        name: kind.to_string(),
-                                        tool_call_id: tool_call_id.map(|s| s.to_string()),
-                                        status: Some(status.to_string()),
-                                        input: None,
-                                        output: raw_output,
+                                    // Check if this update has rawInput and the tool_call wasn't traced yet
+                                    let has_input = raw_input.as_ref().map_or(false, |v| {
+                                        if let Some(obj) = v.as_object() {
+                                            !obj.is_empty()
+                                        } else {
+                                            !v.is_null()
+                                        }
                                     });
-                                    let writer = TraceWriter::new(&cwd_clone);
-                                    let _ = writer.append_safe(&record).await;
+
+                                    if let Some(id) = tool_call_id {
+                                        if let Some((stored_kind, traced)) = pending_tool_calls.get_mut(id) {
+                                            if has_input && !*traced {
+                                                // Record the tool_call trace now with actual input
+                                                let record = TraceRecord::new(
+                                                    &our_sid,
+                                                    TraceEventType::ToolCall,
+                                                    Contributor::new(&provider_clone, None),
+                                                ).with_tool(TraceTool {
+                                                    name: stored_kind.clone(),
+                                                    tool_call_id: Some(id.to_string()),
+                                                    status: Some("running".to_string()),
+                                                    input: raw_input.clone(),
+                                                    output: None,
+                                                });
+                                                let writer = TraceWriter::new(&cwd_clone);
+                                                let _ = writer.append_safe(&record).await;
+                                                *traced = true;
+                                            }
+                                        }
+                                    }
+
+                                    // Record tool_result trace when status indicates completion or we have output
+                                    let is_complete = status == "completed" || status == "failed" || raw_output.is_some();
+                                    if is_complete {
+                                        let record = TraceRecord::new(
+                                            &our_sid,
+                                            TraceEventType::ToolResult,
+                                            Contributor::new(&provider_clone, None),
+                                        ).with_tool(TraceTool {
+                                            name: kind.to_string(),
+                                            tool_call_id: tool_call_id.map(|s| s.to_string()),
+                                            status: Some(status.to_string()),
+                                            input: None,
+                                            output: raw_output,
+                                        });
+                                        let writer = TraceWriter::new(&cwd_clone);
+                                        let _ = writer.append_safe(&record).await;
+
+                                        // Clean up pending entry
+                                        if let Some(id) = tool_call_id {
+                                            pending_tool_calls.remove(id);
+                                        }
+                                    }
                                 }
                                 _ => {}
                             }

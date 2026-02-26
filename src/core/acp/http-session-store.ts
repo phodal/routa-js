@@ -100,6 +100,20 @@ export function consolidateMessageHistory(
   return result;
 }
 
+/**
+ * Pending tool call data awaiting rawInput from tool_call_update.
+ * OpenCode sends tool_call with empty rawInput, then tool_call_update with actual args.
+ */
+interface PendingToolCall {
+  toolCallId: string;
+  kind: string;
+  title: string;
+  provider: string;
+  cwd: string;
+  sessionId: string;
+  traced: boolean;
+}
+
 class HttpSessionStore {
   private sessions = new Map<string, RoutaSessionRecord>();
   private sseControllers = new Map<string, Controller>();
@@ -110,6 +124,8 @@ class HttpSessionStore {
   private agentMessageBuffer = new Map<string, string>();
   /** Buffer for accumulating agent thought chunks before tracing */
   private agentThoughtBuffer = new Map<string, string>();
+  /** Buffer for tool calls awaiting rawInput (keyed by toolCallId) */
+  private pendingToolCalls = new Map<string, PendingToolCall>();
 
   upsertSession(record: RoutaSessionRecord) {
     this.sessions.set(record.sessionId, record);
@@ -320,50 +336,104 @@ class HttpSessionStore {
       );
       recordTrace(cwd, agentTrace);
     } else if (sessionUpdate === "tool_call") {
-      // Tool call - trace immediately
+      // Tool call - OpenCode may send rawInput as empty initially
       const toolCallId = update?.toolCallId as string | undefined;
       const kind = update?.kind as string | undefined;
       const title = update?.title as string | undefined;
       const rawInput = update?.rawInput as Record<string, unknown> | undefined;
 
-      let toolTrace = createTraceRecord(sessionId, "tool_call", { provider });
-      toolTrace = withTool(toolTrace, {
-        name: kind ?? title ?? "unknown",
-        toolCallId,
-        status: "running",
-        input: rawInput,
-      });
+      // Check if rawInput is empty or undefined
+      const hasInput = rawInput && Object.keys(rawInput).length > 0;
 
-      // Extract file ranges from tool parameters
-      const toolName = kind ?? title ?? "unknown";
-      const files = extractFilesFromToolCall(toolName, rawInput);
-      if (files.length > 0) {
-        toolTrace = { ...toolTrace, files };
+      if (hasInput) {
+        // Trace immediately with full input (Claude Code behavior)
+        let toolTrace = createTraceRecord(sessionId, "tool_call", { provider });
+        toolTrace = withTool(toolTrace, {
+          name: kind ?? title ?? "unknown",
+          toolCallId,
+          status: "running",
+          input: rawInput,
+        });
+
+        const toolName = kind ?? title ?? "unknown";
+        const files = extractFilesFromToolCall(toolName, rawInput);
+        if (files.length > 0) {
+          toolTrace = { ...toolTrace, files };
+        }
+
+        const vcs = getVcsContextLight(cwd);
+        if (vcs) {
+          toolTrace = withVcs(toolTrace, vcs);
+        }
+
+        recordTrace(cwd, toolTrace);
+      } else if (toolCallId) {
+        // OpenCode behavior: rawInput is empty, wait for tool_call_update
+        this.pendingToolCalls.set(toolCallId, {
+          toolCallId,
+          kind: kind ?? title ?? "unknown",
+          title: title ?? kind ?? "unknown",
+          provider,
+          cwd,
+          sessionId,
+          traced: false,
+        });
       }
-
-      // Add VCS context (lightweight - branch only)
-      const vcs = getVcsContextLight(cwd);
-      if (vcs) {
-        toolTrace = withVcs(toolTrace, vcs);
-      }
-
-      recordTrace(cwd, toolTrace);
     } else if (sessionUpdate === "tool_call_update") {
-      // Tool result - trace immediately
+      // Tool update - may contain rawInput (OpenCode) or just rawOutput (completion)
       const toolCallId = update?.toolCallId as string | undefined;
       const kind = update?.kind as string | undefined;
       const title = update?.title as string | undefined;
-      const rawOutput = update?.rawOutput as string | undefined;
+      const rawInput = update?.rawInput as Record<string, unknown> | undefined;
+      const rawOutput = update?.rawOutput as unknown;
       const status = update?.status as string | undefined;
 
-      let toolResultTrace = createTraceRecord(sessionId, "tool_result", { provider });
-      toolResultTrace = withTool(toolResultTrace, {
-        name: kind ?? title ?? "unknown",
-        toolCallId,
-        status: status ?? "completed",
-        output: rawOutput,
-      });
-      recordTrace(cwd, toolResultTrace);
+      // Check if this update has rawInput and the tool_call wasn't traced yet
+      const pending = toolCallId ? this.pendingToolCalls.get(toolCallId) : undefined;
+      const hasInput = rawInput && Object.keys(rawInput).length > 0;
+
+      if (pending && hasInput && !pending.traced) {
+        // Record the tool_call trace now with actual input
+        let toolTrace = createTraceRecord(sessionId, "tool_call", { provider });
+        toolTrace = withTool(toolTrace, {
+          name: kind ?? pending.kind ?? "unknown",
+          toolCallId,
+          status: "running",
+          input: rawInput,
+        });
+
+        const toolName = kind ?? pending.kind ?? "unknown";
+        const files = extractFilesFromToolCall(toolName, rawInput);
+        if (files.length > 0) {
+          toolTrace = { ...toolTrace, files };
+        }
+
+        const vcs = getVcsContextLight(cwd);
+        if (vcs) {
+          toolTrace = withVcs(toolTrace, vcs);
+        }
+
+        recordTrace(cwd, toolTrace);
+        pending.traced = true;
+      }
+
+      // Record tool_result trace when status indicates completion or we have output
+      const isComplete = status === "completed" || status === "failed" || rawOutput !== undefined;
+      if (isComplete) {
+        let toolResultTrace = createTraceRecord(sessionId, "tool_result", { provider });
+        toolResultTrace = withTool(toolResultTrace, {
+          name: kind ?? title ?? "unknown",
+          toolCallId,
+          status: status ?? "completed",
+          output: rawOutput as string | undefined,
+        });
+        recordTrace(cwd, toolResultTrace);
+
+        // Clean up pending entry
+        if (toolCallId) {
+          this.pendingToolCalls.delete(toolCallId);
+        }
+      }
     }
 
     const controller = this.sseControllers.get(sessionId);
