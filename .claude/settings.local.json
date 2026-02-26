@@ -15,7 +15,17 @@
       "mcp__ide__getDiagnostics",
       "mcp__auggie__codebase-retrieval",
       "Bash(npm run build)",
-      "Bash(kill 24421)"
+      "Bash(kill 24421)",
+      "Bash(vercel ls:*)",
+      "Bash(vercel link:*)",
+      "Bash(gh deployment list:*)",
+      "Bash(gh api:*)",
+      "Bash(vercel --team phodal-huangs-projects logs --since 15m)",
+      "Bash(DEPLOY_URL=\"https://routa-k20igs3mj-phodal-huangs-projects.vercel.app\")",
+      "Bash(curl:*)",
+      "Bash(vercel curl:*)",
+      "Bash(vercel whoami:*)",
+      "Bash(vercel project ls:*)"
     ]
   }
 }

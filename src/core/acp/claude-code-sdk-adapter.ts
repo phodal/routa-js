@@ -170,8 +170,11 @@ export class ClaudeCodeSdkAdapter {
    * Send a prompt and return a streaming async generator of SSE events.
    * Each yielded string is a complete SSE event (data: JSON\n\n format).
    * This allows the HTTP response to stream in serverless environments.
+   *
+   * @param text - The prompt text
+   * @param acpSessionId - The ACP session ID to use in notifications (must match client's session)
    */
-  async *promptStream(text: string): AsyncGenerator<string, void, unknown> {
+  async *promptStream(text: string, acpSessionId?: string): AsyncGenerator<string, void, unknown> {
     if (!this._alive || !this.sessionId) {
       throw new Error("No active session");
     }
@@ -179,7 +182,8 @@ export class ClaudeCodeSdkAdapter {
     const config = getClaudeCodeSdkConfig();
     this.abortController = new AbortController();
     this._hasSeenStreamTextDelta = false;
-    const sessionId = this.sessionId;
+    // Use the provided ACP session ID for notifications, or fall back to internal ID
+    const sessionId = acpSessionId ?? this.sessionId;
 
     const maskedKey = config.apiKey
       ? `${config.apiKey.substring(0, 8)}...${config.apiKey.substring(config.apiKey.length - 4)}`
