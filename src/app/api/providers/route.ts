@@ -17,6 +17,7 @@ import { which } from "@/core/acp/utils";
 import { fetchRegistry, detectPlatformTarget } from "@/core/acp/acp-registry";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
+import { isClaudeCodeSdkConfigured } from "@/core/acp/claude-code-sdk-adapter";
 
 type ProviderStatus = "available" | "unavailable" | "checking";
 
@@ -50,20 +51,37 @@ async function getLocalProviders(shouldCheck = false): Promise<ProviderInfo[]> {
 
   const providers: ProviderInfo[] = [];
 
-  // In serverless environments (Vercel), only show OpenCode SDK
+  // In serverless environments (Vercel), show SDK-based providers only
   if (isServerlessEnvironment()) {
-    const sdkConfigured = isOpencodeServerConfigured();
+    const claudeSdkConfigured = isClaudeCodeSdkConfigured();
+    const opencodeSdkConfigured = isOpencodeServerConfigured();
+
+    // Claude Code SDK - recommended for serverless
+    providers.push({
+      id: "claude-code-sdk",
+      name: "Claude Code SDK",
+      description: claudeSdkConfigured
+        ? "Claude Code via SDK (configured)"
+        : "Claude Code via SDK - Set ANTHROPIC_AUTH_TOKEN environment variable",
+      command: "sdk",
+      status: claudeSdkConfigured ? "available" : "unavailable",
+      source: "static",
+    });
+
+    // OpenCode SDK - alternative for serverless
     providers.push({
       id: "opencode-sdk",
       name: "OpenCode SDK",
-      description: sdkConfigured
+      description: opencodeSdkConfigured
         ? "Connect to remote OpenCode server (configured)"
         : "Connect to remote OpenCode server - Set OPENCODE_SERVER_URL environment variable",
       command: "sdk",
-      status: sdkConfigured ? "available" : "unavailable",
+      status: opencodeSdkConfigured ? "available" : "unavailable",
       source: "static",
     });
-    console.log("[Providers API] Serverless environment: only OpenCode SDK is available");
+
+    const availableCount = providers.filter(p => p.status === "available").length;
+    console.log(`[Providers API] Serverless environment: ${availableCount}/${providers.length} SDK providers available`);
     return providers;
   }
 
