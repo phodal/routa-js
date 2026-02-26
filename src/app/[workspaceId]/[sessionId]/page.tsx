@@ -10,13 +10,14 @@
 import { SessionPageClient } from "./session-page-client";
 
 // Required for static export - tells Next.js which paths to pre-render.
-// Use placeholder values since actual paths are determined at runtime.
+// For static export (ROUTA_BUILD_STATIC=1): return placeholder values
+// For Vercel/SSR: return empty array (pages rendered on-demand)
 export async function generateStaticParams() {
-  return [{ workspaceId: "__placeholder__", sessionId: "__placeholder__" }];
+  if (process.env.ROUTA_BUILD_STATIC === "1") {
+    return [{ workspaceId: "__placeholder__", sessionId: "__placeholder__" }];
+  }
+  return [];
 }
-
-// Required for static export - only paths in generateStaticParams are valid
-export const dynamicParams = false;
 
 export default function WorkspaceSessionPage() {
   return <SessionPageClient />;

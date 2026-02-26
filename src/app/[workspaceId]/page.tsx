@@ -10,13 +10,14 @@
 import { WorkspacePageClient } from "./workspace-page-client";
 
 // Required for static export - tells Next.js which paths to pre-render.
-// Empty array = no pre-rendering at build time, pages are generated on-demand.
+// For static export (ROUTA_BUILD_STATIC=1): return placeholder values
+// For Vercel/SSR: return empty array (pages rendered on-demand)
 export async function generateStaticParams() {
-  return [{ workspaceId: "__placeholder__" }];
+  if (process.env.ROUTA_BUILD_STATIC === "1") {
+    return [{ workspaceId: "__placeholder__" }];
+  }
+  return [];
 }
-
-// Required for static export - only paths in generateStaticParams are valid
-export const dynamicParams = false;
 
 export default function WorkspacePage() {
   return <WorkspacePageClient />;
