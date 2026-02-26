@@ -14,16 +14,24 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@modelcontextprotocol/sdk",
     "@agentclientprotocol/sdk",
+    "@anthropic-ai/claude-agent-sdk",
     "ws",
     "bufferutil",
     "utf-8-validate",
     "better-sqlite3",
   ],
+  // Ensure cli.js (Claude Code agent binary) is included in Vercel's deployment
+  // bundle. It's not statically imported so file-tracing won't pick it up
+  // automatically; this forces Vercel to copy the whole SDK package.
+  outputFileTracingIncludes: {
+    "/api/**": ["./node_modules/@anthropic-ai/claude-agent-sdk/**/*"],
+  },
   ...(isDesktopServerBuild ? { distDir: ".next-desktop" } : {}),
   ...(isDesktopStandaloneBuild
     ? {
         output: "standalone",
         outputFileTracingIncludes: {
+          "/api/**": ["./node_modules/@anthropic-ai/claude-agent-sdk/**/*"],
           "/*": ["./node_modules/better-sqlite3/**/*"],
         },
       }

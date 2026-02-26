@@ -21,6 +21,23 @@ import type { NotificationHandler, JsonRpcMessage } from "@/core/acp/processer";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { join } from "path";
+
+/**
+ * Resolve the path to the Claude Code cli.js binary.
+ *
+ * The @anthropic-ai/claude-agent-sdk resolves cli.js relative to
+ * import.meta.url inside its own bundled code. On Vercel, Next.js webpack
+ * bundles the SDK's JS but does NOT copy cli.js to the bundle output, so the
+ * auto-resolved path doesn't exist at runtime.
+ *
+ * We override it explicitly using process.cwd() which is:
+ *   - `/var/task`   on Vercel (where node_modules are unpacked)
+ *   - project root  in local dev / tests
+ */
+function resolveCliPath(): string {
+  return join(process.cwd(), "node_modules/@anthropic-ai/claude-agent-sdk/cli.js");
+}
 
 /**
  * Helper to create a JSON-RPC notification message
@@ -160,6 +177,12 @@ export class ClaudeCodeSdkAdapter {
           // Required for autonomous operation in serverless environments.
           permissionMode: "bypassPermissions",
           allowDangerouslySkipPermissions: true,
+          // Explicitly point to cli.js so the SDK doesn't try to resolve it
+          // relative to its own import.meta.url (which fails after webpack
+          // bundling on Vercel because cli.js is not a statically-imported module
+          // and gets stripped from the bundle output unless we force-include it
+          // via outputFileTracingIncludes in next.config.ts).
+          pathToClaudeCodeExecutable: resolveCliPath(),
         },
       });
 
