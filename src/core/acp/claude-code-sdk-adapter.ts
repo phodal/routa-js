@@ -122,10 +122,15 @@ export class ClaudeCodeSdkAdapter {
 
     try {
       // Create Anthropic client with custom configuration
+      // BigModel and other providers may require x-api-key header instead of Authorization
       const client = new Anthropic({
         apiKey: config.apiKey,
         baseURL: config.baseUrl,
         timeout: config.timeoutMs,
+        defaultHeaders: {
+          // Explicitly set x-api-key header for BigModel compatibility
+          "x-api-key": config.apiKey || "",
+        },
       });
 
       let stopReason = "end_turn";
