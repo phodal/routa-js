@@ -406,7 +406,37 @@ export async function POST(request: NextRequest) {
       );
       recordTrace(sessionRecord?.cwd ?? process.cwd(), userMsgTrace);
 
-      // ── Claude Code session ─────────────────────────────────────────
+      // ── Claude Code SDK session (serverless) ────────────────────────
+      if (manager.isClaudeCodeSdkSession(sessionId)) {
+        const adapter = manager.getClaudeCodeSdkAdapter(sessionId);
+        if (!adapter) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: `No Claude Code SDK adapter for session: ${sessionId}`,
+          });
+        }
+
+        if (!adapter.alive) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: "Claude Code SDK adapter is not connected",
+          });
+        }
+
+        try {
+          const result = await adapter.prompt(promptText);
+          store.flushAgentBuffer(sessionId);
+          return jsonrpcResponse(id ?? null, result);
+        } catch (err) {
+          store.flushAgentBuffer(sessionId);
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: err instanceof Error ? err.message : "Claude Code SDK prompt failed",
+          });
+        }
+      }
+
+      // ── Claude Code CLI session ───────────────────────────────────────
       if (manager.isClaudeSession(sessionId)) {
         const claudeProc = manager.getClaudeProcess(sessionId);
         if (!claudeProc) {
@@ -479,8 +509,15 @@ export async function POST(request: NextRequest) {
       if (sessionId) {
         const manager = getAcpProcessManager();
 
-        // Check if Claude Code session
-        if (manager.isClaudeSession(sessionId)) {
+        // Check if Claude Code SDK session
+        if (manager.isClaudeCodeSdkSession(sessionId)) {
+          const adapter = manager.getClaudeCodeSdkAdapter(sessionId);
+          if (adapter) {
+            adapter.cancel();
+          }
+        }
+        // Check if Claude Code CLI session
+        else if (manager.isClaudeSession(sessionId)) {
           const claudeProc = manager.getClaudeProcess(sessionId);
           if (claudeProc) {
             await claudeProc.cancel();

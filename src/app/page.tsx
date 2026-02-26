@@ -3,26 +3,24 @@
 /**
  * Routa JS - Home Page
  *
- * A clean landing page for starting new conversations.
+ * A hero-style landing page for starting new conversations.
  * Features:
- * - QuickStartInput component for fast new conversation creation
- * - Recent sessions panel on the right side
- * - Workspace selector if no workspace is pre-selected
+ * - Centered hero input with TiptapInput (skills, file mentions, etc.)
+ * - Mode selection (ROUTA vs CRAFTER)
+ * - Recent sessions shown as compact cards below
  *
  * From here, users can:
  * 1. Start a new conversation (auto-creates session and navigates to /[workspaceId]/[sessionId])
- * 2. Browse and resume recent sessions
+ * 2. Resume recent sessions
  * 3. Create/manage workspaces
  */
 
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { QuickStartInput } from "@/client/components/quick-start-input";
+import { HomeInput } from "@/client/components/home-input";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { useAcp } from "@/client/hooks/use-acp";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
-import { SessionPanel } from "@/client/components/session-panel";
-import { SkillPanel } from "@/client/components/skill-panel";
 import { AgentInstallPanel } from "@/client/components/agent-install-panel";
 import { ProtocolBadge } from "@/app/protocol-badge";
 
@@ -66,15 +64,9 @@ export default function HomePage() {
     if (activeWorkspaceId) {
       router.push(`/${activeWorkspaceId}/${sessionId}`);
     } else {
-      // If no workspace selected, try to find the session's workspace
-      // This is a fallback - ideally sessions always have a workspace
       router.push(`/${sessionId}`);
     }
   }, [activeWorkspaceId, router]);
-
-  const handleSessionDeleted = useCallback((deletedId: string) => {
-    setRefreshKey((k) => k + 1);
-  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
@@ -154,32 +146,32 @@ export default function HomePage() {
         </a>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left/Center - Quick Start Input */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-5 py-12">
+      {/* Main Content - Centered Hero Layout */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="min-h-full flex flex-col">
+          {/* Hero Section */}
+          <div className="flex-1 flex items-center justify-center px-6 py-12">
             {/* Empty Workspace Onboarding */}
             {!workspacesHook.loading && workspacesHook.workspaces.length === 0 ? (
-              <div className="bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-8 text-center">
-                <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="w-full max-w-md bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl p-8 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-5 shadow-lg">
+                  <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
                   </svg>
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Create your first workspace</h2>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Create your first workspace</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">A workspace organizes your sessions, notes, and codebases for a project.</p>
                 <button
                   type="button"
                   onClick={() => handleWorkspaceCreate("My Workspace")}
-                  className="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                  className="px-8 py-3 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-xl transition-all shadow-md hover:shadow-lg"
                 >
                   Create Workspace
                 </button>
               </div>
             ) : (
-              /* Quick Start Input */
-              <QuickStartInput
+              /* Home Input with TiptapInput */
+              <HomeInput
                 workspaceId={activeWorkspaceId ?? undefined}
                 onSessionCreated={(sessionId) => {
                   setRefreshKey((k) => k + 1);
@@ -187,30 +179,17 @@ export default function HomePage() {
               />
             )}
           </div>
-        </main>
 
-        {/* Right Sidebar - Recent Sessions & Skills */}
-        <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#13151d] flex flex-col overflow-y-auto hidden lg:flex">
-          {/* Recent Sessions */}
-          <div className="flex-1">
-            <SessionPanel
-              selectedSessionId={null}
-              onSelect={handleSessionClick}
+          {/* Recent Sessions Section */}
+          {workspacesHook.workspaces.length > 0 && (
+            <RecentSessionsBar
+              workspaceId={activeWorkspaceId}
               refreshKey={refreshKey}
-              workspaceId={activeWorkspaceId ?? undefined}
-              onSessionDeleted={handleSessionDeleted}
+              onSessionClick={handleSessionClick}
             />
-          </div>
-
-          {/* Divider */}
-          <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800" />
-
-          {/* Skills */}
-          <div className="flex-1">
-            <SkillPanel />
-          </div>
-        </aside>
-      </div>
+          )}
+        </div>
+      </main>
 
       {/* Agent Install Popup */}
       {showAgentInstallPopup && (
@@ -262,6 +241,114 @@ export default function HomePage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Recent Sessions Bar Component ─────────────────────────────────────
+
+interface SessionInfo {
+  sessionId: string;
+  name?: string;
+  cwd: string;
+  workspaceId: string;
+  provider?: string;
+  role?: string;
+  createdAt: string;
+}
+
+interface RecentSessionsBarProps {
+  workspaceId: string | null;
+  refreshKey: number;
+  onSessionClick: (sessionId: string) => void;
+}
+
+function RecentSessionsBar({ workspaceId, refreshKey, onSessionClick }: RecentSessionsBarProps) {
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        setLoading(true);
+        const url = workspaceId
+          ? `/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=6`
+          : "/api/sessions?limit=6";
+        const res = await fetch(url, { cache: "no-store" });
+        const data = await res.json();
+        setSessions(Array.isArray(data?.sessions) ? data.sessions.slice(0, 6) : []);
+      } catch (e) {
+        console.error("Failed to fetch sessions", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSessions();
+  }, [workspaceId, refreshKey]);
+
+  if (sessions.length === 0 && !loading) {
+    return null;
+  }
+
+  const getDisplayName = (s: SessionInfo) => {
+    if (s.name) return s.name;
+    if (s.provider && s.role) return `${s.provider}-${s.role.toLowerCase()}`;
+    if (s.provider) return s.provider;
+    return `Session ${s.sessionId.slice(0, 6)}`;
+  };
+
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
+
+  return (
+    <div className="border-t border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-[#13151d]/50 backdrop-blur-sm">
+      <div className="max-w-5xl mx-auto px-6 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+            Recent Sessions
+          </h3>
+          <a
+            href="/sessions"
+            className="text-xs text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+          >
+            View all →
+          </a>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {sessions.map((s) => (
+            <button
+              key={s.sessionId}
+              onClick={() => onSessionClick(s.sessionId)}
+              className="group p-3 rounded-xl bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all text-left"
+            >
+              <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                {getDisplayName(s)}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                {s.provider && (
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                    {s.provider}
+                  </span>
+                )}
+                <span className="text-[10px] text-gray-300 dark:text-gray-600 ml-auto">
+                  {formatTime(s.createdAt)}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
