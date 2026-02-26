@@ -16,6 +16,8 @@ on:
       - 'apps/desktop/**'
       - 'src/**'
       - 'package.json'
+      - 'package-lock.json'
+      - '.npmrc'
       - 'next.config.ts'
       - 'scripts/build-static.mjs'
       - 'scripts/prepare-frontend.mjs'
