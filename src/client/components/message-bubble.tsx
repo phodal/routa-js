@@ -402,6 +402,7 @@ function ToolBubble({
                                 maxHeight="200px"
                                 showLineNumbers={false}
                                 showCopyButton={false}
+                                showHeader={false}
                                 wordWrap={true}
                             />
                         </div>
