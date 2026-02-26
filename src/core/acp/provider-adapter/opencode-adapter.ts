@@ -47,18 +47,18 @@ export class OpenCodeAdapter extends BaseProviderAdapter {
         const toolCallId = payload.toolCallId as string | undefined;
         const kind = payload.kind as string | undefined;
         const title = payload.title as string | undefined;
-        const rawInput = payload.rawInput as Record<string, unknown> | undefined;
+        const rawInput = payload.rawInput as Record<string, unknown> | undefined | null;
 
         if (!toolCallId) return null;
 
-        // Check if input is present and non-empty
-        const hasInput = rawInput && Object.keys(rawInput).length > 0;
+        // Check if input is present and non-empty (handle null/undefined)
+        const hasInput = !!(rawInput && typeof rawInput === "object" && Object.keys(rawInput).length > 0);
 
         const update = this.createUpdate(sessionId, "tool_call", rawNotification);
         update.toolCall = this.createToolCall(toolCallId, kind ?? title ?? "unknown", {
           title,
           status: "running",
-          input: rawInput,
+          input: rawInput ?? undefined,
           // Input is NOT finalized if empty (will come in update)
           inputFinalized: hasInput,
         });
@@ -69,20 +69,20 @@ export class OpenCodeAdapter extends BaseProviderAdapter {
         const toolCallId = payload.toolCallId as string | undefined;
         const kind = payload.kind as string | undefined;
         const title = payload.title as string | undefined;
-        const rawInput = payload.rawInput as Record<string, unknown> | undefined;
+        const rawInput = payload.rawInput as Record<string, unknown> | undefined | null;
         const rawOutput = payload.rawOutput;
         const status = payload.status as string | undefined;
 
         if (!toolCallId) return null;
 
-        const hasInput = rawInput && Object.keys(rawInput).length > 0;
+        const hasInput = !!(rawInput && typeof rawInput === "object" && Object.keys(rawInput).length > 0);
         const isComplete = status === "completed" || status === "failed" || rawOutput !== undefined;
 
         const update = this.createUpdate(sessionId, "tool_call_update", rawNotification);
         update.toolCall = this.createToolCall(toolCallId, kind ?? title ?? "unknown", {
           title,
           status: this.mapStatus(status, isComplete),
-          input: rawInput, // May contain deferred input
+          input: rawInput ?? undefined, // May contain deferred input
           output: rawOutput,
           inputFinalized: hasInput || isComplete,
         });
