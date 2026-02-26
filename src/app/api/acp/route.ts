@@ -181,16 +181,31 @@ export async function POST(request: NextRequest) {
 
       let acpSessionId: string;
 
-      if (isClaudeCode || isClaudeCodeSdk) {
-        // ── Claude Code: stream-json protocol with MCP ───────────────
-        // For claude-code-sdk, verify SDK is configured
-        if (isClaudeCodeSdk && !isClaudeCodeSdkConfigured()) {
+      if (isClaudeCodeSdk) {
+        // ── Claude Code SDK: direct API calls (for serverless environments) ──
+        if (!isClaudeCodeSdkConfigured()) {
           return jsonrpcResponse(id ?? null, null, {
             code: -32002,
             message: "Claude Code SDK not configured. Set ANTHROPIC_AUTH_TOKEN environment variable.",
           });
         }
 
+        // Always use SDK adapter for claude-code-sdk provider
+        acpSessionId = await manager.createClaudeCodeSdkSession(
+          sessionId,
+          cwd,
+          (msg) => {
+            if (msg.method === "session/update" && msg.params) {
+              const params = msg.params as Record<string, unknown>;
+              store.pushNotification({
+                ...params,
+                sessionId,
+              } as never);
+            }
+          }
+        );
+      } else if (isClaudeCode) {
+        // ── Claude Code: stream-json protocol with MCP (CLI process) ───
         const mcpConfigs = buildMcpConfigForClaude();
 
         acpSessionId = await manager.createClaudeSession(

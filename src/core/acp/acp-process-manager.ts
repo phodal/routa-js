@@ -195,8 +195,10 @@ export class AcpProcessManager {
 
     /**
      * Create a session using Claude Code SDK adapter (for serverless environments).
+     * This is public so that the API route can explicitly request SDK-based session
+     * when the provider is 'claude-code-sdk'.
      */
-    private async createClaudeCodeSdkSession(
+    async createClaudeCodeSdkSession(
         sessionId: string,
         cwd: string,
         onNotification: NotificationHandler
