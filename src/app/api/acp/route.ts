@@ -390,6 +390,7 @@ export async function POST(request: NextRequest) {
 
     // ── session/prompt ─────────────────────────────────────────────────
     // Forward prompt to the ACP agent process (or Claude Code).
+    // If session doesn't exist, auto-create one with default settings.
     if (method === "session/prompt") {
       const p = (params ?? {}) as Record<string, unknown>;
       const sessionId = p.sessionId as string;
@@ -402,6 +403,7 @@ export async function POST(request: NextRequest) {
       }
 
       const manager = getAcpProcessManager();
+      const store = getHttpSessionStore();
 
       // Extract prompt text - handle both string and array formats
       const rawPrompt = p.prompt;
@@ -416,10 +418,153 @@ export async function POST(request: NextRequest) {
           .join("\n");
       }
 
+      // ── Auto-create session if it doesn't exist ────────────────────────
+      // Check if session exists in any of the process managers
+      const sessionExists =
+        manager.getProcess(sessionId) !== undefined ||
+        manager.getClaudeProcess(sessionId) !== undefined ||
+        manager.isClaudeCodeSdkSession(sessionId) ||
+        (await manager.isClaudeCodeSdkSessionAsync(sessionId));
+
+      if (!sessionExists) {
+        console.log(`[ACP Route] Session ${sessionId} not found, auto-creating with default settings...`);
+
+        // Use default settings for auto-created session
+        const cwd = (p.cwd as string | undefined) ?? process.cwd();
+        const defaultProvider = isServerlessEnvironment() ? "claude-code-sdk" : "opencode";
+        const provider = (p.provider as string | undefined) ?? defaultProvider;
+        const workspaceId = (p.workspaceId as string) || "default";
+        const role = "CRAFTER"; // Default role for auto-created sessions
+
+        try {
+          const preset = getPresetById(provider);
+          const isClaudeCode = preset?.nonStandardApi === true || provider === "claude";
+          const isClaudeCodeSdk = provider === "claude-code-sdk";
+
+          let acpSessionId: string;
+
+          if (isClaudeCodeSdk) {
+            // Claude Code SDK session
+            if (!isClaudeCodeSdkConfigured()) {
+              return jsonrpcResponse(id ?? null, null, {
+                code: -32002,
+                message: "Cannot auto-create session: Claude Code SDK not configured. Set ANTHROPIC_AUTH_TOKEN environment variable.",
+              });
+            }
+
+            acpSessionId = await manager.createClaudeCodeSdkSession(
+              sessionId,
+              cwd,
+              (msg) => {
+                if (msg.method === "session/update" && msg.params) {
+                  const params = msg.params as Record<string, unknown>;
+                  store.pushNotification({
+                    ...params,
+                    sessionId,
+                  } as never);
+                }
+              }
+            );
+          } else if (isClaudeCode) {
+            // Claude Code CLI session
+            const mcpConfigs = buildMcpConfigForClaude();
+            acpSessionId = await manager.createClaudeSession(
+              sessionId,
+              cwd,
+              (msg) => {
+                if (msg.method === "session/update" && msg.params) {
+                  const params = msg.params as Record<string, unknown>;
+                  store.pushNotification({
+                    ...params,
+                    sessionId,
+                  } as never);
+                }
+              },
+              mcpConfigs,
+              undefined, // modeId
+              role,
+            );
+          } else {
+            // Standard ACP session
+            acpSessionId = await manager.createSession(
+              sessionId,
+              cwd,
+              (msg) => {
+                if (msg.method === "session/update" && msg.params) {
+                  const params = msg.params as Record<string, unknown>;
+                  store.pushNotification({
+                    ...params,
+                    sessionId,
+                  } as never);
+                }
+              },
+              provider,
+              undefined, // modeId
+              undefined, // extraArgs
+            );
+          }
+
+          // Persist session for UI listing
+          const now = new Date();
+          store.upsertSession({
+            sessionId,
+            cwd,
+            workspaceId,
+            routaAgentId: acpSessionId,
+            provider,
+            role,
+            createdAt: now.toISOString(),
+          });
+
+          // Also persist to database for serverless session recovery
+          if (isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
+            try {
+              const db = getPostgresDatabase();
+              const pgStore = new PgAcpSessionStore(db);
+              await pgStore.save({
+                id: sessionId,
+                cwd,
+                workspaceId,
+                routaAgentId: acpSessionId,
+                provider,
+                role,
+                firstPromptSent: false,
+                messageHistory: [],
+                createdAt: now,
+                updatedAt: now,
+              });
+              console.log(`[ACP Route] Auto-created session persisted to database: ${sessionId}`);
+            } catch (err) {
+              console.error(`[ACP Route] Failed to persist auto-created session to database:`, err);
+            }
+          }
+
+          console.log(`[ACP Route] Auto-created session: ${sessionId} (provider: ${provider}, agent session: ${acpSessionId})`);
+
+          // Trace: session_start
+          const sessionStartTrace = withMetadata(
+            withMetadata(
+              withWorkspaceId(
+                createTraceRecord(sessionId, "session_start", { provider }),
+                workspaceId
+              ),
+              "cwd", cwd
+            ),
+            "role", role
+          );
+          recordTrace(cwd, sessionStartTrace);
+        } catch (err) {
+          console.error(`[ACP Route] Failed to auto-create session:`, err);
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: `Failed to auto-create session: ${err instanceof Error ? err.message : "Unknown error"}`,
+          });
+        }
+      }
+
       // Check if this is a ROUTA coordinator session - inject coordinator context
       const orchestrator = getRoutaOrchestrator();
       if (orchestrator) {
-        const store = getHttpSessionStore();
         const sessionRecord = store.getSession(sessionId);
         if (sessionRecord?.routaAgentId) {
           const system = getRoutaSystem();
@@ -440,7 +585,6 @@ export async function POST(request: NextRequest) {
       }
 
       // ── Store user message in history before sending ────────────────
-      const store = getHttpSessionStore();
       store.pushUserMessage(sessionId, promptText);
 
       // ── Trace: user_message ─────────────────────────────────────────

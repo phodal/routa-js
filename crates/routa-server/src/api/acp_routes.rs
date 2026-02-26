@@ -261,6 +261,68 @@ async fn acp_rpc(
                 prompt_text.len()
             );
 
+            // ── Auto-create session if it doesn't exist ────────────────────────
+            // Check if session exists
+            let session_exists = state.acp_manager.get_session(&session_id).await.is_some();
+
+            if !session_exists {
+                tracing::info!(
+                    "[ACP Route] Session {} not found, auto-creating with default settings...",
+                    session_id
+                );
+
+                // Use default settings for auto-created session
+                let cwd = params
+                    .get("cwd")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(".")
+                    .to_string();
+                let provider = params
+                    .get("provider")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let workspace_id = params
+                    .get("workspaceId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("default")
+                    .to_string();
+                let role = Some("CRAFTER".to_string()); // Default role for auto-created sessions
+
+                // Create the session
+                match state
+                    .acp_manager
+                    .create_session(
+                        session_id.clone(),
+                        cwd,
+                        workspace_id,
+                        provider.clone(),
+                        role,
+                        None, // model
+                    )
+                    .await
+                {
+                    Ok((_our_sid, agent_sid)) => {
+                        tracing::info!(
+                            "[ACP Route] Auto-created session: {} (provider: {:?}, agent session: {})",
+                            session_id,
+                            provider.as_deref().unwrap_or("opencode"),
+                            agent_sid
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("[ACP Route] Failed to auto-create session: {}", e);
+                        return Ok(Json(serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "error": {
+                                "code": -32000,
+                                "message": format!("Failed to auto-create session: {}", e)
+                            }
+                        })));
+                    }
+                }
+            }
+
             // Forward to the live agent process
             match state.acp_manager.prompt(&session_id, &prompt_text).await {
                 Ok(result) => Ok(Json(serde_json::json!({
