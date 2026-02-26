@@ -85,6 +85,14 @@ export class ClaudeCodeSdkAdapter {
   private cwd: string;
   private _alive = false;
   private abortController: AbortController | null = null;
+  /**
+   * Tracks whether native stream_event text deltas have been dispatched during
+   * the current prompt turn. Used to avoid double-dispatching text for backends
+   * (like native Anthropic) that emit both stream_event and assistant messages.
+   * GLM and similar providers only emit assistant messages, so when this is false
+   * we fall back to dispatching text from the assistant message blocks.
+   */
+  private _hasSeenStreamTextDelta = false;
 
   constructor(cwd: string, onNotification: NotificationHandler) {
     this.cwd = cwd;
@@ -151,6 +159,7 @@ export class ClaudeCodeSdkAdapter {
 
     const config = getClaudeCodeSdkConfig();
     this.abortController = new AbortController();
+    this._hasSeenStreamTextDelta = false;
     const sessionId = this.sessionId;
 
     const maskedKey = config.apiKey
@@ -275,6 +284,7 @@ export class ClaudeCodeSdkAdapter {
 
         if (event.type === "content_block_delta") {
           if (event.delta.type === "text_delta") {
+            this._hasSeenStreamTextDelta = true;
             this.onNotification(
               createNotification("session/update", {
                 sessionId,
@@ -315,6 +325,25 @@ export class ClaudeCodeSdkAdapter {
       }
 
       case "assistant": {
+        // For backends that don't emit stream_event text deltas (e.g. GLM via
+        // open.bigmodel.cn), dispatch text blocks as agent_message_chunk here.
+        // Native Anthropic streams already emitted each delta via stream_event,
+        // so we skip to avoid duplicating the complete text.
+        if (!this._hasSeenStreamTextDelta) {
+          for (const block of msg.message.content) {
+            if (block.type === "text" && block.text) {
+              this.onNotification(
+                createNotification("session/update", {
+                  sessionId,
+                  update: {
+                    sessionUpdate: "agent_message_chunk",
+                    content: { type: "text", text: block.text },
+                  },
+                })
+              );
+            }
+          }
+        }
         // Emit tool completion updates for each tool_use block in the message
         for (const block of msg.message.content) {
           if (block.type === "tool_use") {
