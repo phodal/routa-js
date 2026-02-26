@@ -21,6 +21,7 @@ import { useAcp } from "../hooks/use-acp";
 import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
 import { RepoPicker, type RepoSelection } from "./repo-picker";
 import { useRouter } from "next/navigation";
+import { storePendingPrompt } from "../utils/pending-prompt";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -183,15 +184,16 @@ export function QuickStartInput({
 
       if (result?.sessionId) {
         const url = wsId ? `/${wsId}/${result.sessionId}` : `/${result.sessionId}`;
-        const promptText = input;
 
-        // Clear state and navigate FIRST
+        // Store the prompt for the session page to send after navigation
+        // This avoids ACP request cancellation during page transition
+        storePendingPrompt(result.sessionId, input);
+
+        // Clear state and navigate
         setInput("");
         onSessionCreated?.(result.sessionId);
         router.push(url);
-
-        // Send the initial prompt AFTER navigation (don't await)
-        acp.prompt(promptText);
+        // Don't send prompt here - it will be sent by the session page
       }
     } finally {
       // Reset mutex lock (though usually we navigate away)

@@ -30,6 +30,7 @@ import {useNotes} from "@/client/hooks/use-notes";
 import type {RepoSelection} from "@/client/components/repo-picker";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
 import {ProtocolBadge} from "@/app/protocol-badge";
+import {consumePendingPrompt} from "@/client/utils/pending-prompt";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -124,6 +125,31 @@ export function SessionPageClient() {
       acp.selectSession(sessionId);
     }
   }, [sessionId, acp.connected, acp.selectSession]);
+
+  // Track if we've already sent the pending prompt for this session
+  const pendingPromptSentRef = useRef<Set<string>>(new Set());
+
+  // Check for and send pending prompt after session is selected
+  useEffect(() => {
+    if (!sessionId || !acp.connected || acp.loading) return;
+
+    // Only send once per session per page load
+    if (pendingPromptSentRef.current.has(sessionId)) return;
+
+    // Check for pending prompt from home page navigation
+    const pendingText = consumePendingPrompt(sessionId);
+    if (pendingText) {
+      console.log(`[SessionPage] Found pending prompt for session ${sessionId}, sending...`);
+      pendingPromptSentRef.current.add(sessionId);
+
+      // Small delay to ensure ACP connection is fully ready
+      const timer = setTimeout(() => {
+        acp.prompt(pendingText);
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [sessionId, acp.connected, acp.loading, acp.prompt]);
 
   // Load global tool mode on mount
   useEffect(() => {
@@ -771,20 +797,48 @@ export function SessionPageClient() {
   const showTaskPanel = true;
 
   // Verify workspace exists, redirect to home if not
+  // Allow "default" as a special workspace ID that always exists
   const workspace = workspacesHook.workspaces.find((w) => w.id === workspaceId);
+  const isDefaultWorkspace = workspaceId === "default";
+
   useEffect(() => {
-    if (!workspacesHook.loading && !workspace) {
+    // Don't redirect if:
+    // - Still loading workspaces
+    // - Workspace found in list
+    // - Using "default" workspace (always allowed)
+    if (!workspacesHook.loading && !workspace && !isDefaultWorkspace) {
       router.push("/");
     }
-  }, [workspace, workspacesHook.loading, router]);
+  }, [workspace, workspacesHook.loading, router, isDefaultWorkspace]);
 
-  if (workspacesHook.loading || !workspace) {
+  // Show loading state while workspaces are loading
+  // But don't block if using "default" workspace
+  if (workspacesHook.loading && !isDefaultWorkspace) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f1117]">
         <div className="text-gray-400 dark:text-gray-500">Loading...</div>
       </div>
     );
   }
+
+  // For non-default workspaces, require workspace to exist
+  if (!workspace && !isDefaultWorkspace) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f1117]">
+        <div className="text-gray-400 dark:text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  // Create a fallback workspace object for "default"
+  const effectiveWorkspace = workspace ?? {
+    id: "default",
+    title: "Default Workspace",
+    status: "active" as const,
+    metadata: {},
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
@@ -821,7 +875,7 @@ export function SessionPageClient() {
         {/* Workspace context */}
         <div className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
         <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline truncate max-w-[120px]">
-          {workspace.title}
+          {effectiveWorkspace.title}
         </span>
 
         {/* Agent selector */}
@@ -907,7 +961,7 @@ export function SessionPageClient() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
               </svg>
               <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
-                {workspace.title}
+                {effectiveWorkspace.title}
               </span>
               {codebases.length > 0 && repoSelection && (
                 <>

@@ -32,7 +32,8 @@ export interface UseWorkspacesReturn {
 
 export function useWorkspaces(): UseWorkspacesReturn {
   const [workspaces, setWorkspaces] = useState<WorkspaceData[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Start with loading=true since we fetch on mount
+  const [loading, setLoading] = useState(true);
 
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true);

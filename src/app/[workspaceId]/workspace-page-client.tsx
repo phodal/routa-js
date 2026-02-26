@@ -47,12 +47,19 @@ export function WorkspacePageClient() {
   }, [acp.connected, acp.loading]);
 
   // Verify workspace exists, redirect to home if not
+  // Allow "default" as a special workspace ID that always exists
   const workspace = workspacesHook.workspaces.find((w) => w.id === workspaceId);
+  const isDefaultWorkspace = workspaceId === "default";
+
   useEffect(() => {
-    if (!workspacesHook.loading && !workspace) {
+    // Don't redirect if:
+    // - Still loading workspaces
+    // - Workspace found in list
+    // - Using "default" workspace (always allowed)
+    if (!workspacesHook.loading && !workspace && !isDefaultWorkspace) {
       router.push("/");
     }
-  }, [workspace, workspacesHook.loading, router]);
+  }, [workspace, workspacesHook.loading, router, isDefaultWorkspace]);
 
   const handleWorkspaceSelect = useCallback((wsId: string) => {
     router.push(`/${wsId}`);
@@ -71,13 +78,34 @@ export function WorkspacePageClient() {
     setRefreshKey((k) => k + 1);
   }, []);
 
-  if (workspacesHook.loading || !workspace) {
+  // Show loading state while workspaces are loading
+  // But don't block if using "default" workspace
+  if (workspacesHook.loading && !isDefaultWorkspace) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f1117]">
         <div className="text-gray-400 dark:text-gray-500">Loading...</div>
       </div>
     );
   }
+
+  // For non-default workspaces, require workspace to exist
+  if (!workspace && !isDefaultWorkspace) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f1117]">
+        <div className="text-gray-400 dark:text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  // Create a fallback workspace object for "default"
+  const effectiveWorkspace = workspace ?? {
+    id: "default",
+    title: "Default Workspace",
+    status: "active" as const,
+    metadata: {},
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
@@ -105,7 +133,7 @@ export function WorkspacePageClient() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
           </svg>
           <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[150px]">
-            {workspace.title}
+            {effectiveWorkspace.title}
           </span>
           <WorkspaceSwitcher
             workspaces={workspacesHook.workspaces}

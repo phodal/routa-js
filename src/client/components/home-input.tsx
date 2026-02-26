@@ -17,6 +17,7 @@ import { useAcp } from "../hooks/use-acp";
 import { useSkills } from "../hooks/use-skills";
 import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
 import type { RepoSelection } from "./repo-picker";
+import { storePendingPrompt } from "../utils/pending-prompt";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -114,9 +115,14 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
           const url = wsId
             ? `/${wsId}/${result.sessionId}`
             : `/${result.sessionId}`;
+
+          // Store the prompt for the session page to send after navigation
+          // This avoids ACP request cancellation during page transition
+          storePendingPrompt(result.sessionId, text);
+
           onSessionCreated?.(result.sessionId);
           router.push(url);
-          acp.prompt(text);
+          // Don't send prompt here - it will be sent by the session page
         }
       } finally {
         isSubmittingRef.current = false;
