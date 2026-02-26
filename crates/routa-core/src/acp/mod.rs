@@ -21,6 +21,7 @@ pub mod claude_code_process;
 pub mod installation_state;
 pub mod paths;
 pub mod process;
+pub mod provider_adapter;
 pub mod registry_types;
 
 pub use binary_manager::AcpBinaryManager;

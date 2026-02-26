@@ -9,18 +9,11 @@
  * - Stores user messages for history preservation
  * - Consolidates consecutive agent_message_chunk notifications for efficient storage
  * - Records Agent Trace with file ranges and VCS context
+ * - Uses Provider Adapters to normalize different provider message formats
  */
 
-import {
-  createTraceRecord,
-  withConversation,
-  withTool,
-  withVcs,
-  recordTrace,
-  extractFilesFromToolCall,
-  getVcsContextLight,
-  type TraceRecord,
-} from "@/core/trace";
+import { getProviderAdapter } from "./provider-adapter";
+import { TraceRecorder } from "./provider-adapter/trace-recorder";
 
 export interface RoutaSessionRecord {
   sessionId: string;
@@ -101,31 +94,17 @@ export function consolidateMessageHistory(
 }
 
 /**
- * Pending tool call data awaiting rawInput from tool_call_update.
- * OpenCode sends tool_call with empty rawInput, then tool_call_update with actual args.
+ * HttpSessionStore uses Provider Adapters to handle different provider behaviors.
+ * Trace recording is delegated to TraceRecorder which handles deferred input patterns.
  */
-interface PendingToolCall {
-  toolCallId: string;
-  kind: string;
-  title: string;
-  provider: string;
-  cwd: string;
-  sessionId: string;
-  traced: boolean;
-}
-
 class HttpSessionStore {
   private sessions = new Map<string, RoutaSessionRecord>();
   private sseControllers = new Map<string, Controller>();
   private pendingNotifications = new Map<string, SessionUpdateNotification[]>();
   /** Store all notifications per session for history replay */
   private messageHistory = new Map<string, SessionUpdateNotification[]>();
-  /** Buffer for accumulating agent message chunks before tracing */
-  private agentMessageBuffer = new Map<string, string>();
-  /** Buffer for accumulating agent thought chunks before tracing */
-  private agentThoughtBuffer = new Map<string, string>();
-  /** Buffer for tool calls awaiting rawInput (keyed by toolCallId) */
-  private pendingToolCalls = new Map<string, PendingToolCall>();
+  /** TraceRecorder handles all trace recording with provider-specific normalization */
+  private traceRecorder = new TraceRecorder();
 
   upsertSession(record: RoutaSessionRecord) {
     this.sessions.set(record.sessionId, record);
@@ -143,57 +122,24 @@ class HttpSessionStore {
   }
 
   deleteSession(sessionId: string): boolean {
-    this.flushAgentBuffer(sessionId); // Trace any remaining buffered content
-    this.flushThoughtBuffer(sessionId); // Trace any remaining thought content
+    // Clean up TraceRecorder buffers for this session
+    this.traceRecorder.cleanupSession(sessionId);
     this.messageHistory.delete(sessionId);
     this.pendingNotifications.delete(sessionId);
-    this.agentMessageBuffer.delete(sessionId);
-    this.agentThoughtBuffer.delete(sessionId);
     // Detach SSE if connected
     this.sseControllers.delete(sessionId);
     return this.sessions.delete(sessionId);
   }
 
   /**
-   * Flush and trace any remaining buffered agent message content.
+   * Flush and trace any remaining buffered agent message/thought content.
    * Call this when a prompt completes or session ends.
    */
   flushAgentBuffer(sessionId: string): void {
-    const accumulated = this.agentMessageBuffer.get(sessionId);
-    if (accumulated && accumulated.length > 0) {
-      const sessionRecord = this.sessions.get(sessionId);
-      const agentTrace = withConversation(
-        createTraceRecord(sessionId, "agent_message", { provider: sessionRecord?.provider ?? "unknown" }),
-        {
-          role: "assistant",
-          contentPreview: accumulated.slice(0, 200),
-          fullContent: accumulated,
-        }
-      );
-      recordTrace(sessionRecord?.cwd ?? process.cwd(), agentTrace);
-      this.agentMessageBuffer.set(sessionId, "");
-    }
-  }
-
-  /**
-   * Flush and trace any remaining buffered agent thought content.
-   * Call this when a prompt completes or session ends.
-   */
-  flushThoughtBuffer(sessionId: string): void {
-    const accumulated = this.agentThoughtBuffer.get(sessionId);
-    if (accumulated && accumulated.length > 0) {
-      const sessionRecord = this.sessions.get(sessionId);
-      const thoughtTrace = withConversation(
-        createTraceRecord(sessionId, "agent_thought", { provider: sessionRecord?.provider ?? "unknown" }),
-        {
-          role: "assistant",
-          contentPreview: accumulated.slice(0, 200),
-          fullContent: accumulated,
-        }
-      );
-      recordTrace(sessionRecord?.cwd ?? process.cwd(), thoughtTrace);
-      this.agentThoughtBuffer.set(sessionId, "");
-    }
+    const sessionRecord = this.sessions.get(sessionId);
+    const cwd = sessionRecord?.cwd ?? process.cwd();
+    const provider = sessionRecord?.provider ?? "unknown";
+    this.traceRecorder.flushSession(sessionId, cwd, provider);
   }
 
   renameSession(sessionId: string, name: string): boolean {
@@ -246,26 +192,27 @@ class HttpSessionStore {
     history.push(notification);
     this.messageHistory.set(sessionId, history);
 
-    // ── Trace: user_message ───────────────────────────────────────────────
+    // ── Trace: user_message using Provider Adapter ──
     const sessionRecord = this.sessions.get(sessionId);
     const cwd = sessionRecord?.cwd ?? process.cwd();
     const provider = sessionRecord?.provider ?? "unknown";
 
-    const userTrace = withConversation(
-      createTraceRecord(sessionId, "user_message", { provider }),
-      {
-        role: "user",
-        contentPreview: prompt.slice(0, 200),
-        fullContent: prompt,
+    // Normalize and record trace using adapter
+    const adapter = getProviderAdapter(provider);
+    const normalized = adapter.normalize(sessionId, notification);
+    if (normalized) {
+      const updates = Array.isArray(normalized) ? normalized : [normalized];
+      for (const update of updates) {
+        this.traceRecorder.recordFromUpdate(update, cwd);
       }
-    );
-    recordTrace(cwd, userTrace);
+    }
   }
 
   /**
    * Push a session/update notification. If SSE isn't connected yet, buffer it.
    *
    * Accepts the raw notification params from opencode (which may have different shapes).
+   * Uses Provider Adapters to normalize messages and handle provider-specific behaviors.
    */
   pushNotification(notification: SessionUpdateNotification) {
     const sessionId = notification.sessionId;
@@ -275,164 +222,22 @@ class HttpSessionStore {
     history.push(notification);
     this.messageHistory.set(sessionId, history);
 
-    // ── Trace recording for various event types ──
-    const update = notification.update as Record<string, unknown> | undefined;
-    const sessionUpdate = update?.sessionUpdate;
+    // ── Trace recording using Provider Adapter pattern ──
     const sessionRecord = this.sessions.get(sessionId);
     const cwd = sessionRecord?.cwd ?? process.cwd();
     const provider = sessionRecord?.provider ?? "unknown";
 
-    if (sessionUpdate === "agent_thought_chunk") {
-      // Accumulate thought chunks in buffer
-      const content = update?.content as { type?: string; text?: string } | undefined;
-      const text = content?.text ?? "";
-      const existing = this.agentThoughtBuffer.get(sessionId) ?? "";
-      const accumulated = existing + text;
-      this.agentThoughtBuffer.set(sessionId, accumulated);
-      // Trace when buffer reaches 100+ chars
-      if (accumulated.length >= 100) {
-        const thoughtTrace = withConversation(
-          createTraceRecord(sessionId, "agent_thought", { provider }),
-          {
-            role: "assistant",
-            contentPreview: accumulated.slice(0, 200),
-            fullContent: accumulated,
-          }
-        );
-        recordTrace(cwd, thoughtTrace);
-        this.agentThoughtBuffer.set(sessionId, ""); // Reset buffer
-      }
-    } else if (sessionUpdate === "agent_message_chunk") {
-      // Accumulate message chunks in buffer
-      const content = update?.content as { type?: string; text?: string } | undefined;
-      const text = content?.text ?? "";
-      const existing = this.agentMessageBuffer.get(sessionId) ?? "";
-      const accumulated = existing + text;
-      this.agentMessageBuffer.set(sessionId, accumulated);
-      // Trace when buffer reaches 100+ chars (captures meaningful segments)
-      if (accumulated.length >= 100) {
-        const agentTrace = withConversation(
-          createTraceRecord(sessionId, "agent_message", { provider }),
-          {
-            role: "assistant",
-            contentPreview: accumulated.slice(0, 200),
-            fullContent: accumulated,
-          }
-        );
-        recordTrace(cwd, agentTrace);
-        this.agentMessageBuffer.set(sessionId, ""); // Reset buffer
-      }
-    } else if (sessionUpdate === "agent_message") {
-      // Full message (non-streaming) - trace immediately
-      const content = update?.content as { type?: string; text?: string } | undefined;
-      const text = content?.text ?? "";
-      const agentTrace = withConversation(
-        createTraceRecord(sessionId, "agent_message", { provider }),
-        {
-          role: "assistant",
-          contentPreview: text.slice(0, 200),
-          fullContent: text,
-        }
-      );
-      recordTrace(cwd, agentTrace);
-    } else if (sessionUpdate === "tool_call") {
-      // Tool call - OpenCode may send rawInput as empty initially
-      const toolCallId = update?.toolCallId as string | undefined;
-      const kind = update?.kind as string | undefined;
-      const title = update?.title as string | undefined;
-      const rawInput = update?.rawInput as Record<string, unknown> | undefined;
+    // Get the appropriate adapter for this provider
+    const adapter = getProviderAdapter(provider);
 
-      // Check if rawInput is empty or undefined
-      const hasInput = rawInput && Object.keys(rawInput).length > 0;
+    // Normalize the raw notification using the provider adapter
+    const normalized = adapter.normalize(sessionId, notification);
 
-      if (hasInput) {
-        // Trace immediately with full input (Claude Code behavior)
-        let toolTrace = createTraceRecord(sessionId, "tool_call", { provider });
-        toolTrace = withTool(toolTrace, {
-          name: kind ?? title ?? "unknown",
-          toolCallId,
-          status: "running",
-          input: rawInput,
-        });
-
-        const toolName = kind ?? title ?? "unknown";
-        const files = extractFilesFromToolCall(toolName, rawInput);
-        if (files.length > 0) {
-          toolTrace = { ...toolTrace, files };
-        }
-
-        const vcs = getVcsContextLight(cwd);
-        if (vcs) {
-          toolTrace = withVcs(toolTrace, vcs);
-        }
-
-        recordTrace(cwd, toolTrace);
-      } else if (toolCallId) {
-        // OpenCode behavior: rawInput is empty, wait for tool_call_update
-        this.pendingToolCalls.set(toolCallId, {
-          toolCallId,
-          kind: kind ?? title ?? "unknown",
-          title: title ?? kind ?? "unknown",
-          provider,
-          cwd,
-          sessionId,
-          traced: false,
-        });
-      }
-    } else if (sessionUpdate === "tool_call_update") {
-      // Tool update - may contain rawInput (OpenCode) or just rawOutput (completion)
-      const toolCallId = update?.toolCallId as string | undefined;
-      const kind = update?.kind as string | undefined;
-      const title = update?.title as string | undefined;
-      const rawInput = update?.rawInput as Record<string, unknown> | undefined;
-      const rawOutput = update?.rawOutput as unknown;
-      const status = update?.status as string | undefined;
-
-      // Check if this update has rawInput and the tool_call wasn't traced yet
-      const pending = toolCallId ? this.pendingToolCalls.get(toolCallId) : undefined;
-      const hasInput = rawInput && Object.keys(rawInput).length > 0;
-
-      if (pending && hasInput && !pending.traced) {
-        // Record the tool_call trace now with actual input
-        let toolTrace = createTraceRecord(sessionId, "tool_call", { provider });
-        toolTrace = withTool(toolTrace, {
-          name: kind ?? pending.kind ?? "unknown",
-          toolCallId,
-          status: "running",
-          input: rawInput,
-        });
-
-        const toolName = kind ?? pending.kind ?? "unknown";
-        const files = extractFilesFromToolCall(toolName, rawInput);
-        if (files.length > 0) {
-          toolTrace = { ...toolTrace, files };
-        }
-
-        const vcs = getVcsContextLight(cwd);
-        if (vcs) {
-          toolTrace = withVcs(toolTrace, vcs);
-        }
-
-        recordTrace(cwd, toolTrace);
-        pending.traced = true;
-      }
-
-      // Record tool_result trace when status indicates completion or we have output
-      const isComplete = status === "completed" || status === "failed" || rawOutput !== undefined;
-      if (isComplete) {
-        let toolResultTrace = createTraceRecord(sessionId, "tool_result", { provider });
-        toolResultTrace = withTool(toolResultTrace, {
-          name: kind ?? title ?? "unknown",
-          toolCallId,
-          status: status ?? "completed",
-          output: rawOutput as string | undefined,
-        });
-        recordTrace(cwd, toolResultTrace);
-
-        // Clean up pending entry
-        if (toolCallId) {
-          this.pendingToolCalls.delete(toolCallId);
-        }
+    // Record traces from normalized messages
+    if (normalized) {
+      const updates = Array.isArray(normalized) ? normalized : [normalized];
+      for (const update of updates) {
+        this.traceRecorder.recordFromUpdate(update, cwd);
       }
     }
 
