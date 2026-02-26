@@ -27,6 +27,7 @@ import { ensureMcpForProvider } from "@/core/acp/mcp-setup";
 import { v4 as uuidv4 } from "uuid";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
+import { isClaudeCodeSdkConfigured } from "@/core/acp/claude-code-sdk-adapter";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { getRoutaSystem } from "@/core/routa-system";
 import { AgentRole } from "@/core/models/agent";
@@ -175,11 +176,21 @@ export async function POST(request: NextRequest) {
 
       const preset = getPresetById(provider);
       const isClaudeCode = preset?.nonStandardApi === true || provider === "claude";
+      // claude-code-sdk is the SDK-based adapter for serverless environments
+      const isClaudeCodeSdk = provider === "claude-code-sdk";
 
       let acpSessionId: string;
 
-      if (isClaudeCode) {
+      if (isClaudeCode || isClaudeCodeSdk) {
         // ── Claude Code: stream-json protocol with MCP ───────────────
+        // For claude-code-sdk, verify SDK is configured
+        if (isClaudeCodeSdk && !isClaudeCodeSdkConfigured()) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32002,
+            message: "Claude Code SDK not configured. Set ANTHROPIC_AUTH_TOKEN environment variable.",
+          });
+        }
+
         const mcpConfigs = buildMcpConfigForClaude();
 
         acpSessionId = await manager.createClaudeSession(
