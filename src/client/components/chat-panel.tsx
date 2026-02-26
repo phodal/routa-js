@@ -203,11 +203,6 @@ export function ChatPanel({
   const fetchSessionHistory = useCallback(async (sessionId: string) => {
     // Skip if already loaded
     if (loadedHistoryRef.current.has(sessionId)) return;
-    if (messagesBySession[sessionId]?.length) {
-      // Already have messages from SSE
-      loadedHistoryRef.current.add(sessionId);
-      return;
-    }
 
     try {
       const res = await fetch(`/api/sessions/${sessionId}/history`, { cache: "no-store" });
@@ -336,7 +331,7 @@ export function ChatPanel({
     } catch {
       // ignore errors
     }
-  }, [messagesBySession, onTasksDetected]);
+  }, [onTasksDetected]);
 
   // When active session changes, swap visible transcript and load history
   useEffect(() => {
