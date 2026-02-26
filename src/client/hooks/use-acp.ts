@@ -56,6 +56,8 @@ export interface UseAcpActions {
     role?: string,
     workspaceId?: string,
     model?: string,
+    /** Idempotency key to prevent duplicate session creation */
+    idempotencyKey?: string,
   ) => Promise<AcpNewSessionResult | null>;
   selectSession: (sessionId: string) => void;
   setProvider: (provider: string) => void;
@@ -179,6 +181,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       role?: string,
       workspaceId?: string,
       model?: string,
+      idempotencyKey?: string,
     ): Promise<AcpNewSessionResult | null> => {
       const client = clientRef.current;
       if (!client) return null;
@@ -196,6 +199,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           mcpServers: [],
           workspaceId,
           model,
+          idempotencyKey,
         });
         sessionIdRef.current = result.sessionId;
         setState((s) => ({

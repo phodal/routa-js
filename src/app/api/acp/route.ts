@@ -42,6 +42,29 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// ─── Idempotency cache for session/new requests ─────────────────────────
+// Prevents duplicate session creation when user clicks multiple times
+// before navigation completes. Cache entries expire after 30 seconds.
+
+interface IdempotencyEntry {
+  sessionId: string;
+  provider: string;
+  role: string;
+  createdAt: number;
+}
+
+const idempotencyCache = new Map<string, IdempotencyEntry>();
+const IDEMPOTENCY_TTL_MS = 30_000; // 30 seconds
+
+function cleanupIdempotencyCache() {
+  const now = Date.now();
+  for (const [key, entry] of idempotencyCache.entries()) {
+    if (now - entry.createdAt > IDEMPOTENCY_TTL_MS) {
+      idempotencyCache.delete(key);
+    }
+  }
+}
+
 // ─── GET: SSE stream for session/update ────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -111,6 +134,7 @@ export async function POST(request: NextRequest) {
     // Spawn an ACP agent process and create a session.
     // Optional `provider` param selects the agent (default: "opencode").
     // For `claude` provider: spawns Claude Code with stream-json + MCP.
+    // Supports idempotencyKey to prevent duplicate session creation.
     if (method === "session/new") {
       const p = (params ?? {}) as Record<string, unknown>;
       const cwd = (p.cwd as string | undefined) ?? process.cwd();
@@ -118,13 +142,33 @@ export async function POST(request: NextRequest) {
       const modeId = (p.modeId as string | undefined) ?? (p.mode as string | undefined);
       const role = (p.role as string | undefined)?.toUpperCase();
       const model = (p.model as string | undefined);
+      const idempotencyKey = p.idempotencyKey as string | undefined;
+
+      // ── Idempotency check ──────────────────────────────────────────────
+      // If client provides an idempotencyKey, check if we've already created
+      // a session for this key. This prevents duplicate sessions when user
+      // clicks "Start" multiple times before navigation completes.
+      if (idempotencyKey) {
+        cleanupIdempotencyCache();
+        const cached = idempotencyCache.get(idempotencyKey);
+        if (cached) {
+          console.log(`[ACP Route] Returning cached session for idempotencyKey: ${idempotencyKey} -> ${cached.sessionId}`);
+          return jsonrpcResponse(id ?? null, {
+            sessionId: cached.sessionId,
+            provider: cached.provider,
+            role: cached.role,
+            cached: true,
+          });
+        }
+      }
+
       const sessionId = uuidv4();
 
       // Default provider for CRAFTER/GATE delegation (can be overridden per-task)
       const crafterProvider = (p.crafterProvider as string | undefined) ?? provider;
       const gateProvider = (p.gateProvider as string | undefined) ?? provider;
 
-      console.log(`[ACP Route] Creating session: provider=${provider}, cwd=${cwd}, modeId=${modeId}, role=${role ?? "CRAFTER"}`);
+      console.log(`[ACP Route] Creating session: provider=${provider}, cwd=${cwd}, modeId=${modeId}, role=${role ?? "CRAFTER"}, idempotencyKey=${idempotencyKey ?? "none"}`);
 
       const store = getHttpSessionStore();
       const manager = getAcpProcessManager();
@@ -253,6 +297,16 @@ export async function POST(request: NextRequest) {
       console.log(
         `[ACP Route] Session created: ${sessionId} (provider: ${provider}, agent session: ${acpSessionId}, role: ${role ?? "CRAFTER"})`
       );
+
+      // ── Cache for idempotency ─────────────────────────────────────────
+      if (idempotencyKey) {
+        idempotencyCache.set(idempotencyKey, {
+          sessionId,
+          provider,
+          role: role ?? "CRAFTER",
+          createdAt: Date.now(),
+        });
+      }
 
       // ── Trace: session_start ────────────────────────────────────────
       const sessionStartTrace = withMetadata(

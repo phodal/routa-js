@@ -15,7 +15,7 @@
  * Designed to work both on the home page and in workspace contexts.
  */
 
-import React, { useState, useRef, useEffect, useCallback, useTransition } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useAcp } from "../hooks/use-acp";
 import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
@@ -50,10 +50,13 @@ export function QuickStartInput({
   const router = useRouter();
   const acp = useAcp();
   const workspacesHook = useWorkspaces();
-  const [isPending, startTransition] = useTransition();
 
   // Input state
   const [input, setInput] = useState("");
+
+  // Submission state - use ref as mutex lock to prevent double submission
+  const isSubmittingRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Workspace & codebase state
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(propWorkspaceId ?? null);
@@ -134,29 +137,58 @@ export function QuickStartInput({
     setModelModels([]);
   }, [acp.selectedProvider]);
 
+  // Idempotency key ref - generated once per "start" attempt
+  // This is used to prevent duplicate session creation on the backend
+  const idempotencyKeyRef = useRef<string | null>(null);
+
   // Handle start session
   const handleStart = useCallback(async () => {
     if (!input.trim() || !acp.connected) return;
 
-    const cwd = repoSelection?.path;
-    const wsId = selectedWorkspaceId ?? undefined;
+    // Prevent double submission using ref as mutex lock
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
 
-    // Create session
-    const result = await acp.createSession(cwd, undefined, undefined, selectedRole, wsId, model || undefined);
+    // Generate idempotency key for this submission attempt
+    // This ensures that even if the request is sent multiple times,
+    // the backend will only create one session
+    idempotencyKeyRef.current = `quick-start-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-    if (result?.sessionId) {
-      const url = wsId ? `/${wsId}/${result.sessionId}` : `/${result.sessionId}`;
-      const promptText = input;
+    try {
+      const cwd = repoSelection?.path;
+      const wsId = selectedWorkspaceId ?? undefined;
 
-      // Clear state and navigate FIRST
-      setInput("");
-      onSessionCreated?.(result.sessionId);
-      router.push(url);
+      // Create session with idempotency key
+      const result = await acp.createSession(
+        cwd,
+        undefined,
+        undefined,
+        selectedRole,
+        wsId,
+        model || undefined,
+        idempotencyKeyRef.current
+      );
 
-      // Send the initial prompt AFTER navigation (don't await)
-      acp.prompt(promptText);
+      if (result?.sessionId) {
+        const url = wsId ? `/${wsId}/${result.sessionId}` : `/${result.sessionId}`;
+        const promptText = input;
+
+        // Clear state and navigate FIRST
+        setInput("");
+        onSessionCreated?.(result.sessionId);
+        router.push(url);
+
+        // Send the initial prompt AFTER navigation (don't await)
+        acp.prompt(promptText);
+      }
+    } finally {
+      // Reset mutex lock (though usually we navigate away)
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+      idempotencyKeyRef.current = null;
     }
-  }, [input, acp, repoSelection, selectedWorkspaceId, selectedRole, model, router, onSessionCreated, startTransition]);
+  }, [input, acp, repoSelection, selectedWorkspaceId, selectedRole, model, router, onSessionCreated]);
 
   const selectedProviderInfo = acp.providers.find((p) => p.id === acp.selectedProvider);
 
@@ -476,13 +508,22 @@ export function QuickStartInput({
 
           <button
             onClick={handleStart}
-            disabled={!input.trim() || !acp.connected || isPending}
+            disabled={!input.trim() || !acp.connected || isSubmitting}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            开始
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-            </svg>
+            {isSubmitting ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                创建中...
+              </>
+            ) : (
+              <>
+                开始
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                </svg>
+              </>
+            )}
           </button>
         </div>
       </div>

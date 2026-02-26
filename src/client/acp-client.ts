@@ -102,6 +102,11 @@ export class BrowserAcpClient {
   /**
    * Create a new ACP session.
    * This spawns a new ACP agent process on the backend.
+   *
+   * @param params.idempotencyKey - Optional unique key to prevent duplicate session creation.
+   *   If provided, the backend will return the same session for repeated requests with the same key
+   *   within a short time window (30 seconds). This prevents multiple sessions being created when
+   *   user clicks "Start" multiple times before navigation completes.
    */
   async newSession(params: {
     cwd?: string;
@@ -113,6 +118,7 @@ export class BrowserAcpClient {
     mcpServers?: Array<{ name: string; url?: string }>;
     workspaceId?: string;
     model?: string;
+    idempotencyKey?: string;
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", {
       cwd: params.cwd,
@@ -124,6 +130,7 @@ export class BrowserAcpClient {
       mcpServers: params.mcpServers ?? [],
       workspaceId: params.workspaceId,
       model: params.model,
+      idempotencyKey: params.idempotencyKey,
     });
     this._sessionId = result.sessionId;
 
