@@ -120,6 +120,8 @@ export class SqliteCodebaseStore implements CodebaseStore {
       branch: codebase.branch,
       label: codebase.label,
       isDefault: codebase.isDefault,
+      sourceType: codebase.sourceType ?? null,
+      sourceUrl: codebase.sourceUrl ?? null,
       createdAt: codebase.createdAt,
       updatedAt: codebase.updatedAt,
     });
@@ -198,6 +200,8 @@ export class SqliteCodebaseStore implements CodebaseStore {
       branch: row.branch ?? undefined,
       label: row.label ?? undefined,
       isDefault: row.isDefault,
+      sourceType: (row.sourceType as Codebase["sourceType"]) ?? undefined,
+      sourceUrl: row.sourceUrl ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

@@ -36,6 +36,8 @@ export const codebases = pgTable("codebases", {
   branch: text("branch"),
   label: text("label"),
   isDefault: boolean("is_default").notNull().default(false),
+  sourceType: text("source_type"),   // "local" | "github" — null treated as "local"
+  sourceUrl: text("source_url"),     // e.g. "https://github.com/owner/repo"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

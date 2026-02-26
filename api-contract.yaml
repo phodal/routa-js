@@ -47,6 +47,27 @@ components:
       type: string
       enum: [active, archived]
 
+    CodebaseSourceType:
+      type: string
+      enum: [local, github]
+
+    VirtualFileEntry:
+      type: object
+      required: [path, name, isDirectory]
+      properties:
+        path:
+          type: string
+        name:
+          type: string
+        isDirectory:
+          type: boolean
+        size:
+          type: integer
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/VirtualFileEntry"
+
     # ── Models ──
     Agent:
       type: object
@@ -1236,3 +1257,219 @@ paths:
       responses:
         "200":
           description: Healthy
+
+  # ── GitHub Virtual Workspace ──
+  /api/github:
+    get:
+      operationId: listGitHubWorkspaces
+      summary: List active GitHub virtual workspaces
+      responses:
+        "200":
+          description: Active workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspaces:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          type: string
+                        owner:
+                          type: string
+                        repo:
+                          type: string
+                        ref:
+                          type: string
+                        fileCount:
+                          type: integer
+                        importedAt:
+                          type: string
+                          format: date-time
+                        expiresAt:
+                          type: string
+                          format: date-time
+
+  /api/github/import:
+    post:
+      operationId: importGitHubRepo
+      summary: Import a GitHub repo as a virtual workspace (zipball download)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                owner:
+                  type: string
+                repo:
+                  type: string
+                ref:
+                  type: string
+                  description: Branch, tag, or SHA. Defaults to HEAD.
+                url:
+                  type: string
+                  description: Shorthand — GitHub URL (parsed into owner/repo)
+      responses:
+        "200":
+          description: Import successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  owner:
+                    type: string
+                  repo:
+                    type: string
+                  ref:
+                    type: string
+                  fileCount:
+                    type: integer
+                  extractedPath:
+                    type: string
+                  importedAt:
+                    type: string
+                    format: date-time
+        "404":
+          description: Repository not found
+        "403":
+          description: Rate limited or forbidden
+        "413":
+          description: Repository too large
+
+  /api/github/tree:
+    get:
+      operationId: getGitHubTree
+      summary: Get file tree for an imported GitHub repo
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ref
+          in: query
+          schema:
+            type: string
+            default: HEAD
+      responses:
+        "200":
+          description: File tree
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tree:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/VirtualFileEntry"
+                  fileCount:
+                    type: integer
+        "404":
+          description: Workspace not imported
+
+  /api/github/file:
+    get:
+      operationId: getGitHubFile
+      summary: Read a file from an imported GitHub repo
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ref
+          in: query
+          schema:
+            type: string
+            default: HEAD
+      responses:
+        "200":
+          description: File content
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: string
+                  path:
+                    type: string
+        "404":
+          description: File or workspace not found
+
+  /api/github/search:
+    get:
+      operationId: searchGitHubFiles
+      summary: Search files in an imported GitHub repo
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: ref
+          in: query
+          schema:
+            type: string
+            default: HEAD
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                        name:
+                          type: string
+                        score:
+                          type: number
+                  total:
+                    type: integer
+                  query:
+                    type: string
