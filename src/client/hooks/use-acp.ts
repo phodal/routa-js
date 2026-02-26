@@ -140,6 +140,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
       // Background task 2: Load registry providers (with timeout protection)
       // This runs in parallel and adds registry providers when ready
+      // First, quickly load registry providers (without checking status)
       client.loadRegistryProviders().then((allProviders) => {
         // loadRegistryProviders returns ALL providers (local + registry)
         // Filter to get only registry providers to avoid duplicates
@@ -152,6 +153,23 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
               ...s,
               providers: [...localProviders, ...registryProviders],
             };
+          });
+
+          // Background task 3: Check registry provider availability (slower)
+          // This updates the status from "checking" to "available" or "unavailable"
+          client.listProviders(true, true).then((checkedAllProviders) => {
+            const checkedRegistry = checkedAllProviders.filter((p) => p.source === "registry");
+            if (checkedRegistry.length > 0) {
+              setState((s) => {
+                const localProviders = s.providers.filter((p) => p.source === "static");
+                return {
+                  ...s,
+                  providers: [...localProviders, ...checkedRegistry],
+                };
+              });
+            }
+          }).catch((err) => {
+            logRuntime("info", "useAcp.connect", "Failed to check registry provider status", err);
           });
         }
       }).catch((err) => {

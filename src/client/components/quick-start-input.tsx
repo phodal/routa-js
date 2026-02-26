@@ -105,20 +105,31 @@ export function QuickStartInput({
   const modelBtnRef = useRef<HTMLButtonElement>(null);
   const [modelDropdownPos, setModelDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
 
+  // Refs for dropdown menus (portalled to body)
+  const providerDropdownRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     if (!providerDropdownOpen && !modelDropdownOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      // Provider dropdown
-      if (providerDropdownOpen && providerButtonRef.current) {
-        if (!providerButtonRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      // Provider dropdown - check both button and dropdown menu
+      if (providerDropdownOpen) {
+        const clickedInButton = providerButtonRef.current?.contains(target);
+        const clickedInDropdown = providerDropdownRef.current?.contains(target);
+        if (!clickedInButton && !clickedInDropdown) {
           setProviderDropdownOpen(false);
         }
       }
-      // Model dropdown
-      if (modelDropdownOpen && modelBtnRef.current) {
-        if (!modelBtnRef.current.contains(event.target as Node)) {
+
+      // Model dropdown - check both button and dropdown menu
+      if (modelDropdownOpen) {
+        const clickedInButton = modelBtnRef.current?.contains(target);
+        const clickedInDropdown = modelDropdownRef.current?.contains(target);
+        if (!clickedInButton && !clickedInDropdown) {
           setModelDropdownOpen(false);
           setModelFilter("");
         }
@@ -262,6 +273,7 @@ export function QuickStartInput({
               {providerDropdownOpen && providerDropdownPos && typeof document !== "undefined" &&
                 createPortal(
                   <div
+                    ref={providerDropdownRef}
                     className="fixed w-72 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999]"
                     style={{ left: providerDropdownPos.left, bottom: providerDropdownPos.bottom }}
                   >
@@ -447,6 +459,7 @@ export function QuickStartInput({
                 {modelDropdownOpen && modelDropdownPos && typeof document !== "undefined" &&
                   createPortal(
                     <div
+                      ref={modelDropdownRef}
                       className="fixed w-72 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999] flex flex-col"
                       style={{ left: modelDropdownPos.left, bottom: modelDropdownPos.bottom, maxHeight: "320px" }}
                     >
