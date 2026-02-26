@@ -31,6 +31,7 @@ import type {RepoSelection} from "@/client/components/repo-picker";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
 import {ProtocolBadge} from "@/app/protocol-badge";
 import {consumePendingPrompt} from "@/client/utils/pending-prompt";
+import {SettingsPanel, loadDefaultProviders} from "@/client/components/settings-panel";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -94,9 +95,13 @@ export function SessionPageClient() {
   const leftResizeStartXRef = useRef(0);
   const leftResizeStartWidthRef = useRef(0);
 
+  // ── Left sidebar collapse ──────────────────────────────────────────
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
+
   // ── Mobile sidebar toggle ──────────────────────────────────────────
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -470,8 +475,11 @@ export function SessionPageClient() {
       const cwd = repoSelection?.path ?? undefined;
       // Always pass the selected role - don't skip CRAFTER
       const role = selectedAgent;
-      console.log(`[handleCreateSession] Creating session: provider=${provider}, role=${role}`);
-      const result = await acp.createSession(cwd, provider, undefined, role, workspaceId);
+      // Use configured default provider for this role if caller didn't specify one
+      const defaults = loadDefaultProviders();
+      const effectiveProvider = provider || defaults[role] || acp.selectedProvider;
+      console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, role=${role}`);
+      const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId);
       if (result?.sessionId) {
         router.push(`/${workspaceId}/${result.sessionId}`);
       }
@@ -499,8 +507,11 @@ export function SessionPageClient() {
 
     // Fallback: create a new session
     const role = selectedAgent;
-    console.log(`[ensureSessionForChat] Creating session: provider=${provider ?? acp.selectedProvider}, role=${role}, model=${model}`);
-    const result = await acp.createSession(cwd, provider ?? acp.selectedProvider, modeId, role, workspaceId, model);
+    // Use configured default provider for this role when no explicit provider given
+    const defaults = loadDefaultProviders();
+    const effectiveProvider = provider ?? defaults[role] ?? acp.selectedProvider;
+    console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${model}`);
+    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, model);
     if (result?.sessionId) {
       router.push(`/${workspaceId}/${result.sessionId}`);
       return result.sessionId;
@@ -1065,11 +1076,54 @@ export function SessionPageClient() {
 
         {/* ─── Left Sidebar ──────────────────────────────────────── */}
         <aside
-          className={`shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#13151d] flex flex-col relative
+          className={`shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#13151d] flex flex-col relative transition-[width] duration-200
             ${showMobileSidebar ? "fixed inset-y-[52px] left-0 z-40 shadow-2xl overflow-y-auto" : "hidden md:flex overflow-hidden"}
           `}
-          style={{ width: `${leftSidebarWidth}px` }}
+          style={{ width: isLeftSidebarCollapsed ? "44px" : `${leftSidebarWidth}px` }}
         >
+          {isLeftSidebarCollapsed ? (
+            /* ─── Collapsed sidebar: icon-only strip ─────────────── */
+            <div className="flex flex-col items-center py-2 gap-2 h-full">
+              {/* Expand button */}
+              <button
+                onClick={() => setIsLeftSidebarCollapsed(false)}
+                className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                title="Expand sidebar"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              {/* New session button */}
+              <button
+                onClick={() => handleCreateSession(acp.selectedProvider)}
+                disabled={acp.providers.length === 0 || !acp.selectedProvider}
+                className="p-1.5 rounded-md text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="New Session"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+
+              <div className="flex-1" />
+
+              {/* Settings button */}
+              <button
+                onClick={() => setShowSettingsPanel(true)}
+                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                title="Settings"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            /* ─── Expanded sidebar ────────────────────────────────── */
+            <>
           {/* Workspace section */}
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -1088,14 +1142,26 @@ export function SessionPageClient() {
                 </>
               )}
             </div>
-            <WorkspaceSwitcher
-              workspaces={workspacesHook.workspaces}
-              activeWorkspaceId={workspaceId}
-              onSelect={handleWorkspaceSelect}
-              onCreate={handleWorkspaceCreate}
-              loading={workspacesHook.loading}
-              compact
-            />
+            <div className="flex items-center gap-1">
+              <WorkspaceSwitcher
+                workspaces={workspacesHook.workspaces}
+                activeWorkspaceId={workspaceId}
+                onSelect={handleWorkspaceSelect}
+                onCreate={handleWorkspaceCreate}
+                loading={workspacesHook.loading}
+                compact
+              />
+              {/* Collapse button */}
+              <button
+                onClick={() => setIsLeftSidebarCollapsed(true)}
+                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                title="Collapse sidebar"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Sessions header + New Session */}
@@ -1149,14 +1215,14 @@ export function SessionPageClient() {
             </button>
             <button
               type="button"
-              onClick={() => setShowAgentInstallPopup(true)}
+              onClick={() => setShowSettingsPanel(true)}
               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              Manage Providers
+              Settings
             </button>
           </div>
 
@@ -1167,6 +1233,8 @@ export function SessionPageClient() {
           >
             <div className="resize-indicator" />
           </div>
+            </>
+          )}
         </aside>
 
         {/* ─── Chat Area ──────────────────────────────────────────── */}
@@ -1303,6 +1371,13 @@ export function SessionPageClient() {
           ROUTA mode: Coordinator will plan, delegate to CRAFTER agents, and verify with GATE.
         </div>
       )}
+
+      {/* ─── Settings Panel ──────────────────────────────────────── */}
+      <SettingsPanel
+        open={showSettingsPanel}
+        onClose={() => setShowSettingsPanel(false)}
+        providers={acp.providers}
+      />
     </div>
   );
 }
