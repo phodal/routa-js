@@ -193,37 +193,55 @@ export class BrowserAcpClient {
   /**
    * Send a prompt to the session.
    * Content streams via SSE session/update notifications.
-   * In serverless environments, content may also be returned in the response.
+   * In serverless environments, the POST response itself streams SSE events.
    */
   async prompt(sessionId: string, text: string): Promise<AcpPromptResult> {
-    const result = await this.rpc<AcpPromptResult>("session/prompt", {
-      sessionId,
-      prompt: [{ type: "text", text }],
+    const id = ++this.requestId;
+
+    const response = await fetch(`${this.baseUrl}/api/acp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id,
+        method: "session/prompt",
+        params: { sessionId, prompt: [{ type: "text", text }] },
+      }),
     });
 
-    // In serverless environments, SSE might not work across lambda instances.
-    // If the response includes content directly, emit it as an update notification.
+    const contentType = response.headers.get("Content-Type") || "";
+
+    // Handle streaming SSE response (serverless environments)
+    if (contentType.includes("text/event-stream")) {
+      return this.handleStreamingPromptResponse(response, sessionId);
+    }
+
+    // Handle traditional JSON response
+    const data = await response.json();
+    if (data.error) {
+      throw new AcpClientError(
+        data.error.message,
+        data.error.code,
+        data.error.authMethods,
+        data.error.agentInfo
+      );
+    }
+
+    const result = data.result as AcpPromptResult;
+
+    // Legacy fallback: if response includes content directly, emit as notification
     if (result.content) {
       const notification: AcpSessionNotification = {
         sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
-          content: {
-            type: "text",
-            text: result.content,
-          },
+          content: { type: "text", text: result.content },
         },
       };
-
       for (const handler of this.updateHandlers) {
-        try {
-          handler(notification);
-        } catch (err) {
-          console.error("[AcpClient] Handler error:", err);
-        }
+        try { handler(notification); } catch (err) { console.error("[AcpClient] Handler error:", err); }
       }
 
-      // Also emit turn_complete
       const turnCompleteNotification: AcpSessionNotification = {
         sessionId,
         update: {
@@ -235,17 +253,88 @@ export class BrowserAcpClient {
           } : undefined,
         },
       };
-
       for (const handler of this.updateHandlers) {
-        try {
-          handler(turnCompleteNotification);
-        } catch (err) {
-          console.error("[AcpClient] Handler error:", err);
-        }
+        try { handler(turnCompleteNotification); } catch (err) { console.error("[AcpClient] Handler error:", err); }
       }
     }
 
     return result;
+  }
+
+  /**
+   * Handle streaming SSE response from prompt endpoint.
+   * Reads SSE events from the response body and dispatches notifications.
+   */
+  private async handleStreamingPromptResponse(
+    response: Response,
+    sessionId: string
+  ): Promise<AcpPromptResult> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Response body is not readable");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lastStopReason = "end_turn";
+    let lastUsage: { inputTokens: number; outputTokens: number } | undefined;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events (lines ending with \n\n)
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || ""; // Keep incomplete event in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+
+          try {
+            const jsonStr = line.slice(6); // Remove "data: " prefix
+            const data = JSON.parse(jsonStr);
+
+            // Dispatch notification to handlers
+            if (data.method === "session/update" && data.params) {
+              const notification = data.params as AcpSessionNotification;
+
+              // Track turn_complete for return value
+              const update = notification.update as Record<string, unknown> | undefined;
+              if (update?.sessionUpdate === "turn_complete") {
+                lastStopReason = (update.stopReason as string) || "end_turn";
+                const usage = update.usage as Record<string, number> | undefined;
+                if (usage) {
+                  lastUsage = {
+                    inputTokens: usage.input_tokens || 0,
+                    outputTokens: usage.output_tokens || 0,
+                  };
+                }
+              }
+
+              for (const handler of this.updateHandlers) {
+                try {
+                  handler(notification);
+                } catch (err) {
+                  console.error("[AcpClient] Handler error:", err);
+                }
+              }
+            }
+          } catch (parseErr) {
+            console.error("[AcpClient] SSE parse error:", parseErr);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return {
+      stopReason: lastStopReason,
+      usage: lastUsage,
+    };
   }
 
   /**

@@ -629,17 +629,43 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        try {
-          const result = await adapter.prompt(promptText);
-          store.flushAgentBuffer(sessionId);
-          return jsonrpcResponse(id ?? null, result);
-        } catch (err) {
-          store.flushAgentBuffer(sessionId);
-          return jsonrpcResponse(id ?? null, null, {
-            code: -32000,
-            message: err instanceof Error ? err.message : "Claude Code SDK prompt failed",
-          });
-        }
+        // Return streaming SSE response to prevent serverless timeout
+        // Each event is sent immediately as it's received from the SDK
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const event of adapter.promptStream(promptText)) {
+                controller.enqueue(encoder.encode(event));
+              }
+              store.flushAgentBuffer(sessionId);
+              controller.close();
+            } catch (err) {
+              store.flushAgentBuffer(sessionId);
+              // Send error event before closing
+              const errorNotification = {
+                jsonrpc: "2.0",
+                method: "session/update",
+                params: {
+                  sessionId,
+                  type: "error",
+                  error: { message: err instanceof Error ? err.message : "Claude Code SDK prompt failed" },
+                },
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorNotification)}\n\n`));
+              controller.close();
+            }
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+          },
+        });
       }
 
       // ── Claude Code CLI session ───────────────────────────────────────

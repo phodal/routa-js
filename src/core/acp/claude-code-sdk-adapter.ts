@@ -167,8 +167,159 @@ export class ClaudeCodeSdkAdapter {
   }
 
   /**
+   * Send a prompt and return a streaming async generator of SSE events.
+   * Each yielded string is a complete SSE event (data: JSON\n\n format).
+   * This allows the HTTP response to stream in serverless environments.
+   */
+  async *promptStream(text: string): AsyncGenerator<string, void, unknown> {
+    if (!this._alive || !this.sessionId) {
+      throw new Error("No active session");
+    }
+
+    const config = getClaudeCodeSdkConfig();
+    this.abortController = new AbortController();
+    this._hasSeenStreamTextDelta = false;
+    const sessionId = this.sessionId;
+
+    const maskedKey = config.apiKey
+      ? `${config.apiKey.substring(0, 8)}...${config.apiKey.substring(config.apiKey.length - 4)}`
+      : "undefined";
+    const cliPath = resolveCliPath();
+    const promptCwd = this.cwd || process.cwd();
+    const shouldContinue = !this._isFirstPrompt && this.sdkSessionId !== null;
+
+    console.log(
+      `[ClaudeCodeSdkAdapter] promptStream: model=${config.model}, apiKey=${maskedKey}, ` +
+      `cwd=${promptCwd}, cli=${cliPath}, continue=${shouldContinue}`
+    );
+
+    let stopReason = "end_turn";
+    let fullContent = "";
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    // Helper to format SSE event
+    const formatSseEvent = (notification: JsonRpcMessage): string => {
+      return `data: ${JSON.stringify(notification)}\n\n`;
+    };
+
+    try {
+      const queryOptions: Parameters<typeof query>[0]["options"] = {
+        cwd: promptCwd,
+        model: config.model,
+        maxTurns: 30,
+        abortController: this.abortController,
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        pathToClaudeCodeExecutable: cliPath,
+        env: {
+          ...process.env,
+          CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? "/tmp/.claude",
+        },
+        ...(shouldContinue && { continue: true }),
+        persistSession: true,
+      };
+
+      if (shouldContinue && this.sdkSessionId) {
+        (queryOptions as Record<string, unknown>).resume = this.sdkSessionId;
+      }
+
+      const stream = query({
+        prompt: text,
+        options: queryOptions,
+      });
+
+      if ("sessionId" in stream) {
+        const streamSessionId = (stream as { sessionId?: string }).sessionId;
+        if (streamSessionId && streamSessionId !== this.sdkSessionId) {
+          this.sdkSessionId = streamSessionId;
+        }
+      }
+
+      for await (const msg of stream) {
+        if (this.abortController?.signal.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
+        // Capture SDK session ID from system message
+        if (msg.type === "system" && "session_id" in msg) {
+          const systemSessionId = (msg as Record<string, unknown>).session_id as string | undefined;
+          if (systemSessionId && systemSessionId !== this.sdkSessionId) {
+            this.sdkSessionId = systemSessionId;
+          }
+        }
+
+        // Dispatch message and yield SSE event
+        const notification = this.createNotificationFromMessage(msg, sessionId);
+        if (notification) {
+          // Also call the original notification handler for non-streaming consumers
+          this.onNotification(notification);
+          // Yield SSE event for streaming response
+          yield formatSseEvent(notification);
+        }
+
+        // Accumulate content
+        if (msg.type === "assistant") {
+          for (const block of msg.message.content) {
+            if (block.type === "text") {
+              fullContent += block.text;
+            }
+          }
+          if (msg.message.usage) {
+            inputTokens = msg.message.usage.input_tokens ?? inputTokens;
+            outputTokens = msg.message.usage.output_tokens ?? outputTokens;
+          }
+        }
+
+        if (msg.type === "result") {
+          stopReason = msg.stop_reason ?? (msg.is_error ? "error" : "end_turn");
+          if (msg.subtype === "success" && msg.result) {
+            fullContent = msg.result;
+          }
+          if (msg.usage) {
+            inputTokens = msg.usage.input_tokens ?? inputTokens;
+            outputTokens = msg.usage.output_tokens ?? outputTokens;
+          }
+        }
+      }
+
+      this._isFirstPrompt = false;
+
+      // Yield turn_complete event
+      const completeNotification = createNotification("session/update", {
+        sessionId,
+        update: {
+          sessionUpdate: "turn_complete",
+          stopReason,
+          usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+        },
+      });
+      this.onNotification(completeNotification);
+      yield formatSseEvent(completeNotification);
+
+    } catch (error) {
+      if (!this.abortController?.signal.aborted) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("[ClaudeCodeSdkAdapter] promptStream failed:", errorMessage);
+        const errorNotification = createNotification("session/update", {
+          sessionId,
+          type: "error",
+          error: { message: errorMessage },
+        });
+        this.onNotification(errorNotification);
+        yield formatSseEvent(errorNotification);
+      }
+      throw error;
+    } finally {
+      this.abortController = null;
+    }
+  }
+
+  /**
    * Send a prompt through the official Claude Code Agent SDK.
    * Streams ACP notifications for real-time UI updates.
+   * @deprecated Use promptStream() for serverless streaming - this blocks until completion
    */
   async prompt(text: string): Promise<{
     stopReason: string;
@@ -350,7 +501,8 @@ export class ClaudeCodeSdkAdapter {
   }
 
   /**
-   * Convert an SDKMessage to ACP session/update notifications.
+   * Convert an SDKMessage to an ACP session/update notification.
+   * Returns null if the message doesn't produce a notification.
    *
    * Message type mapping:
    *   stream_event (text_delta)      → agent_message_chunk  (real-time text)
@@ -359,7 +511,7 @@ export class ClaudeCodeSdkAdapter {
    *   assistant (tool_use blocks)    → tool_call_update     (tool completes)
    *   result (error)                 → error notification
    */
-  private dispatchMessage(msg: SDKMessage, sessionId: string): void {
+  private createNotificationFromMessage(msg: SDKMessage, sessionId: string): JsonRpcMessage | null {
     switch (msg.type) {
       case "stream_event": {
         const event = msg.event;
@@ -367,131 +519,108 @@ export class ClaudeCodeSdkAdapter {
         if (event.type === "content_block_delta") {
           if (event.delta.type === "text_delta") {
             this._hasSeenStreamTextDelta = true;
-            this.onNotification(
-              createNotification("session/update", {
-                sessionId,
-                update: {
-                  sessionUpdate: "agent_message_chunk",
-                  content: { type: "text", text: event.delta.text },
-                },
-              })
-            );
+            return createNotification("session/update", {
+              sessionId,
+              update: {
+                sessionUpdate: "agent_message_chunk",
+                content: { type: "text", text: event.delta.text },
+              },
+            });
           } else if (event.delta.type === "thinking_delta") {
-            this.onNotification(
-              createNotification("session/update", {
-                sessionId,
-                update: {
-                  sessionUpdate: "agent_thought_chunk",
-                  content: { type: "text", text: event.delta.thinking },
-                },
-              })
-            );
+            return createNotification("session/update", {
+              sessionId,
+              update: {
+                sessionUpdate: "agent_thought_chunk",
+                content: { type: "text", text: event.delta.thinking },
+              },
+            });
           } else if (event.delta.type === "input_json_delta") {
-            // Stream tool input as it arrives (partial JSON)
             const inputDelta = (event.delta as Record<string, unknown>).partial_json;
             if (inputDelta) {
-              this.onNotification(
-                createNotification("session/update", {
-                  sessionId,
-                  update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId: (event as Record<string, unknown>).index?.toString() ?? "unknown",
-                    inputDelta: inputDelta,
-                    status: "running",
-                  },
-                })
-              );
+              return createNotification("session/update", {
+                sessionId,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: (event as Record<string, unknown>).index?.toString() ?? "unknown",
+                  inputDelta: inputDelta,
+                  status: "running",
+                },
+              });
             }
           }
         } else if (
           event.type === "content_block_start" &&
           event.content_block.type === "tool_use"
         ) {
-          // Include tool input if available (for UI display)
           const toolBlock = event.content_block as Record<string, unknown>;
           const rawInputObj = toolBlock.input ? { rawInput: toolBlock.input } : {};
-          this.onNotification(
-            createNotification("session/update", {
-              sessionId,
-              update: {
-                sessionUpdate: "tool_call",
-                title: event.content_block.name,
-                toolCallId: event.content_block.id,
-                status: "running",
-                // Include rawInput if available at start
-                ...rawInputObj,
-              },
-            })
-          );
+          return createNotification("session/update", {
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call",
+              title: event.content_block.name,
+              toolCallId: event.content_block.id,
+              status: "running",
+              ...rawInputObj,
+            },
+          });
         }
-        break;
+        return null;
       }
 
       case "assistant": {
-        // For backends that don't emit stream_event text deltas (e.g. GLM via
-        // open.bigmodel.cn), dispatch text blocks as agent_message_chunk here.
-        // Native Anthropic streams already emitted each delta via stream_event,
-        // so we skip to avoid duplicating the complete text.
+        // For backends that don't emit stream_event text deltas (e.g. GLM),
+        // emit the full text block as a single chunk.
         if (!this._hasSeenStreamTextDelta) {
           for (const block of msg.message.content) {
             if (block.type === "text" && block.text) {
-              this.onNotification(
-                createNotification("session/update", {
-                  sessionId,
-                  update: {
-                    sessionUpdate: "agent_message_chunk",
-                    content: { type: "text", text: block.text },
-                  },
-                })
-              );
+              return createNotification("session/update", {
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_message_chunk",
+                  content: { type: "text", text: block.text },
+                },
+              });
             }
           }
         }
-        // Emit tool completion updates for each tool_use block in the message
-        // Include rawInput for UI display
+        // Also emit tool_call_update for completed tools
         for (const block of msg.message.content) {
           if (block.type === "tool_use") {
             const toolBlock = block as Record<string, unknown>;
             const rawInputObj = toolBlock.input ? { rawInput: toolBlock.input } : {};
-            this.onNotification(
-              createNotification("session/update", {
-                sessionId,
-                update: {
-                  sessionUpdate: "tool_call_update",
-                  toolCallId: block.id,
-                  title: block.name,
-                  status: "completed",
-                  // Include rawInput for display in UI
-                  ...rawInputObj,
-                },
-              })
-            );
+            return createNotification("session/update", {
+              sessionId,
+              update: {
+                sessionUpdate: "tool_call_update",
+                toolCallId: block.id,
+                title: block.name,
+                status: "completed",
+                ...rawInputObj,
+              },
+            });
           }
         }
-        break;
+        return null;
       }
 
       case "user": {
-        // User messages may contain tool results
         const userMsg = msg as Record<string, unknown>;
         const toolUseResult = userMsg.tool_use_result;
         const parentToolUseId = userMsg.parent_tool_use_id as string | undefined;
 
         if (toolUseResult && parentToolUseId) {
-          // Emit tool result as tool_call_update with output
-          this.onNotification(
-            createNotification("session/update", {
-              sessionId,
-              update: {
-                sessionUpdate: "tool_call_update",
-                toolCallId: parentToolUseId,
-                status: "completed",
-                rawOutput: toolUseResult,
-              },
-            })
-          );
+          return createNotification("session/update", {
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId: parentToolUseId,
+              status: "completed",
+              rawOutput: toolUseResult,
+            },
+          });
         }
-        break;
+        return null;
       }
 
       case "result": {
@@ -502,19 +631,28 @@ export class ClaudeCodeSdkAdapter {
               : msg.subtype === "error_max_budget_usd"
               ? "Budget limit exceeded"
               : "Agent execution error";
-          this.onNotification(
-            createNotification("session/update", {
-              sessionId,
-              type: "error",
-              error: { message: errorText },
-            })
-          );
+          return createNotification("session/update", {
+            sessionId,
+            type: "error",
+            error: { message: errorText },
+          });
         }
-        break;
+        return null;
       }
 
       default:
-        break;
+        return null;
+    }
+  }
+
+  /**
+   * Convert an SDKMessage to ACP session/update notifications.
+   * @deprecated Use createNotificationFromMessage for streaming - this method dispatches directly
+   */
+  private dispatchMessage(msg: SDKMessage, sessionId: string): void {
+    const notification = this.createNotificationFromMessage(msg, sessionId);
+    if (notification) {
+      this.onNotification(notification);
     }
   }
 
