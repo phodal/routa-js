@@ -8,6 +8,20 @@
       "when": 1771948288318,
       "tag": "0000_natural_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771948288319,
+      "tag": "0001_workspace_centric",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772000000000,
+      "tag": "0002_codebase_source_fields",
+      "breakpoints": true
     }
   ]
 }

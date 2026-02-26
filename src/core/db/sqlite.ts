@@ -174,6 +174,50 @@ function initializeSqliteTables(db: SqliteDatabase): void {
     )
   `);
 
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS codebases (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      repo_path TEXT NOT NULL,
+      branch TEXT,
+      label TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      source_type TEXT,
+      source_url TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    )
+  `);
+
+  // Add source_type/source_url to existing codebases tables that predate this migration
+  try { db.run(sql`ALTER TABLE codebases ADD COLUMN source_type TEXT`); } catch { /* column already exists */ }
+  try { db.run(sql`ALTER TABLE codebases ADD COLUMN source_url TEXT`); } catch { /* column already exists */ }
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS skills (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL,
+      catalog_type TEXT NOT NULL DEFAULT 'skillssh',
+      files TEXT NOT NULL DEFAULT '[]',
+      license TEXT,
+      metadata TEXT DEFAULT '{}',
+      installs INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    )
+  `);
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS workspace_skills (
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+      installed_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
+      PRIMARY KEY (workspace_id, skill_id)
+    )
+  `);
+
   console.log("[SQLite] Tables initialized");
 }
 
