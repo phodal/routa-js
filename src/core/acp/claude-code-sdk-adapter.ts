@@ -165,20 +165,23 @@ export class ClaudeCodeSdkAdapter {
     const maskedKey = config.apiKey
       ? `${config.apiKey.substring(0, 8)}...${config.apiKey.substring(config.apiKey.length - 4)}`
       : "undefined";
+    const cliPath = resolveCliPath();
+    const promptCwd = this.cwd || process.cwd();
     console.log(
-      `[ClaudeCodeSdkAdapter] Sending prompt: model=${config.model}, apiKey=${maskedKey}`
+      `[ClaudeCodeSdkAdapter] Sending prompt: model=${config.model}, apiKey=${maskedKey}, cwd=${promptCwd}, cli=${cliPath}`
     );
 
     let stopReason = "end_turn";
     let fullContent = "";
     let inputTokens = 0;
     let outputTokens = 0;
+    let msgCount = 0;
 
     try {
       const stream = query({
         prompt: text,
         options: {
-          cwd: this.cwd || process.cwd(),
+          cwd: promptCwd,
           model: config.model,
           maxTurns: 30,
           abortController: this.abortController,
@@ -191,11 +194,19 @@ export class ClaudeCodeSdkAdapter {
           // bundling on Vercel because cli.js is not a statically-imported module
           // and gets stripped from the bundle output unless we force-include it
           // via outputFileTracingIncludes in next.config.ts).
-          pathToClaudeCodeExecutable: resolveCliPath(),
+          pathToClaudeCodeExecutable: cliPath,
+          // Set CLAUDE_CONFIG_DIR to /tmp so the child process can write its
+          // config/cache files in serverless environments (like Vercel Lambda)
+          // where HOME or the default config directory is read-only.
+          env: {
+            ...process.env,
+            CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? "/tmp/.claude",
+          },
         },
       });
 
       for await (const msg of stream) {
+        msgCount++;
         if (this.abortController?.signal.aborted) {
           stopReason = "cancelled";
           break;
@@ -217,6 +228,13 @@ export class ClaudeCodeSdkAdapter {
         }
 
         if (msg.type === "result") {
+          // Log full result for debugging (visible in Vercel function logs)
+          console.log(
+            `[ClaudeCodeSdkAdapter] result: subtype=${msg.subtype} is_error=${msg.is_error}` +
+            ` stop_reason=${msg.stop_reason} result_len=${msg.result?.length ?? 0}` +
+            ` in=${(msg.usage as Record<string,number>|null)?.input_tokens ?? 0}` +
+            ` out=${(msg.usage as Record<string,number>|null)?.output_tokens ?? 0}`
+          );
           stopReason = msg.stop_reason ?? (msg.is_error ? "error" : "end_turn");
           if (msg.subtype === "success" && msg.result) {
             fullContent = msg.result;
@@ -227,6 +245,7 @@ export class ClaudeCodeSdkAdapter {
           }
         }
       }
+      console.log(`[ClaudeCodeSdkAdapter] stream done: ${msgCount} messages, content_len=${fullContent.length}, in=${inputTokens}, out=${outputTokens}`);
     } catch (error) {
       if (this.abortController?.signal.aborted) {
         return { stopReason: "cancelled" };
