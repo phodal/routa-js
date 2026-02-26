@@ -50,8 +50,11 @@ export async function POST(request: NextRequest) {
     workspaceId,
     type = "general",
     metadata,
-    source = "user",
+    source: rawSource = "user",
   } = body;
+
+  // Validate source type
+  const source = (["agent", "user", "system"].includes(rawSource) ? rawSource : "user") as "agent" | "user" | "system";
 
   if (!workspaceId) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
@@ -71,6 +74,9 @@ export async function POST(request: NextRequest) {
 
       await store.save(existing, source);
 
+      // Broadcast update for real-time sync (PgNoteStore/SqliteNoteStore don't broadcast)
+      system.noteBroadcaster.notifyUpdated(existing, source);
+
       return NextResponse.json({ note: serializeNote(existing) });
     }
   }
@@ -89,6 +95,9 @@ export async function POST(request: NextRequest) {
 
   await store.save(note, source);
 
+  // Broadcast creation for real-time sync (PgNoteStore/SqliteNoteStore don't broadcast)
+  system.noteBroadcaster.notifyCreated(note, source);
+
   return NextResponse.json({ note: serializeNote(note) }, { status: 201 });
 }
 
@@ -106,6 +115,9 @@ export async function DELETE(request: NextRequest) {
 
   const system = getRoutaSystem();
   await system.noteStore.delete(noteId, workspaceId);
+
+  // Broadcast deletion for real-time sync
+  system.noteBroadcaster.notifyDeleted(noteId, workspaceId, "user");
 
   return NextResponse.json({ deleted: true, noteId });
 }

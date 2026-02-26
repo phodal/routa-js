@@ -143,13 +143,8 @@ export class ClaudeCodeSdkAdapter {
       });
 
       let stopReason = "end_turn";
-
-      // Emit message start
-      this.onNotification(createNotification("session/update", {
-        sessionId: this.sessionId,
-        type: "message_start",
-        message: { role: "assistant" },
-      }));
+      let inputTokens = 0;
+      let outputTokens = 0;
 
       // Build conversation messages
       // For now, we only support single-turn conversations
@@ -175,20 +170,42 @@ export class ClaudeCodeSdkAdapter {
 
         this.handleStreamEvent(event);
 
-        // Extract stop reason from message_delta event
+        // Extract stop reason and usage from message_delta event
         if (event.type === "message_delta" && event.delta) {
           const delta = event.delta as { stop_reason?: string };
           if (delta.stop_reason) {
             stopReason = delta.stop_reason;
           }
         }
+
+        // Extract usage from message_delta
+        if (event.type === "message_delta" && event.usage) {
+          const usage = event.usage as { output_tokens?: number };
+          if (usage.output_tokens) {
+            outputTokens = usage.output_tokens;
+          }
+        }
+
+        // Extract input tokens from message_start
+        if (event.type === "message_start" && event.message?.usage) {
+          const usage = event.message.usage as { input_tokens?: number };
+          if (usage.input_tokens) {
+            inputTokens = usage.input_tokens;
+          }
+        }
       }
 
-      // Emit message end
+      // Emit turn_complete notification in ACP format for UI
       this.onNotification(createNotification("session/update", {
         sessionId: this.sessionId,
-        type: "message_end",
-        message: { role: "assistant", stop_reason: stopReason },
+        update: {
+          sessionUpdate: "turn_complete",
+          stopReason,
+          usage: {
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+          },
+        },
       }));
 
       return { stopReason };
@@ -221,18 +238,24 @@ export class ClaudeCodeSdkAdapter {
 
   /**
    * Handle stream events from the Anthropic API
+   * Converts Anthropic stream events to ACP sessionUpdate format expected by the frontend
    */
   private handleStreamEvent(event: Anthropic.MessageStreamEvent): void {
     if (!this.sessionId) return;
 
     switch (event.type) {
       case "content_block_delta":
-        // Text delta from the model
+        // Text delta from the model - convert to agent_message_chunk format
         if (event.delta.type === "text_delta") {
           this.onNotification(createNotification("session/update", {
             sessionId: this.sessionId,
-            type: "text_delta",
-            delta: event.delta.text,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: {
+                type: "text",
+                text: event.delta.text,
+              },
+            },
           }));
         }
         break;
@@ -242,12 +265,11 @@ export class ClaudeCodeSdkAdapter {
         if (event.content_block.type === "tool_use") {
           this.onNotification(createNotification("session/update", {
             sessionId: this.sessionId,
-            type: "tool_call",
-            toolCall: {
-              id: event.content_block.id,
-              name: event.content_block.name,
-              input: {},
-              state: "running",
+            update: {
+              sessionUpdate: "tool_call_start",
+              title: event.content_block.name,
+              toolCallId: event.content_block.id,
+              status: "running",
             },
           }));
         }
