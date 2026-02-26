@@ -123,7 +123,7 @@ export default function WorkspaceSessionPage() {
     if (sessionId && acp.connected) {
       acp.selectSession(sessionId);
     }
-  }, [sessionId, acp]);
+  }, [sessionId, acp.connected, acp.selectSession]);
 
   // Load global tool mode on mount
   useEffect(() => {
