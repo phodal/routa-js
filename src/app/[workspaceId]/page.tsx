@@ -11,9 +11,12 @@ import { WorkspacePageClient } from "./workspace-page-client";
 
 // Required for static export - tells Next.js which paths to pre-render.
 // Empty array = no pre-rendering at build time, pages are generated on-demand.
-export async function generateStaticParams(): Promise<{ workspaceId: string }[]> {
-  return [];
+export async function generateStaticParams() {
+  return [{ workspaceId: "__placeholder__" }];
 }
+
+// Required for static export - only paths in generateStaticParams are valid
+export const dynamicParams = false;
 
 export default function WorkspacePage() {
   return <WorkspacePageClient />;

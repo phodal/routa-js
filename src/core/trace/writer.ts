@@ -1,12 +1,22 @@
 /**
  * TraceWriter - Append-only JSONL file writer for trace records.
- * 
+ *
  * Writes traces to: <workspace>/.routa/traces/{day}/traces-{datetime}.jsonl
+ *
+ * In serverless environments (Vercel), traces are written to /tmp/.routa/traces/
+ * since the main filesystem is read-only.
  */
 
 import { TraceRecord } from "./types";
 import path from "path";
 import fs from "fs/promises";
+
+/**
+ * Check if running in a serverless environment (e.g., Vercel)
+ */
+function isServerlessEnvironment(): boolean {
+  return !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
 
 /**
  * Format a date as YYYY-MM-DD for daily directory names.
@@ -28,21 +38,28 @@ function formatDateTime(date: Date): string {
 /**
  * TraceWriter manages JSONL trace file writing with automatic directory creation
  * and daily file rotation.
+ *
+ * In serverless environments, traces are written to /tmp which is the only writable
+ * directory. Note that /tmp contents are ephemeral and may be cleared between invocations.
  */
 export class TraceWriter {
   private cwd: string;
   private currentDay: string | null = null;
   private currentFilePath: string | null = null;
+  private readonly isServerless: boolean;
 
   constructor(cwd: string) {
     this.cwd = cwd;
+    this.isServerless = isServerlessEnvironment();
   }
 
   /**
    * Get the trace directory path for a given day.
+   * In serverless environments, uses /tmp/.routa/traces/ instead of workspace.
    */
   private getTraceDir(day: string): string {
-    return path.join(this.cwd, ".routa", "traces", day);
+    const basePath = this.isServerless ? "/tmp" : this.cwd;
+    return path.join(basePath, ".routa", "traces", day);
   }
 
   /**

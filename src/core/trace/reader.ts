@@ -3,6 +3,9 @@
  *
  * Storage path: `<workspace>/.routa/traces/{day}/traces-{datetime}.jsonl`
  *
+ * In serverless environments (Vercel), reads from /tmp/.routa/traces/
+ * since that's where TraceWriter stores traces.
+ *
  * Features:
  * - Filter traces by session, file, workspace, date range
  * - Retrieve individual traces by ID
@@ -13,6 +16,13 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { TraceRecord, TraceEventType } from "./types";
+
+/**
+ * Check if running in a serverless environment (e.g., Vercel)
+ */
+function isServerlessEnvironment(): boolean {
+  return !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
 
 /**
  * Query parameters for filtering traces.
@@ -49,6 +59,9 @@ export interface TraceStats {
 
 /**
  * TraceReader provides querying capabilities over stored traces.
+ *
+ * In serverless environments, reads from /tmp/.routa/traces/ since
+ * that's the only writable location.
  */
 export class TraceReader {
   /** Base directory for trace files (e.g., "/project/.routa/traces") */
@@ -58,9 +71,11 @@ export class TraceReader {
    * Create a new TraceReader with the given workspace root.
    *
    * Traces are read from `<workspace_root>/.routa/traces/`.
+   * In serverless environments, reads from `/tmp/.routa/traces/`.
    */
   constructor(workspaceRoot: string) {
-    this.#baseDir = path.join(workspaceRoot, ".routa", "traces");
+    const basePath = isServerlessEnvironment() ? "/tmp" : workspaceRoot;
+    this.#baseDir = path.join(basePath, ".routa", "traces");
   }
 
   /**
