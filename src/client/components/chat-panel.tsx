@@ -343,8 +343,14 @@ export function ChatPanel({
     processedMessageIdsRef.current.clear();
     // Load history if not yet loaded
     fetchSessionHistory(activeSessionId);
-    setVisibleMessages(messagesBySession[activeSessionId] ?? []);
-  }, [activeSessionId, messagesBySession, fetchSessionHistory]);
+  }, [activeSessionId, fetchSessionHistory]);
+
+  // Update visible messages when messagesBySession changes
+  useEffect(() => {
+    if (activeSessionId) {
+      setVisibleMessages(messagesBySession[activeSessionId] ?? []);
+    }
+  }, [activeSessionId, messagesBySession]);
 
   const fetchSessions = useCallback(async () => {
     try {
