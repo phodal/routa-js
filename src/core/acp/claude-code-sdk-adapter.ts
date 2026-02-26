@@ -196,11 +196,22 @@ export class ClaudeCodeSdkAdapter {
       if (this.currentAbortController?.signal.aborted) {
         return { stopReason: "cancelled" };
       }
-      console.error("[ClaudeCodeSdkAdapter] Prompt failed:", error);
+      // Enhanced error logging to capture API error details
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorDetails = {
+        message: errorMessage,
+        config: {
+          baseUrl: config.baseUrl,
+          model: config.model,
+          apiKeySet: !!config.apiKey,
+          apiKeyLength: config.apiKey?.length,
+        },
+      };
+      console.error("[ClaudeCodeSdkAdapter] Prompt failed:", JSON.stringify(errorDetails, null, 2));
       this.onNotification(createNotification("session/update", {
         sessionId: this.sessionId,
         type: "error",
-        error: { message: String(error) },
+        error: { message: errorMessage },
       }));
       throw error;
     } finally {
