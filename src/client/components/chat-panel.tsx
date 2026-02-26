@@ -169,6 +169,26 @@ export function ChatPanel({
       });
   }, [visibleMessages]);
 
+  // Extract plan entries from plan messages
+  const planTasks = useMemo<TaskInfo[]>(() => {
+    // Find the latest plan message with entries
+    const planMessages = visibleMessages.filter(
+      (msg) => msg.role === "plan" && msg.planEntries && msg.planEntries.length > 0
+    );
+    if (planMessages.length === 0) return [];
+
+    // Use the most recent plan
+    const latestPlan = planMessages[planMessages.length - 1];
+    return (latestPlan.planEntries ?? []).map((entry, index) => ({
+      id: `plan-${index}`,
+      title: entry.content,
+      status: entry.status === "completed" ? "completed"
+        : entry.status === "in_progress" ? "running"
+        : "pending",
+      description: entry.priority ? `Priority: ${entry.priority}` : undefined,
+    }));
+  }, [visibleMessages]);
+
   // Combine checklist items into TaskInfo format for display
   const taskInfos = useMemo<TaskInfo[]>(() => {
     // Convert checklist items to TaskInfo
@@ -180,9 +200,11 @@ export function ChatPanel({
               item.status as TaskInfo["status"],
     }));
 
-    // If we have checklist items, show them; otherwise fall back to delegated tasks
-    return checklistTasks.length > 0 ? checklistTasks : delegatedTasks;
-  }, [checklistItems, delegatedTasks]);
+    // Priority: checklist items > plan tasks > delegated tasks
+    if (checklistTasks.length > 0) return checklistTasks;
+    if (planTasks.length > 0) return planTasks;
+    return delegatedTasks;
+  }, [checklistItems, planTasks, delegatedTasks]);
 
   // File changes summary for TaskProgressBar
   const fileChangesSummary = useMemo<FileChangesSummary | undefined>(() => {
@@ -1625,9 +1647,17 @@ export function ChatPanel({
                   Send a message to start.
                 </div>
               )}
-              {visibleMessages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
+              {visibleMessages
+                .filter((msg) => {
+                  // Hide plan messages that have entries (they show in TaskProgressBar)
+                  if (msg.role === "plan" && msg.planEntries && msg.planEntries.length > 0) {
+                    return false;
+                  }
+                  return true;
+                })
+                .map((msg) => (
+                  <MessageBubble key={msg.id} message={msg} />
+                ))}
               <div ref={messagesEndRef} />
             </div>
           </div>
