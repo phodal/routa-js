@@ -17,6 +17,11 @@
  * - API_TIMEOUT_MS: Request timeout in milliseconds (default: 55000)
  */
 
+// ─── MUST be imported BEFORE the SDK ─────────────────────────────────────────
+// Patches `fs` to redirect .claude/ writes from read-only home directories
+// to /tmp/.claude/ (prevents ENOENT crashes in Vercel Lambda).
+import "@/core/platform/serverless-fs-patch";
+
 import type { NotificationHandler, JsonRpcMessage } from "@/core/acp/processer";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -78,13 +83,22 @@ export function getClaudeCodeSdkConfig(): {
 /**
  * Claude Code SDK Adapter — wraps the official agent SDK to provide an
  * ACP-compatible streaming interface.
+ *
+ * Session Continuity:
+ * - Uses `continue: true` option to maintain conversation history within a session
+ * - Stores the SDK's internal sessionId for proper multi-turn conversations
+ * - Each prompt() call continues the same conversation context
  */
 export class ClaudeCodeSdkAdapter {
   private sessionId: string | null = null;
+  /** Internal SDK session ID for multi-turn continuity */
+  private sdkSessionId: string | null = null;
   private onNotification: NotificationHandler;
   private cwd: string;
   private _alive = false;
   private abortController: AbortController | null = null;
+  /** Track if this is the first prompt in the session (no continue needed) */
+  private _isFirstPrompt = true;
   /**
    * Tracks whether native stream_event text deltas have been dispatched during
    * the current prompt turn. Used to avoid double-dispatching text for backends
@@ -123,6 +137,14 @@ export class ClaudeCodeSdkAdapter {
     process.env.ANTHROPIC_API_KEY = config.apiKey;
     if (config.baseUrl) {
       process.env.ANTHROPIC_BASE_URL = config.baseUrl;
+    }
+
+    // Ensure CLAUDE_CONFIG_DIR points to /tmp/.claude in the current process
+    // so the SDK's trace writer resolves to a writable path — this is the
+    // primary fix for the ENOENT crash on Vercel (the serverless-fs-patch
+    // import above acts as a safety net).
+    if (!process.env.CLAUDE_CONFIG_DIR) {
+      process.env.CLAUDE_CONFIG_DIR = "/tmp/.claude";
     }
 
     this.sessionId = `claude-sdk-${Date.now()}`;
@@ -167,8 +189,11 @@ export class ClaudeCodeSdkAdapter {
       : "undefined";
     const cliPath = resolveCliPath();
     const promptCwd = this.cwd || process.cwd();
+    const shouldContinue = !this._isFirstPrompt && this.sdkSessionId !== null;
+
     console.log(
-      `[ClaudeCodeSdkAdapter] Sending prompt: model=${config.model}, apiKey=${maskedKey}, cwd=${promptCwd}, cli=${cliPath}`
+      `[ClaudeCodeSdkAdapter] Sending prompt: model=${config.model}, apiKey=${maskedKey}, ` +
+      `cwd=${promptCwd}, cli=${cliPath}, continue=${shouldContinue}, sdkSessionId=${this.sdkSessionId ?? "none"}`
     );
 
     let stopReason = "end_turn";
@@ -178,38 +203,72 @@ export class ClaudeCodeSdkAdapter {
     let msgCount = 0;
 
     try {
+      // Build query options with session continuity support
+      const queryOptions: Parameters<typeof query>[0]["options"] = {
+        cwd: promptCwd,
+        model: config.model,
+        maxTurns: 30,
+        abortController: this.abortController,
+        // Allow the agent to execute tools without interactive permission prompts.
+        // Required for autonomous operation in serverless environments.
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        // Explicitly point to cli.js so the SDK doesn't try to resolve it
+        // relative to its own import.meta.url (which fails after webpack
+        // bundling on Vercel because cli.js is not a statically-imported module
+        // and gets stripped from the bundle output unless we force-include it
+        // via outputFileTracingIncludes in next.config.ts).
+        pathToClaudeCodeExecutable: cliPath,
+        // Set CLAUDE_CONFIG_DIR to /tmp so the child process can write its
+        // config/cache files in serverless environments (like Vercel Lambda)
+        // where HOME or the default config directory is read-only.
+        env: {
+          ...process.env,
+          CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? "/tmp/.claude",
+        },
+        // Session continuity: use `continue: true` for follow-up prompts
+        // to maintain conversation history within the same session.
+        // For the first prompt, we let the SDK create a new session.
+        ...(shouldContinue && { continue: true }),
+        // Persist session to enable conversation history
+        persistSession: true,
+      };
+
+      // If we have a previous SDK session ID, resume from it
+      if (shouldContinue && this.sdkSessionId) {
+        // Use resume to load conversation history from the previous session
+        (queryOptions as Record<string, unknown>).resume = this.sdkSessionId;
+      }
+
       const stream = query({
         prompt: text,
-        options: {
-          cwd: promptCwd,
-          model: config.model,
-          maxTurns: 30,
-          abortController: this.abortController,
-          // Allow the agent to execute tools without interactive permission prompts.
-          // Required for autonomous operation in serverless environments.
-          permissionMode: "bypassPermissions",
-          allowDangerouslySkipPermissions: true,
-          // Explicitly point to cli.js so the SDK doesn't try to resolve it
-          // relative to its own import.meta.url (which fails after webpack
-          // bundling on Vercel because cli.js is not a statically-imported module
-          // and gets stripped from the bundle output unless we force-include it
-          // via outputFileTracingIncludes in next.config.ts).
-          pathToClaudeCodeExecutable: cliPath,
-          // Set CLAUDE_CONFIG_DIR to /tmp so the child process can write its
-          // config/cache files in serverless environments (like Vercel Lambda)
-          // where HOME or the default config directory is read-only.
-          env: {
-            ...process.env,
-            CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? "/tmp/.claude",
-          },
-        },
+        options: queryOptions,
       });
+
+      // Capture SDK session ID from the stream for future continuity
+      // The stream object has a sessionId property after initialization
+      if ("sessionId" in stream) {
+        const streamSessionId = (stream as { sessionId?: string }).sessionId;
+        if (streamSessionId && streamSessionId !== this.sdkSessionId) {
+          console.log(`[ClaudeCodeSdkAdapter] Captured SDK session ID: ${streamSessionId}`);
+          this.sdkSessionId = streamSessionId;
+        }
+      }
 
       for await (const msg of stream) {
         msgCount++;
         if (this.abortController?.signal.aborted) {
           stopReason = "cancelled";
           break;
+        }
+
+        // Try to capture SDK session ID from system message
+        if (msg.type === "system" && "session_id" in msg) {
+          const systemSessionId = (msg as Record<string, unknown>).session_id as string | undefined;
+          if (systemSessionId && systemSessionId !== this.sdkSessionId) {
+            console.log(`[ClaudeCodeSdkAdapter] Captured SDK session ID from system message: ${systemSessionId}`);
+            this.sdkSessionId = systemSessionId;
+          }
         }
 
         this.dispatchMessage(msg, sessionId);
@@ -245,7 +304,11 @@ export class ClaudeCodeSdkAdapter {
           }
         }
       }
-      console.log(`[ClaudeCodeSdkAdapter] stream done: ${msgCount} messages, content_len=${fullContent.length}, in=${inputTokens}, out=${outputTokens}`);
+
+      // Mark that first prompt has been completed - next prompts should use continue
+      this._isFirstPrompt = false;
+
+      console.log(`[ClaudeCodeSdkAdapter] stream done: ${msgCount} messages, content_len=${fullContent.length}, in=${inputTokens}, out=${outputTokens}, sdkSessionId=${this.sdkSessionId ?? "none"}`);
     } catch (error) {
       if (this.abortController?.signal.aborted) {
         return { stopReason: "cancelled" };
@@ -323,11 +386,30 @@ export class ClaudeCodeSdkAdapter {
                 },
               })
             );
+          } else if (event.delta.type === "input_json_delta") {
+            // Stream tool input as it arrives (partial JSON)
+            const inputDelta = (event.delta as Record<string, unknown>).partial_json;
+            if (inputDelta) {
+              this.onNotification(
+                createNotification("session/update", {
+                  sessionId,
+                  update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: (event as Record<string, unknown>).index?.toString() ?? "unknown",
+                    inputDelta: inputDelta,
+                    status: "running",
+                  },
+                })
+              );
+            }
           }
         } else if (
           event.type === "content_block_start" &&
           event.content_block.type === "tool_use"
         ) {
+          // Include tool input if available (for UI display)
+          const toolBlock = event.content_block as Record<string, unknown>;
+          const rawInputObj = toolBlock.input ? { rawInput: toolBlock.input } : {};
           this.onNotification(
             createNotification("session/update", {
               sessionId,
@@ -336,6 +418,8 @@ export class ClaudeCodeSdkAdapter {
                 title: event.content_block.name,
                 toolCallId: event.content_block.id,
                 status: "running",
+                // Include rawInput if available at start
+                ...rawInputObj,
               },
             })
           );
@@ -364,8 +448,11 @@ export class ClaudeCodeSdkAdapter {
           }
         }
         // Emit tool completion updates for each tool_use block in the message
+        // Include rawInput for UI display
         for (const block of msg.message.content) {
           if (block.type === "tool_use") {
+            const toolBlock = block as Record<string, unknown>;
+            const rawInputObj = toolBlock.input ? { rawInput: toolBlock.input } : {};
             this.onNotification(
               createNotification("session/update", {
                 sessionId,
@@ -374,10 +461,35 @@ export class ClaudeCodeSdkAdapter {
                   toolCallId: block.id,
                   title: block.name,
                   status: "completed",
+                  // Include rawInput for display in UI
+                  ...rawInputObj,
                 },
               })
             );
           }
+        }
+        break;
+      }
+
+      case "user": {
+        // User messages may contain tool results
+        const userMsg = msg as Record<string, unknown>;
+        const toolUseResult = userMsg.tool_use_result;
+        const parentToolUseId = userMsg.parent_tool_use_id as string | undefined;
+
+        if (toolUseResult && parentToolUseId) {
+          // Emit tool result as tool_call_update with output
+          this.onNotification(
+            createNotification("session/update", {
+              sessionId,
+              update: {
+                sessionUpdate: "tool_call_update",
+                toolCallId: parentToolUseId,
+                status: "completed",
+                rawOutput: toolUseResult,
+              },
+            })
+          );
         }
         break;
       }
