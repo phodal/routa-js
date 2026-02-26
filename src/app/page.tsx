@@ -290,7 +290,8 @@ function RecentSessionsBar({ workspaceId, refreshKey, onSessionClick }: RecentSe
     fetchSessions();
   }, [workspaceId, refreshKey]);
 
-  if (sessions.length === 0 && !loading) {
+  // Don't render anything if there are no sessions (whether loading or not)
+  if (sessions.length === 0) {
     return null;
   }
 
