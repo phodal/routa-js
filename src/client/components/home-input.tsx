@@ -42,6 +42,7 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
   const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+  const [pendingSkill, setPendingSkill] = useState<string | null>(null);
 
   // Sync with external workspaceId prop
   useEffect(() => {
@@ -144,6 +145,28 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
         </p>
       </div>
 
+      {/* Skills chip list */}
+      {skillsHook.allSkills.length > 0 && (
+        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 scrollbar-none">
+          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Skills:</span>
+          {skillsHook.allSkills.map((skill) => (
+            <button
+              key={skill.name}
+              type="button"
+              onClick={() => setPendingSkill(skill.name)}
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                pendingSkill === skill.name
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-white dark:bg-[#1a1f2e] text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-600"
+              }`}
+              title={skill.description}
+            >
+              /{skill.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Mode selection cards */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <ModeCard
@@ -181,6 +204,8 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
           onRepoChange={setRepoSelection}
           agentRole={selectedRole}
           onFetchModels={acp.listProviderModels}
+          pendingSkill={pendingSkill}
+          onSkillInserted={() => setPendingSkill(null)}
         />
       </div>
 

@@ -212,6 +212,10 @@ export class ClaudeCodeSdkAdapter {
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         pathToClaudeCodeExecutable: cliPath,
+        // Load Skills from user (~/.claude/skills/) and project (.claude/skills/) dirs
+        settingSources: ["user", "project"],
+        // Enable the Skill tool so Claude can invoke SKILL.md-defined skills
+        allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         env: {
           ...process.env,
           CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? "/tmp/.claude",
@@ -370,6 +374,10 @@ export class ClaudeCodeSdkAdapter {
         // and gets stripped from the bundle output unless we force-include it
         // via outputFileTracingIncludes in next.config.ts).
         pathToClaudeCodeExecutable: cliPath,
+        // Load Skills from user (~/.claude/skills/) and project (.claude/skills/) dirs
+        settingSources: ["user", "project"],
+        // Enable the Skill tool so Claude can invoke SKILL.md-defined skills
+        allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         // Set CLAUDE_CONFIG_DIR to /tmp so the child process can write its
         // config/cache files in serverless environments (like Vercel Lambda)
         // where HOME or the default config directory is read-only.

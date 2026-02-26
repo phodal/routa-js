@@ -473,6 +473,10 @@ interface TiptapInputProps {
   usageInfo?: UsageInfo | null;
   /** Fetch available models for a provider (returns model IDs like "anthropic/claude-3-5-sonnet") */
   onFetchModels?: (provider: string) => Promise<string[]>;
+  /** When set, programmatically inserts this skill mention into the editor */
+  pendingSkill?: string | null;
+  /** Called after pendingSkill has been inserted so the parent can clear it */
+  onSkillInserted?: () => void;
 }
 
 export function TiptapInput({
@@ -493,6 +497,8 @@ export function TiptapInput({
   onRepoChange,
   usageInfo,
   onFetchModels,
+  pendingSkill,
+  onSkillInserted,
 }: TiptapInputProps) {
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
@@ -580,6 +586,21 @@ export function TiptapInput({
   useEffect(() => {
     fileSearchContextRef.current.repoPath = repoSelection?.path ?? null;
   }, [repoSelection?.path]);
+
+  // Insert a skill mention when pendingSkill is set from outside (e.g. skill chip click)
+  useEffect(() => {
+    if (!pendingSkill || !editor) return;
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: "skillMention",
+        attrs: { id: pendingSkill, label: pendingSkill },
+      })
+      .insertContent(" ")
+      .run();
+    onSkillInserted?.();
+  }, [pendingSkill, editor]);
 
   // Use a ref for the send handler so extensions always call the latest version
   const handleSendRef = useRef<() => void>(() => {});
