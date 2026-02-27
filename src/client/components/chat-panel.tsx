@@ -270,6 +270,15 @@ export function ChatPanel({
             }
             break;
           }
+          // Consolidated form of agent_message_chunk (stored in DB via getConsolidatedHistory)
+          case "agent_message": {
+            const text = extractText();
+            if (!text) break;
+            streamingThoughtId = null;
+            streamingMsgId = uuidv4();
+            messages.push({ id: streamingMsgId, role: "assistant", content: text, timestamp: new Date() });
+            break;
+          }
           case "agent_thought_chunk": {
             const text = extractText();
             if (!text) break;
@@ -291,7 +300,9 @@ export function ChatPanel({
             streamingThoughtId = null;
             break;
           }
-          case "tool_call": {
+          case "tool_call":
+          // Consolidated form of tool_call (stored in DB via getConsolidatedHistory)
+          case "tool_call_update": {
             const toolKind = update.kind as string | undefined;
             const title = (update.title as string) ?? toolKind ?? "tool";
             const status = (update.status as string) ?? "completed";
