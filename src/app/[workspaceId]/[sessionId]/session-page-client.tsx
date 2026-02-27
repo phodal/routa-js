@@ -1015,8 +1015,18 @@ export function SessionPageClient() {
   }, [notesHook, handleExecuteNoteTask]);
 
   // Filter notes for the active session
+  // Task notes MUST have matching sessionId; spec/general notes can be workspace-wide
   const sessionNotes = notesHook.notes.filter((n) => {
     const noteSessionId = n.metadata.custom?.sessionId;
+    // Task notes require exact session match
+    if (n.metadata.type === "task") {
+      return noteSessionId === sessionId;
+    }
+    // Spec notes belong to the workspace, not a specific session
+    if (n.metadata.type === "spec") {
+      return true;
+    }
+    // General notes: show if no sessionId OR matching sessionId
     if (!noteSessionId) return true;
     return noteSessionId === sessionId;
   });
