@@ -1,16 +1,8 @@
 /**
- * TraceReader — Query and read trace records from filesystem storage.
+ * TraceReader — Query and read trace records from filesystem or Postgres.
  *
- * Storage path: `<workspace>/.routa/traces/{day}/traces-{datetime}.jsonl`
- *
- * In serverless environments (Vercel), reads from /tmp/.routa/traces/
- * since that's where TraceWriter stores traces.
- *
- * Features:
- * - Filter traces by session, file, workspace, date range
- * - Retrieve individual traces by ID
- * - Export traces in standard Agent Trace JSON format
- * - Efficient file scanning with early termination on match
+ * In serverless environments (Vercel), reads from Postgres since the filesystem
+ * is ephemeral. Locally reads from JSONL files.
  */
 
 import * as fs from "node:fs/promises";
@@ -70,12 +62,11 @@ export class TraceReader {
   /**
    * Create a new TraceReader with the given workspace root.
    *
-   * Traces are read from `<workspace_root>/.routa/traces/`.
-   * In serverless environments, reads from `/tmp/.routa/traces/`.
+   * In serverless environments, reads from Postgres.
+   * Locally reads from `<workspace_root>/.routa/traces/`.
    */
   constructor(workspaceRoot: string) {
-    const basePath = isServerlessEnvironment() ? "/tmp" : workspaceRoot;
-    this.#baseDir = path.join(basePath, ".routa", "traces");
+    this.#baseDir = path.join(workspaceRoot, ".routa", "traces");
   }
 
   /**
@@ -88,9 +79,29 @@ export class TraceReader {
   /**
    * Query traces based on the provided filter parameters.
    *
-   * Returns traces sorted by timestamp (newest first).
+   * In serverless, queries Postgres. Locally reads from JSONL files.
    */
   async query(query: TraceQuery = {}): Promise<TraceRecord[]> {
+    if (isServerlessEnvironment()) {
+      return this.#queryFromDb(query);
+    }
+    return this.#queryFromFiles(query);
+  }
+
+  async #queryFromDb(query: TraceQuery): Promise<TraceRecord[]> {
+    try {
+      const { getDatabaseDriver, getPostgresDatabase } = await import("../db/index");
+      if (getDatabaseDriver() !== "postgres") return [];
+      const { PgTraceStore } = await import("../db/pg-trace-store");
+      const db = getPostgresDatabase();
+      return await new PgTraceStore(db).query(query);
+    } catch (err) {
+      console.error("[TraceReader] Failed to query from DB:", err);
+      return [];
+    }
+  }
+
+  async #queryFromFiles(query: TraceQuery): Promise<TraceRecord[]> {
     // If traces directory doesn't exist, return empty result
     try {
       await fs.access(this.#baseDir);
@@ -145,6 +156,19 @@ export class TraceReader {
    * Get a single trace by its ID.
    */
   async getById(id: string): Promise<TraceRecord | null> {
+    if (isServerlessEnvironment()) {
+      try {
+        const { getDatabaseDriver, getPostgresDatabase } = await import("../db/index");
+        if (getDatabaseDriver() !== "postgres") return null;
+        const { PgTraceStore } = await import("../db/pg-trace-store");
+        const db = getPostgresDatabase();
+        return await new PgTraceStore(db).getById(id);
+      } catch (err) {
+        console.error("[TraceReader] Failed to getById from DB:", err);
+        return null;
+      }
+    }
+
     try {
       await fs.access(this.#baseDir);
     } catch {

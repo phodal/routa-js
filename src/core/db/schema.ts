@@ -173,6 +173,25 @@ export const acpSessions = pgTable("acp_sessions", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Traces ───────────────────────────────────────────────────────────
+
+export const traces = pgTable("traces", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  workspaceId: text("workspace_id"),
+  eventType: text("event_type").notNull(),
+  version: text("version").notNull().default("0.1.0"),
+  contributor: jsonb("contributor").$type<Record<string, unknown>>().notNull(),
+  tool: jsonb("tool").$type<Record<string, unknown>>(),
+  files: jsonb("files").$type<unknown[]>(),
+  conversation: jsonb("conversation").$type<Record<string, unknown>>(),
+  vcs: jsonb("vcs").$type<Record<string, unknown>>(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  /** Original trace timestamp (ISO 8601) */
+  timestamp: timestamp("timestamp", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Skills ───────────────────────────────────────────────────────────
 
 export interface SkillFileEntry {

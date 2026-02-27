@@ -206,6 +206,16 @@ class HttpSessionStore {
   }
 
   /**
+   * Push a notification directly into history without SSE delivery or trace recording.
+   * Used when restoring history from DB on cold start.
+   */
+  pushNotificationToHistory(sessionId: string, notification: SessionUpdateNotification) {
+    const history = this.messageHistory.get(sessionId) ?? [];
+    history.push(notification);
+    this.messageHistory.set(sessionId, history);
+  }
+
+  /**
    * Store a user message in history. This is called when user sends a prompt.
    * User messages are stored with sessionUpdate: "user_message" for easy identification.
    */

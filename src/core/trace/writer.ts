@@ -3,8 +3,8 @@
  *
  * Writes traces to: <workspace>/.routa/traces/{day}/traces-{datetime}.jsonl
  *
- * In serverless environments (Vercel), traces are written to /tmp/.routa/traces/
- * since the main filesystem is read-only.
+ * In serverless environments (Vercel), traces are written to Postgres instead
+ * of the filesystem (which is ephemeral in /tmp).
  */
 
 import { TraceRecord } from "./types";
@@ -39,8 +39,8 @@ function formatDateTime(date: Date): string {
  * TraceWriter manages JSONL trace file writing with automatic directory creation
  * and daily file rotation.
  *
- * In serverless environments, traces are written to /tmp which is the only writable
- * directory. Note that /tmp contents are ephemeral and may be cleared between invocations.
+ * In serverless environments (Vercel), traces are written to Postgres since
+ * the filesystem is ephemeral.
  */
 export class TraceWriter {
   private cwd: string;
@@ -54,52 +54,54 @@ export class TraceWriter {
   }
 
   /**
-   * Get the trace directory path for a given day.
-   * In serverless environments, uses /tmp/.routa/traces/ instead of workspace.
+   * Get the trace directory path for a given day (local only).
    */
   private getTraceDir(day: string): string {
-    const basePath = this.isServerless ? "/tmp" : this.cwd;
-    return path.join(basePath, ".routa", "traces", day);
+    return path.join(this.cwd, ".routa", "traces", day);
   }
 
   /**
-   * Get a new trace file path for the current datetime.
+   * Get a trace file path for the current datetime (local only).
    */
   private async getTracePath(day: string): Promise<string> {
     const dir = this.getTraceDir(day);
-    
-    // Ensure directory exists
     await fs.mkdir(dir, { recursive: true });
-    
-    // If we have a current file for this day, reuse it
+
     if (this.currentDay === day && this.currentFilePath) {
       return this.currentFilePath;
     }
-    
-    // Create new file path
+
     const datetime = formatDateTime(new Date());
     const filePath = path.join(dir, `traces-${datetime}.jsonl`);
-    
     this.currentDay = day;
     this.currentFilePath = filePath;
-    
     return filePath;
   }
 
   /**
-   * Append a trace record to the current trace file.
+   * Append a trace record. In serverless, writes to Postgres; locally writes to JSONL.
    */
   async append(record: TraceRecord): Promise<void> {
+    if (this.isServerless) {
+      // Write to Postgres in serverless environments
+      const { getDatabaseDriver, getPostgresDatabase } = await import("../db/index");
+      if (getDatabaseDriver() === "postgres") {
+        const { PgTraceStore } = await import("../db/pg-trace-store");
+        const db = getPostgresDatabase();
+        await new PgTraceStore(db).save(record);
+        return;
+      }
+    }
+
+    // Local: write to JSONL file
     const day = formatDay(new Date());
     const filePath = await this.getTracePath(day);
-    
     const line = JSON.stringify(record) + "\n";
     await fs.appendFile(filePath, line, "utf-8");
   }
 
   /**
    * Append a trace record safely - logs errors but never throws.
-   * Use this in hot paths where trace failures should not impact main flow.
    */
   async appendSafe(record: TraceRecord): Promise<void> {
     try {

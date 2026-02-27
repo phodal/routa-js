@@ -42,7 +42,7 @@ import {
   withConversation,
   recordTrace,
 } from "@/core/trace";
-import { persistSessionToDb, renameSessionInDb } from "@/core/acp/session-db-persister";
+import { persistSessionToDb, renameSessionInDb, saveHistoryToDb } from "@/core/acp/session-db-persister";
 import { resolveSkillContent } from "@/core/skills/skill-resolver";
 import type { SessionUpdateNotification } from "@/core/acp/http-session-store";
 
@@ -615,10 +615,12 @@ export async function POST(request: NextRequest) {
               }
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
+              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
+              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               const errorNotification = {
                 jsonrpc: "2.0",
                 method: "session/update",
@@ -683,10 +685,12 @@ export async function POST(request: NextRequest) {
               }
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
+              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
+              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               // Send error event before closing
               const errorNotification = {
                 jsonrpc: "2.0",
@@ -732,11 +736,12 @@ export async function POST(request: NextRequest) {
 
         try {
           const result = await claudeProc.prompt(sessionId, promptText);
-          // Flush any remaining buffered agent chunks for tracing
           store.flushAgentBuffer(sessionId);
+          void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
           return jsonrpcResponse(id ?? null, result);
         } catch (err) {
-          store.flushAgentBuffer(sessionId); // Flush even on error
+          store.flushAgentBuffer(sessionId);
+          void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
           return jsonrpcResponse(id ?? null, null, {
             code: -32000,
             message: err instanceof Error ? err.message : "Claude Code prompt failed",
@@ -764,13 +769,13 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // Forward to agent (responses stream via session/update → SSE)
         const result = await proc.prompt(acpSessionId, promptText);
-        // Flush any remaining buffered agent chunks for tracing
         store.flushAgentBuffer(sessionId);
+        void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
         return jsonrpcResponse(id ?? null, result);
       } catch (err) {
-        store.flushAgentBuffer(sessionId); // Flush even on error
+        store.flushAgentBuffer(sessionId);
+        void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
         return jsonrpcResponse(id ?? null, null, {
           code: -32000,
           message: err instanceof Error ? err.message : "Prompt failed",

@@ -25,7 +25,9 @@
       "Bash(curl:*)",
       "Bash(vercel curl:*)",
       "Bash(vercel whoami:*)",
-      "Bash(vercel project ls:*)"
+      "Bash(vercel project ls:*)",
+      "Bash(ls:*)",
+      "Bash(npx tsx:*)"
     ]
   }
 }

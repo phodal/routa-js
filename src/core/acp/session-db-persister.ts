@@ -110,6 +110,7 @@ export async function hydrateSessionsFromDb(): Promise<Array<{
   provider?: string;
   role?: string;
   modeId?: string;
+  model?: string;
   createdAt: Date | null;
 }>> {
   const driver = getDatabaseDriver();
@@ -128,6 +129,58 @@ export async function hydrateSessionsFromDb(): Promise<Array<{
     }
   } catch (err) {
     console.error(`[SessionDB] Failed to load sessions from ${driver}:`, err);
+    return [];
+  }
+}
+
+export async function saveHistoryToDb(
+  sessionId: string,
+  history: import("@/core/acp/http-session-store").SessionUpdateNotification[]
+): Promise<void> {
+  const driver = getDatabaseDriver();
+  if (driver === "memory") return;
+
+  try {
+    if (driver === "postgres") {
+      const db = getPostgresDatabase();
+      const pgStore = new PgAcpSessionStore(db);
+      const session = await pgStore.get(sessionId);
+      if (!session) return;
+      await pgStore.save({ ...session, messageHistory: history, updatedAt: new Date() });
+    } else {
+      // eslint-disable-next-line no-eval
+      const dynamicRequire = eval("require") as NodeRequire;
+      const { getSqliteDatabase } = dynamicRequire("../db/sqlite");
+      const db = getSqliteDatabase();
+      const sqliteStore = new SqliteAcpSessionStore(db);
+      const session = await sqliteStore.get(sessionId);
+      if (!session) return;
+      await sqliteStore.save({ ...session, messageHistory: history, updatedAt: new Date() });
+    }
+  } catch (err) {
+    console.error(`[SessionDB] Failed to save history to ${driver}:`, err);
+  }
+}
+
+export async function loadHistoryFromDb(
+  sessionId: string
+): Promise<import("@/core/acp/http-session-store").SessionUpdateNotification[]> {
+  const driver = getDatabaseDriver();
+  if (driver === "memory") return [];
+
+  try {
+    if (driver === "postgres") {
+      const db = getPostgresDatabase();
+      return (await new PgAcpSessionStore(db).getHistory(sessionId)) as import("@/core/acp/http-session-store").SessionUpdateNotification[];
+    } else {
+      // eslint-disable-next-line no-eval
+      const dynamicRequire = eval("require") as NodeRequire;
+      const { getSqliteDatabase } = dynamicRequire("../db/sqlite");
+      const db = getSqliteDatabase();
+      return (await new SqliteAcpSessionStore(db).getHistory(sessionId)) as import("@/core/acp/http-session-store").SessionUpdateNotification[];
+    }
+  } catch (err) {
+    console.error(`[SessionDB] Failed to load history from ${driver}:`, err);
     return [];
   }
 }
