@@ -110,6 +110,22 @@ class HttpSessionStore {
   private messageHistory = new Map<string, SessionUpdateNotification[]>();
   /** TraceRecorder handles all trace recording with provider-specific normalization */
   private traceRecorder = new TraceRecorder();
+  /**
+   * Sessions currently streaming a prompt response via their own SSE body.
+   * While in streaming mode, pushNotification() stores to history/trace but
+   * does NOT forward to the persistent EventSource SSE controller — that would
+   * cause the same event to appear twice in the browser (once via the prompt
+   * response stream and once via the EventSource GET stream).
+   */
+  private streamingSessionIds = new Set<string>();
+
+  enterStreamingMode(sessionId: string): void {
+    this.streamingSessionIds.add(sessionId);
+  }
+
+  exitStreamingMode(sessionId: string): void {
+    this.streamingSessionIds.delete(sessionId);
+  }
 
   upsertSession(record: RoutaSessionRecord) {
     const existing = this.sessions.get(record.sessionId);
@@ -252,6 +268,12 @@ class HttpSessionStore {
       for (const update of updates) {
         this.traceRecorder.recordFromUpdate(update, cwd);
       }
+    }
+
+    // Skip SSE push while a prompt stream is actively delivering events via
+    // its own HTTP response body — prevents each event being dispatched twice.
+    if (this.streamingSessionIds.has(sessionId)) {
+      return;
     }
 
     const controller = this.sseControllers.get(sessionId);

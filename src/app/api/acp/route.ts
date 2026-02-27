@@ -603,6 +603,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Return streaming SSE response
+        // Enter streaming mode so pushNotification() skips the persistent SSE
+        // EventSource channel — events are already delivered via this response body.
+        store.enterStreamingMode(sessionId);
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           async start(controller) {
@@ -611,9 +614,11 @@ export async function POST(request: NextRequest) {
                 controller.enqueue(encoder.encode(event));
               }
               store.flushAgentBuffer(sessionId);
+              store.exitStreamingMode(sessionId);
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
+              store.exitStreamingMode(sessionId);
               const errorNotification = {
                 jsonrpc: "2.0",
                 method: "session/update",
@@ -666,6 +671,9 @@ export async function POST(request: NextRequest) {
         // Each event is sent immediately as it's received from the SDK
         // Pass the ACP sessionId so notifications match what client expects
         // Pass skill content as appendSystemPrompt for proper skill integration
+        // Enter streaming mode so pushNotification() skips the persistent SSE
+        // EventSource channel — events are already delivered via this response body.
+        store.enterStreamingMode(sessionId);
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           async start(controller) {
@@ -674,9 +682,11 @@ export async function POST(request: NextRequest) {
                 controller.enqueue(encoder.encode(event));
               }
               store.flushAgentBuffer(sessionId);
+              store.exitStreamingMode(sessionId);
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
+              store.exitStreamingMode(sessionId);
               // Send error event before closing
               const errorNotification = {
                 jsonrpc: "2.0",
