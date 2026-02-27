@@ -78,7 +78,6 @@ export function WorkspacePageClient() {
   const [traces, setTraces] = useState<TraceInfo[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
-  const [showNewSession, setShowNewSession] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "notes">("overview");
 
   // Auto-connect ACP
@@ -244,53 +243,14 @@ export function WorkspacePageClient() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-6 py-6">
 
-          {/* Quick Input — collapsed by default, expands on click */}
+          {/* Quick Input */}
           <div className="mb-8">
-            {showNewSession ? (
-              <div className="animate-fade-in-up">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">New Session</h2>
-                  <button
-                    onClick={() => setShowNewSession(false)}
-                    className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                  >
-                    Collapse
-                  </button>
-                </div>
-                <div className="bg-white dark:bg-[#12141c] rounded-xl border border-gray-200/80 dark:border-[#1c1f2e] p-5 shadow-sm">
-                  <HomeInput
-                    workspaceId={workspaceId}
-                    onSessionCreated={(sessionId) => {
-                      setRefreshKey((k) => k + 1);
-                      setShowNewSession(false);
-                    }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowNewSession(true)}
-                className="group w-full flex items-center gap-3 px-5 py-3.5 rounded-xl bg-white dark:bg-[#12141c] border border-gray-200/80 dark:border-[#1c1f2e] hover:border-amber-300 dark:hover:border-amber-700/40 shadow-sm hover:shadow-md transition-all"
-              >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm shadow-amber-500/20 group-hover:shadow-amber-500/40 transition-shadow">
-                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-                <div className="text-left">
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
-                    Start a new session…
-                  </div>
-                  <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                    Chat with agents, run tasks, use skills
-                  </div>
-                </div>
-                <div className="flex-1" />
-                <kbd className="hidden sm:inline-flex px-2 py-0.5 rounded bg-gray-100 dark:bg-[#191c28] text-[10px] font-mono text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-[#252838]">
-                  ⌘ N
-                </kbd>
-              </button>
-            )}
+            <HomeInput
+              workspaceId={workspaceId}
+              onSessionCreated={() => {
+                setRefreshKey((k) => k + 1);
+              }}
+            />
           </div>
 
           {/* ─── Stat Cards ──────────────────────────────────────────── */}
@@ -878,7 +838,7 @@ function NotesTab({
         </div>
       ) : (
         <div className="space-y-2">
-          {notes.map((note) => (
+          {[...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).map((note) => (
             <div
               key={note.id}
               className="bg-white dark:bg-[#12141c] rounded-xl border border-gray-200/60 dark:border-[#1c1f2e] overflow-hidden transition-shadow hover:shadow-sm"
