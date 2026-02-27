@@ -161,6 +161,8 @@ export const acpSessions = pgTable("acp_sessions", {
   provider: text("provider"),
   role: text("role"),
   modeId: text("mode_id"),
+  /** Model used for this session */
+  model: text("model"),
   /** Whether the first prompt has been sent */
   firstPromptSent: boolean("first_prompt_sent").default(false),
   /** Message history stored as JSONB array */

@@ -25,6 +25,8 @@ export interface RoutaSessionRecord {
   provider?: string;
   role?: string;
   modeId?: string;
+  /** Model used for this session (e.g. "claude-sonnet-4-20250514") */
+  model?: string;
   createdAt: string;
   /** Whether the first prompt has been sent (for coordinator prompt injection) */
   firstPromptSent?: boolean;

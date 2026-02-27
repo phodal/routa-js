@@ -183,13 +183,103 @@ export async function POST(request: NextRequest) {
     const response = await transport.handleRequest(patchedRequest);
 
     // Check if the SDK returned "Server not initialized" error
-    // and handle it by providing a helpful message
+    // For non-initialize methods, auto-initialize a new session and retry
     if (response.status === 400) {
       const responseClone = response.clone();
       try {
         const errorBody = await responseClone.json();
         if (errorBody?.error?.code === -32000 &&
             errorBody?.error?.message?.includes("not initialized")) {
+
+          // If this is NOT an initialize request, we can auto-initialize
+          // and retry the original request transparently
+          if (method !== "initialize" && requestBody) {
+            console.log(
+              `[MCP Route] Auto-initializing MCP session for method=${method} (session ${sessionId ?? "unknown"} was stale)`,
+            );
+
+            try {
+              // Create a fresh session and send an initialize request to it
+              const freshTransport = await createSession();
+              const initBody = JSON.stringify({
+                jsonrpc: "2.0",
+                id: `auto-init-${Date.now()}`,
+                method: "initialize",
+                params: {
+                  protocolVersion: "2024-11-05",
+                  capabilities: {},
+                  clientInfo: { name: "routa-auto", version: "0.1.0" },
+                },
+              });
+              const initRequest = new NextRequest(request.url, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Accept": "application/json, text/event-stream",
+                },
+                body: initBody,
+              });
+              const initResponse = await freshTransport.handleRequest(initRequest);
+
+              if (initResponse.ok) {
+                // Get the new session ID from the response
+                const newSessionId = initResponse.headers.get("mcp-session-id") ?? freshTransport.sessionId;
+                console.log(
+                  `[MCP Route] Auto-initialized new session: ${newSessionId}`,
+                );
+
+                // Now send the notification/initialized to complete initialization
+                const initializedBody = JSON.stringify({
+                  jsonrpc: "2.0",
+                  method: "notifications/initialized",
+                });
+                const notifRequest = new NextRequest(request.url, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    ...(newSessionId ? { "Mcp-Session-Id": newSessionId } : {}),
+                  },
+                  body: initializedBody,
+                });
+                await freshTransport.handleRequest(notifRequest);
+
+                // Replay the original request on the new session
+                const retryBody = JSON.stringify(requestBody);
+                const retryRequest = new NextRequest(request.url, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    ...(newSessionId ? { "Mcp-Session-Id": newSessionId } : {}),
+                  },
+                  body: retryBody,
+                });
+                const retryResponse = await freshTransport.handleRequest(retryRequest);
+
+                // Add the new session ID header so the client can update its reference
+                const retryHeaders = new Headers(retryResponse.headers);
+                if (newSessionId) {
+                  retryHeaders.set("mcp-session-id", newSessionId);
+                }
+
+                console.log(
+                  `[MCP Route] Auto-init retry response: ${retryResponse.status}`,
+                );
+                return withCorsHeaders(
+                  new Response(retryResponse.body, {
+                    status: retryResponse.status,
+                    statusText: retryResponse.statusText,
+                    headers: retryHeaders,
+                  }),
+                );
+              }
+            } catch (autoInitErr) {
+              console.error("[MCP Route] Auto-initialization failed:", autoInitErr);
+              // Fall through to return the original error
+            }
+          }
+
           console.log(
             `[MCP Route] Server not initialized error - client needs to send initialize first`,
           );

@@ -156,6 +156,8 @@ export const acpSessions = sqliteTable("acp_sessions", {
   provider: text("provider"),
   role: text("role"),
   modeId: text("mode_id"),
+  /** Model used for this session */
+  model: text("model"),
   /** Whether the first prompt has been sent */
   firstPromptSent: integer("first_prompt_sent", { mode: "boolean" }).default(false),
   /** Message history stored as JSON array */

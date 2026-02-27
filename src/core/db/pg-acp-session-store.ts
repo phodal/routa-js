@@ -22,6 +22,7 @@ export class PgAcpSessionStore implements AcpSessionStore {
         provider: session.provider,
         role: session.role,
         modeId: session.modeId,
+        model: session.model,
         firstPromptSent: session.firstPromptSent ?? false,
         messageHistory: session.messageHistory,
         createdAt: session.createdAt,
@@ -32,6 +33,7 @@ export class PgAcpSessionStore implements AcpSessionStore {
         set: {
           name: session.name,
           modeId: session.modeId,
+          model: session.model,
           firstPromptSent: session.firstPromptSent ?? false,
           messageHistory: session.messageHistory,
           updatedAt: new Date(),
@@ -106,6 +108,7 @@ export class PgAcpSessionStore implements AcpSessionStore {
       provider: row.provider ?? undefined,
       role: row.role ?? undefined,
       modeId: row.modeId ?? undefined,
+      model: row.model ?? undefined,
       firstPromptSent: row.firstPromptSent ?? false,
       messageHistory: row.messageHistory ?? [],
       createdAt: row.createdAt,

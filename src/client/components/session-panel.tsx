@@ -11,6 +11,8 @@ export interface SessionInfo {
   provider?: string;
   role?: string;
   modeId?: string;
+  /** Model used for this session */
+  model?: string;
   createdAt: string;
 }
 

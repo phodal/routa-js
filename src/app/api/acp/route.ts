@@ -326,6 +326,7 @@ export async function POST(request: NextRequest) {
         provider,
         role: role ?? "CRAFTER",
         modeId,
+        model,
         createdAt: now.toISOString(),
       });
 
@@ -342,6 +343,7 @@ export async function POST(request: NextRequest) {
             provider,
             role: role ?? "CRAFTER",
             modeId,
+            model,
             firstPromptSent: false,
             messageHistory: [],
             createdAt: now,
@@ -385,6 +387,7 @@ export async function POST(request: NextRequest) {
         sessionId,
         provider,
         role: role ?? "CRAFTER",
+        model,
         routaAgentId,
       });
     }

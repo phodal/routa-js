@@ -2,6 +2,7 @@
  * Session API Route - /api/sessions/[sessionId]
  *
  * Supports:
+ * - GET: Get session metadata (provider, role, model, etc.)
  * - PATCH: Rename a session
  * - DELETE: Delete a session
  */
@@ -10,6 +11,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
 
 export const dynamic = "force-dynamic";
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  const { sessionId } = await params;
+  const store = getHttpSessionStore();
+  const session = store.getSession(sessionId);
+
+  if (!session) {
+    return NextResponse.json(
+      { error: "Session not found" },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json({
+    session: {
+      sessionId: session.sessionId,
+      name: session.name,
+      cwd: session.cwd,
+      workspaceId: session.workspaceId,
+      routaAgentId: session.routaAgentId,
+      provider: session.provider,
+      role: session.role,
+      modeId: session.modeId,
+      model: session.model,
+      createdAt: session.createdAt,
+    },
+  });
+}
 
 export async function PATCH(
   request: NextRequest,

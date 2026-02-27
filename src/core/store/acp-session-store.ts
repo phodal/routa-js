@@ -23,6 +23,8 @@ export interface AcpSession {
   provider?: string;
   role?: string;
   modeId?: string;
+  /** Model used for this session */
+  model?: string;
   firstPromptSent?: boolean;
   messageHistory: AcpSessionNotification[];
   createdAt: Date;

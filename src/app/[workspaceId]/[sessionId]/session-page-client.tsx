@@ -131,6 +131,37 @@ export function SessionPageClient() {
     }
   }, [sessionId, acp.connected, acp.selectSession]);
 
+  // Restore session metadata (role, provider, model) when navigating to an existing session
+  const sessionMetadataLoadedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!sessionId || !acp.connected) return;
+    // Only fetch once per session
+    if (sessionMetadataLoadedRef.current.has(sessionId)) return;
+    sessionMetadataLoadedRef.current.add(sessionId);
+
+    fetch(`/api/sessions/${sessionId}`)
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => {
+        if (!data?.session) return;
+        const { role, provider } = data.session;
+        // Restore agent role if stored
+        if (role && ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"].includes(role)) {
+          setSelectedAgent(role as AgentRole);
+        }
+        // Restore provider
+        if (provider) {
+          acp.setProvider(provider);
+        }
+        console.log(`[SessionPage] Restored session metadata: role=${role}, provider=${provider}`);
+      })
+      .catch((err) => {
+        console.warn("[SessionPage] Failed to restore session metadata:", err);
+      });
+  }, [sessionId, acp.connected, acp.setProvider]);
+
   // Track if we've already sent the pending prompt for this session
   const pendingPromptSentRef = useRef<Set<string>>(new Set());
 
@@ -574,54 +605,81 @@ export function SessionPageClient() {
 
   /**
    * Call a Routa MCP tool via the /api/mcp endpoint.
+   * Handles auto-initialization and retries on stale sessions.
    */
   const mcpSessionRef = useRef<string | null>(null);
 
-  const callMcpTool = useCallback(async (toolName: string, args: Record<string, unknown>) => {
-    if (!mcpSessionRef.current) {
-      const initRes = await fetch("/api/mcp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json, text/event-stream",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: {
-            protocolVersion: "2024-11-05",
-            capabilities: {},
-            clientInfo: { name: "routa-ui", version: "0.1.0" },
-          },
-        }),
-      });
-      const mcpSessionId = initRes.headers.get("mcp-session-id");
-      if (mcpSessionId) {
-        mcpSessionRef.current = mcpSessionId;
-        console.log(`[MCP] Session initialized: ${mcpSessionId}`);
-      }
-    }
-
-    const res = await fetch("/api/mcp", {
+  const initMcpSession = useCallback(async (): Promise<string | null> => {
+    const initRes = await fetch("/api/mcp", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
-        ...(mcpSessionRef.current ? { "Mcp-Session-Id": mcpSessionRef.current } : {}),
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: Date.now(),
-        method: "tools/call",
-        params: { name: toolName, arguments: args },
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "routa-ui", version: "0.1.0" },
+        },
       }),
     });
+    const mcpSessionId = initRes.headers.get("mcp-session-id");
+    if (mcpSessionId) {
+      mcpSessionRef.current = mcpSessionId;
+      console.log(`[MCP] Session initialized: ${mcpSessionId}`);
+    }
+    return mcpSessionId;
+  }, []);
 
-    const data = await res.json();
+  const callMcpTool = useCallback(async (toolName: string, args: Record<string, unknown>) => {
+    // Ensure MCP session is initialized
+    if (!mcpSessionRef.current) {
+      await initMcpSession();
+    }
+
+    const doCall = async () => {
+      const res = await fetch("/api/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/event-stream",
+          ...(mcpSessionRef.current ? { "Mcp-Session-Id": mcpSessionRef.current } : {}),
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now(),
+          method: "tools/call",
+          params: { name: toolName, arguments: args },
+        }),
+      });
+
+      // Update session ref if server auto-initialized a new session
+      const newSessionId = res.headers.get("mcp-session-id");
+      if (newSessionId && newSessionId !== mcpSessionRef.current) {
+        console.log(`[MCP] Session updated by server: ${newSessionId}`);
+        mcpSessionRef.current = newSessionId;
+      }
+
+      return res.json();
+    };
+
+    let data = await doCall();
+
+    // If we got a "not initialized" error, re-initialize and retry once
+    if (data.error?.code === -32000 && data.error?.message?.includes("not initialized")) {
+      console.log(`[MCP] Session stale, re-initializing...`);
+      mcpSessionRef.current = null;
+      await initMcpSession();
+      data = await doCall();
+    }
+
     if (data.error) throw new Error(data.error.message || "MCP tool call failed");
     return data.result;
-  }, []);
+  }, [initMcpSession]);
 
   const handleConfirmAllTasks = useCallback(() => {
     setRoutaTasks((prev) =>
