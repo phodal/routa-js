@@ -3,7 +3,7 @@ import {buildConfigFromPreset, ManagedProcess, NotificationHandler} from "@/core
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
 import {ensureMcpForProvider, providerSupportsMcp} from "@/core/acp/mcp-setup";
 import {getDefaultRoutaMcpConfig} from "@/core/acp/mcp-config-generator";
-import {OpencodeSdkAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl} from "@/core/acp/opencode-sdk-adapter";
+import {OpencodeSdkAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl, isOpencodeServerConfigured} from "@/core/acp/opencode-sdk-adapter";
 import {ClaudeCodeSdkAdapter, shouldUseClaudeCodeSdkAdapter} from "@/core/acp/claude-code-sdk-adapter";
 import {isServerlessEnvironment} from "@/core/acp/api-based-providers";
 import {getHttpSessionStore} from "@/core/acp/http-session-store";
@@ -76,7 +76,7 @@ export class AcpProcessManager {
     ): Promise<string> {
         // Check if we should use OpenCode SDK adapter (serverless + configured)
         if (presetId === "opencode" && shouldUseOpencodeAdapter()) {
-            return this.createOpencodeAdapterSession(sessionId, onNotification);
+            return this.createOpencodeSdkSession(sessionId, onNotification);
         }
 
         // Setup MCP: writes config files and/or returns CLI args
@@ -117,8 +117,10 @@ export class AcpProcessManager {
 
     /**
      * Create a session using OpenCode SDK adapter (for serverless environments).
+     * This is public so that the API route can explicitly request SDK-based session
+     * when the provider is 'opencode-sdk'.
      */
-    private async createOpencodeAdapterSession(
+    async createOpencodeSdkSession(
         sessionId: string,
         onNotification: NotificationHandler
     ): Promise<string> {
@@ -412,10 +414,127 @@ export class AcpProcessManager {
     }
 
     /**
-     * Check if a session is using OpenCode SDK adapter.
+     * Check if a session is using OpenCode SDK adapter (sync version).
+     * Checks in-memory and HTTP session store.
      */
     isOpencodeAdapterSession(sessionId: string): boolean {
-        return this.opencodeAdapters.has(sessionId);
+        // First check in-memory
+        if (this.opencodeAdapters.has(sessionId)) {
+            return true;
+        }
+
+        // Check HTTP session store (session might exist but adapter not in memory)
+        const store = getHttpSessionStore();
+        const sessionRecord = store.getSession(sessionId);
+        if (sessionRecord?.provider === "opencode-sdk") {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a session is using OpenCode SDK adapter (async version).
+     * In serverless environments, also checks database for persisted sessions.
+     */
+    async isOpencodeSdkSessionAsync(sessionId: string): Promise<boolean> {
+        // First check in-memory
+        if (this.opencodeAdapters.has(sessionId)) {
+            return true;
+        }
+
+        // Check HTTP session store
+        const store = getHttpSessionStore();
+        const sessionRecord = store.getSession(sessionId);
+        if (sessionRecord?.provider === "opencode-sdk") {
+            return true;
+        }
+
+        // In serverless with Postgres, check database
+        if (isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
+            try {
+                const db = getPostgresDatabase();
+                const pgStore = new PgAcpSessionStore(db);
+                const dbSession = await pgStore.get(sessionId);
+                return dbSession?.provider === "opencode-sdk";
+            } catch (err) {
+                console.error(`[AcpProcessManager] Failed to check OpenCode session in database:`, err);
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get or recreate an OpenCode SDK adapter for serverless environments.
+     * If the session exists in HTTP store or database with provider 'opencode-sdk' but
+     * the adapter is not in memory (due to serverless cold start), recreate it.
+     */
+    async getOrRecreateOpencodeSdkAdapter(
+        sessionId: string,
+        onNotification: NotificationHandler
+    ): Promise<OpencodeSdkAdapter | undefined> {
+        // First check if adapter is already in memory
+        const existing = this.opencodeAdapters.get(sessionId)?.adapter;
+        if (existing) {
+            return existing;
+        }
+
+        // Check HTTP session store for session metadata
+        const store = getHttpSessionStore();
+        let sessionRecord = store.getSession(sessionId);
+        let provider = sessionRecord?.provider;
+
+        // If not in HTTP store (serverless cold start), try to recover from database
+        if (!sessionRecord && isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
+            console.log(`[AcpProcessManager] OpenCode session not in HTTP store, checking database: ${sessionId}`);
+            try {
+                const db = getPostgresDatabase();
+                const pgStore = new PgAcpSessionStore(db);
+                const dbSession = await pgStore.get(sessionId);
+                if (dbSession) {
+                    provider = dbSession.provider;
+                    console.log(`[AcpProcessManager] Found OpenCode session in database: provider=${provider}`);
+
+                    // Restore to HTTP session store
+                    store.upsertSession({
+                        sessionId,
+                        cwd: dbSession.cwd,
+                        workspaceId: dbSession.workspaceId,
+                        routaAgentId: dbSession.routaAgentId,
+                        provider: dbSession.provider,
+                        role: dbSession.role,
+                        modeId: dbSession.modeId,
+                        createdAt: dbSession.createdAt.toISOString(),
+                        firstPromptSent: dbSession.firstPromptSent,
+                    });
+                }
+            } catch (err) {
+                console.error(`[AcpProcessManager] Failed to query database:`, err);
+            }
+        }
+
+        if (provider !== "opencode-sdk" || !isOpencodeServerConfigured()) {
+            return undefined;
+        }
+
+        // Session exists but adapter not in memory - recreate it
+        console.log(`[AcpProcessManager] Recreating OpenCode SDK adapter for session: ${sessionId}`);
+
+        const serverUrl = getOpencodeServerUrl()!;
+        const adapter = new OpencodeSdkAdapter(serverUrl, onNotification);
+        await adapter.connect();
+        const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
+
+        this.opencodeAdapters.set(sessionId, {
+            adapter,
+            acpSessionId,
+            presetId: "opencode-sdk",
+            createdAt: new Date(),
+        });
+
+        console.log(`[AcpProcessManager] OpenCode SDK adapter recreated: ${acpSessionId}`);
+        return adapter;
     }
 
     /**

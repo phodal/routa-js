@@ -28,6 +28,7 @@ import { getDefaultRoutaMcpConfig } from "@/core/acp/mcp-config-generator";
 import { v4 as uuidv4 } from "uuid";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
+import type { OpencodeSdkAdapter } from "@/core/acp/opencode-sdk-adapter";
 import { isClaudeCodeSdkConfigured } from "@/core/acp/claude-code-sdk-adapter";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { getRoutaSystem } from "@/core/routa-system";
@@ -189,10 +190,25 @@ export async function POST(request: NextRequest) {
       const isClaudeCode = preset?.nonStandardApi === true || provider === "claude";
       // claude-code-sdk is the SDK-based adapter for serverless environments
       const isClaudeCodeSdk = provider === "claude-code-sdk";
+      // opencode-sdk is the SDK-based adapter for connecting to remote OpenCode server
+      const isOpencodeSdk = provider === "opencode-sdk";
 
       let acpSessionId: string;
 
-      if (isClaudeCodeSdk) {
+      if (isOpencodeSdk) {
+        // ── OpenCode SDK: connect to remote OpenCode server ──────────────
+        if (!isOpencodeServerConfigured()) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32002,
+            message: "OpenCode SDK not configured. Set OPENCODE_SERVER_URL environment variable.",
+          });
+        }
+
+        acpSessionId = await manager.createOpencodeSdkSession(
+          sessionId,
+          forwardSessionUpdate
+        );
+      } else if (isClaudeCodeSdk) {
         // ── Claude Code SDK: direct API calls (for serverless environments) ──
         if (!isClaudeCodeSdkConfigured()) {
           return jsonrpcResponse(id ?? null, null, {
@@ -410,7 +426,9 @@ export async function POST(request: NextRequest) {
         manager.getProcess(sessionId) !== undefined ||
         manager.getClaudeProcess(sessionId) !== undefined ||
         manager.isClaudeCodeSdkSession(sessionId) ||
-        (await manager.isClaudeCodeSdkSessionAsync(sessionId));
+        manager.isOpencodeAdapterSession(sessionId) ||
+        (await manager.isClaudeCodeSdkSessionAsync(sessionId)) ||
+        (await manager.isOpencodeSdkSessionAsync(sessionId));
 
       if (!sessionExists) {
         console.log(`[ACP Route] Session ${sessionId} not found, auto-creating with default settings...`);
@@ -426,10 +444,24 @@ export async function POST(request: NextRequest) {
           const preset = getPresetById(provider);
           const isClaudeCode = preset?.nonStandardApi === true || provider === "claude";
           const isClaudeCodeSdk = provider === "claude-code-sdk";
+          const isOpencodeSdk = provider === "opencode-sdk";
 
           let acpSessionId: string;
 
-          if (isClaudeCodeSdk) {
+          if (isOpencodeSdk) {
+            // OpenCode SDK session
+            if (!isOpencodeServerConfigured()) {
+              return jsonrpcResponse(id ?? null, null, {
+                code: -32002,
+                message: "Cannot auto-create session: OpenCode SDK not configured. Set OPENCODE_SERVER_URL environment variable.",
+              });
+            }
+
+            acpSessionId = await manager.createOpencodeSdkSession(
+              sessionId,
+              forwardSessionUpdate
+            );
+          } else if (isClaudeCodeSdk) {
             // Claude Code SDK session
             if (!isClaudeCodeSdkConfigured()) {
               return jsonrpcResponse(id ?? null, null, {
@@ -548,6 +580,64 @@ export async function POST(request: NextRequest) {
         }
       );
       recordTrace(sessionRecord?.cwd ?? process.cwd(), userMsgTrace);
+
+      // ── OpenCode SDK session (serverless) ──────────────────────────
+      if (manager.isOpencodeAdapterSession(sessionId) || await manager.isOpencodeSdkSessionAsync(sessionId)) {
+        const opcAdapter = await manager.getOrRecreateOpencodeSdkAdapter(
+          sessionId,
+          forwardSessionUpdate
+        );
+
+        if (!opcAdapter) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: `No OpenCode SDK adapter for session: ${sessionId}`,
+          });
+        }
+
+        if (!opcAdapter.alive) {
+          return jsonrpcResponse(id ?? null, null, {
+            code: -32000,
+            message: "OpenCode SDK adapter is not connected",
+          });
+        }
+
+        // Return streaming SSE response
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const event of opcAdapter.promptStream(promptText, sessionId, skillContent)) {
+                controller.enqueue(encoder.encode(event));
+              }
+              store.flushAgentBuffer(sessionId);
+              controller.close();
+            } catch (err) {
+              store.flushAgentBuffer(sessionId);
+              const errorNotification = {
+                jsonrpc: "2.0",
+                method: "session/update",
+                params: {
+                  sessionId,
+                  type: "error",
+                  error: { message: err instanceof Error ? err.message : "OpenCode SDK prompt failed" },
+                },
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorNotification)}\n\n`));
+              controller.close();
+            }
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+          },
+        });
+      }
 
       // ── Claude Code SDK session (serverless) ────────────────────────
       // Use async version to check database in serverless cold starts
@@ -687,8 +777,15 @@ export async function POST(request: NextRequest) {
         const manager = getAcpProcessManager();
         const store = getHttpSessionStore();
 
+        // Check if OpenCode SDK session
+        if (manager.isOpencodeAdapterSession(sessionId)) {
+          const opcAdapter = manager.getOpencodeAdapter(sessionId);
+          if (opcAdapter) {
+            opcAdapter.cancel();
+          }
+        }
         // Check if Claude Code SDK session
-        if (manager.isClaudeCodeSdkSession(sessionId)) {
+        else if (manager.isClaudeCodeSdkSession(sessionId)) {
           // Try to get existing adapter, or recreate for cancel (though cancel is less critical)
           const adapter = await manager.getOrRecreateClaudeCodeSdkAdapter(
             sessionId,
@@ -842,8 +939,8 @@ export async function POST(request: NextRequest) {
 
       const providers = staticProviders;
 
-      // In serverless environments, add OpenCode SDK as a provider option
-      if (isServerlessEnvironment()) {
+      // Add OpenCode SDK as a provider option (available in any environment when configured)
+      {
         const sdkConfigured = isOpencodeServerConfigured();
         providers.unshift({
           id: "opencode-sdk",
