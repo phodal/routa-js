@@ -73,8 +73,8 @@ async function getLocalProviders(shouldCheck = false): Promise<ProviderInfo[]> {
       id: "opencode-sdk",
       name: "OpenCode SDK",
       description: opencodeSdkConfigured
-        ? "Connect to remote OpenCode server (configured)"
-        : "Connect to remote OpenCode server - Set OPENCODE_SERVER_URL environment variable",
+        ? "OpenCode via SDK (configured)"
+        : "OpenCode SDK - Set OPENCODE_SERVER_URL or OPENCODE_API_KEY",
       command: "sdk",
       status: opencodeSdkConfigured ? "available" : "unavailable",
       source: "static",

@@ -3,7 +3,7 @@ import {buildConfigFromPreset, ManagedProcess, NotificationHandler} from "@/core
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
 import {ensureMcpForProvider, providerSupportsMcp} from "@/core/acp/mcp-setup";
 import {getDefaultRoutaMcpConfig} from "@/core/acp/mcp-config-generator";
-import {OpencodeSdkAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl, isOpencodeServerConfigured} from "@/core/acp/opencode-sdk-adapter";
+import {OpencodeSdkAdapter, OpencodeSdkDirectAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl, isOpencodeServerConfigured, isOpencodeDirectApiConfigured} from "@/core/acp/opencode-sdk-adapter";
 import {ClaudeCodeSdkAdapter, shouldUseClaudeCodeSdkAdapter} from "@/core/acp/claude-code-sdk-adapter";
 import {isServerlessEnvironment} from "@/core/acp/api-based-providers";
 import {getHttpSessionStore} from "@/core/acp/http-session-store";
@@ -24,7 +24,7 @@ export interface ManagedClaudeProcess {
  * A managed OpenCode SDK adapter (for serverless environments).
  */
 export interface ManagedOpencodeAdapter {
-    adapter: OpencodeSdkAdapter;
+    adapter: OpencodeSdkAdapter | OpencodeSdkDirectAdapter;
     acpSessionId: string;
     presetId: string;
     createdAt: Date;
@@ -125,26 +125,47 @@ export class AcpProcessManager {
         onNotification: NotificationHandler
     ): Promise<string> {
         const serverUrl = getOpencodeServerUrl();
-        if (!serverUrl) {
-            throw new Error("OPENCODE_SERVER_URL not configured");
+
+        if (serverUrl) {
+            // Mode 1: Remote Server
+            console.log(`[AcpProcessManager] Using OpenCode SDK adapter (remote server)`);
+            console.log(`[AcpProcessManager] Connecting to: ${serverUrl}`);
+
+            const adapter = new OpencodeSdkAdapter(serverUrl, onNotification);
+            await adapter.connect();
+            const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
+
+            this.opencodeAdapters.set(sessionId, {
+                adapter,
+                acpSessionId,
+                presetId: "opencode-sdk",
+                createdAt: new Date(),
+            });
+
+            console.log(`[AcpProcessManager] OpenCode SDK session created: ${acpSessionId}`);
+            return acpSessionId;
         }
 
-        console.log(`[AcpProcessManager] Using OpenCode SDK adapter for serverless environment`);
-        console.log(`[AcpProcessManager] Connecting to: ${serverUrl}`);
+        if (isOpencodeDirectApiConfigured()) {
+            // Mode 2: Direct API (BigModel Coding API, etc.)
+            console.log(`[AcpProcessManager] Using OpenCode SDK adapter (direct API mode)`);
 
-        const adapter = new OpencodeSdkAdapter(serverUrl, onNotification);
-        await adapter.connect();
-        const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
+            const adapter = new OpencodeSdkDirectAdapter(onNotification);
+            await adapter.connect();
+            const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
 
-        this.opencodeAdapters.set(sessionId, {
-            adapter,
-            acpSessionId,
-            presetId: "opencode-sdk",
-            createdAt: new Date(),
-        });
+            this.opencodeAdapters.set(sessionId, {
+                adapter,
+                acpSessionId,
+                presetId: "opencode-sdk",
+                createdAt: new Date(),
+            });
 
-        console.log(`[AcpProcessManager] OpenCode SDK session created: ${acpSessionId}`);
-        return acpSessionId;
+            console.log(`[AcpProcessManager] OpenCode SDK direct session created: ${acpSessionId}`);
+            return acpSessionId;
+        }
+
+        throw new Error("OpenCode SDK not configured. Set OPENCODE_SERVER_URL or OPENCODE_API_KEY.");
     }
 
     /**
@@ -266,7 +287,7 @@ export class AcpProcessManager {
     /**
      * Get the OpenCode SDK adapter for a session.
      */
-    getOpencodeAdapter(sessionId: string): OpencodeSdkAdapter | undefined {
+    getOpencodeAdapter(sessionId: string): OpencodeSdkAdapter | OpencodeSdkDirectAdapter | undefined {
         return this.opencodeAdapters.get(sessionId)?.adapter;
     }
 
@@ -473,7 +494,7 @@ export class AcpProcessManager {
     async getOrRecreateOpencodeSdkAdapter(
         sessionId: string,
         onNotification: NotificationHandler
-    ): Promise<OpencodeSdkAdapter | undefined> {
+    ): Promise<OpencodeSdkAdapter | OpencodeSdkDirectAdapter | undefined> {
         // First check if adapter is already in memory
         const existing = this.opencodeAdapters.get(sessionId)?.adapter;
         if (existing) {
@@ -521,8 +542,15 @@ export class AcpProcessManager {
         // Session exists but adapter not in memory - recreate it
         console.log(`[AcpProcessManager] Recreating OpenCode SDK adapter for session: ${sessionId}`);
 
-        const serverUrl = getOpencodeServerUrl()!;
-        const adapter = new OpencodeSdkAdapter(serverUrl, onNotification);
+        const serverUrl = getOpencodeServerUrl();
+        let adapter: OpencodeSdkAdapter | OpencodeSdkDirectAdapter;
+
+        if (serverUrl) {
+            adapter = new OpencodeSdkAdapter(serverUrl, onNotification);
+        } else {
+            adapter = new OpencodeSdkDirectAdapter(onNotification);
+        }
+
         await adapter.connect();
         const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
 

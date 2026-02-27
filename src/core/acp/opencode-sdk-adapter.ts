@@ -1,27 +1,31 @@
 /**
  * OpenCode SDK Adapter for Serverless Environments (Vercel)
  *
- * Uses the official @opencode-ai/sdk to connect to a remote OpenCode server
- * and communicate via REST API + Server-Sent Events (SSE). This gives us the
- * full OpenCode agent loop (tools, multi-turn, etc.) while being compatible
- * with Node.js serverless runtimes (e.g. Vercel Pro with 60s timeout).
+ * Supports two modes:
  *
- * Architecture:
- *   1. Connect to remote OpenCode server (spawned separately, e.g. on a VPS)
- *   2. Create session via REST API
- *   3. Send prompts via promptAsync (fire-and-forget)
- *   4. Stream responses via SSE event subscription
- *   5. Map OpenCode events → ACP session/update notifications
+ * **Mode 1: Remote Server** — connects to a running OpenCode server
+ * via the official @opencode-ai/sdk (REST API + SSE).
  *
- * Requirements:
- * - A running OpenCode server (e.g., `opencode serve` on a VPS)
- * - Environment variable: OPENCODE_SERVER_URL (e.g., "http://your-server:4096")
- * - Optional: OPENCODE_MODEL (e.g., "anthropic/claude-sonnet-4-20250514")
+ * **Mode 2: Direct API** — calls an OpenAI-compatible chat completions
+ * endpoint directly (e.g. BigModel's Coding API). This mode is used when
+ * OPENCODE_SERVER_URL is not set but OPENCODE_API_KEY (or ANTHROPIC_AUTH_TOKEN)
+ * is available. It provides a lightweight chat experience without requiring
+ * a running OpenCode server.
  *
  * Configuration via environment variables:
- * - OPENCODE_SERVER_URL: Remote server endpoint (required)
+ *
+ * Remote Server mode:
+ * - OPENCODE_SERVER_URL: Remote server endpoint (required for this mode)
  * - OPENCODE_MODEL: Model in "providerID/modelID" format (optional)
  * - OPENCODE_DIRECTORY: Project working directory on the server (optional)
+ *
+ * Direct API mode:
+ * - OPENCODE_API_KEY: API key (falls back to ANTHROPIC_AUTH_TOKEN)
+ * - OPENCODE_BASE_URL: Chat completions base URL
+ *     (default: https://open.bigmodel.cn/api/coding/paas/v4)
+ * - OPENCODE_MODEL_ID: Model ID for completions (default: GLM-4.7)
+ *
+ * Common:
  * - API_TIMEOUT_MS: Request timeout in milliseconds (default: 55000)
  */
 
@@ -122,10 +126,19 @@ interface OpencodeEvent {
 }
 
 /**
- * Check if OpenCode SDK mode is available
+ * Check if OpenCode SDK mode is available.
+ * Returns true when either a remote server URL OR a direct API key is configured.
  */
 export function isOpencodeServerConfigured(): boolean {
-  return !!process.env.OPENCODE_SERVER_URL;
+  return !!process.env.OPENCODE_SERVER_URL || isOpencodeDirectApiConfigured();
+}
+
+/**
+ * Check if Direct API mode is available (no server needed).
+ * Requires OPENCODE_API_KEY or falls back to ANTHROPIC_AUTH_TOKEN.
+ */
+export function isOpencodeDirectApiConfigured(): boolean {
+  return !!(process.env.OPENCODE_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 }
 
 /**
@@ -143,6 +156,12 @@ export function getOpencodeConfig(): {
   model: { providerID: string; modelID: string } | undefined;
   directory: string | undefined;
   timeoutMs: number;
+  /** Direct API mode config (when no server URL) */
+  directApi: {
+    apiKey: string | undefined;
+    baseUrl: string;
+    modelId: string;
+  };
 } {
   const modelStr = process.env.OPENCODE_MODEL;
   let model: { providerID: string; modelID: string } | undefined;
@@ -156,6 +175,11 @@ export function getOpencodeConfig(): {
     model,
     directory: process.env.OPENCODE_DIRECTORY,
     timeoutMs: parseInt(process.env.API_TIMEOUT_MS || "55000", 10),
+    directApi: {
+      apiKey: process.env.OPENCODE_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
+      baseUrl: process.env.OPENCODE_BASE_URL || "https://open.bigmodel.cn/api/coding/paas/v4",
+      modelId: process.env.OPENCODE_MODEL_ID || process.env.ANTHROPIC_MODEL || "GLM-4.7",
+    },
   };
 }
 
@@ -752,14 +776,313 @@ export function shouldUseOpencodeAdapter(): boolean {
 }
 
 /**
- * Create an OpenCode SDK adapter if conditions are met
+ * Create an OpenCode SDK adapter if conditions are met.
+ * Prefers Remote Server mode when OPENCODE_SERVER_URL is set,
+ * otherwise falls back to Direct API mode.
  */
 export function createOpencodeAdapterIfAvailable(
   onNotification: NotificationHandler
-): OpencodeSdkAdapter | null {
+): OpencodeSdkAdapter | OpencodeSdkDirectAdapter | null {
   const serverUrl = getOpencodeServerUrl();
-  if (!serverUrl) return null;
+  if (serverUrl) {
+    return new OpencodeSdkAdapter(serverUrl, onNotification);
+  }
 
-  return new OpencodeSdkAdapter(serverUrl, onNotification);
+  // Fall back to direct API mode (BigModel Coding API, etc.)
+  if (isOpencodeDirectApiConfigured()) {
+    return new OpencodeSdkDirectAdapter(onNotification);
+  }
+
+  return null;
+}
+
+
+// ─── Direct API Adapter ────────────────────────────────────────────────────
+
+/**
+ * Chat message for conversation history (OpenAI-compatible format)
+ */
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+  reasoning_content?: string;
+}
+
+/**
+ * OpenCode SDK Direct Adapter — calls an OpenAI-compatible chat completions
+ * endpoint directly, without requiring a running OpenCode server.
+ *
+ * This is used when OPENCODE_SERVER_URL is not set but API credentials are
+ * available (e.g. BigModel's Coding API at
+ * https://open.bigmodel.cn/api/coding/paas/v4).
+ *
+ * Features:
+ * - Streaming SSE responses (text + reasoning)
+ * - Multi-turn conversation history (in-memory)
+ * - Maps responses to ACP session/update notifications
+ */
+export class OpencodeSdkDirectAdapter {
+  private sessionId: string | null = null;
+  private onNotification: NotificationHandler;
+  private _alive = false;
+  private abortController: AbortController | null = null;
+  /** Conversation history for multi-turn */
+  private messages: ChatMessage[] = [];
+
+  constructor(onNotification: NotificationHandler) {
+    this.onNotification = onNotification;
+  }
+
+  get alive(): boolean {
+    return this._alive;
+  }
+
+  get acpSessionId(): string | null {
+    return this.sessionId;
+  }
+
+  /**
+   * Initialize — validates that API credentials are present.
+   */
+  async connect(): Promise<void> {
+    const config = getOpencodeConfig();
+
+    if (!config.directApi.apiKey) {
+      throw new Error(
+        "OpenCode Direct API requires OPENCODE_API_KEY or ANTHROPIC_AUTH_TOKEN environment variable"
+      );
+    }
+
+    this.sessionId = `opencode-direct-${Date.now()}`;
+    this._alive = true;
+    console.log(
+      `[OpencodeSdkDirectAdapter] Initialized with model: ${config.directApi.modelId}, ` +
+      `endpoint: ${config.directApi.baseUrl}`
+    );
+  }
+
+  /**
+   * Create a session (API compatibility)
+   */
+  async createSession(title?: string): Promise<string> {
+    if (!this._alive) {
+      throw new Error("Adapter not connected");
+    }
+    // Reset conversation history for new session
+    this.messages = [];
+    console.log(
+      `[OpencodeSdkDirectAdapter] Session created: ${this.sessionId} (${title || "untitled"})`
+    );
+    return this.sessionId!;
+  }
+
+  /**
+   * Send a prompt and return a streaming async generator of SSE events.
+   * Uses OpenAI-compatible chat completions with streaming.
+   */
+  async *promptStream(
+    text: string,
+    acpSessionId?: string,
+    skillContent?: string,
+  ): AsyncGenerator<string, void, unknown> {
+    if (!this._alive || !this.sessionId) {
+      throw new Error("No active session");
+    }
+
+    const config = getOpencodeConfig();
+    const { directApi } = config;
+    this.abortController = new AbortController();
+    const sessionId = acpSessionId ?? this.sessionId;
+
+    console.log(
+      `[OpencodeSdkDirectAdapter] promptStream: model=${directApi.modelId}, ` +
+      `endpoint=${directApi.baseUrl}`
+    );
+
+    const formatSseEvent = (notification: JsonRpcMessage): string => {
+      return `data: ${JSON.stringify(notification)}\n\n`;
+    };
+
+    // Build messages array
+    const requestMessages: ChatMessage[] = [];
+    if (skillContent) {
+      requestMessages.push({ role: "system", content: skillContent });
+    }
+    // Add conversation history
+    requestMessages.push(...this.messages);
+    // Add current user message
+    requestMessages.push({ role: "user", content: text });
+    // Save to history
+    this.messages.push({ role: "user", content: text });
+
+    let fullContent = "";
+    let fullReasoning = "";
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let stopReason = "end_turn";
+
+    try {
+      const url = `${directApi.baseUrl}/chat/completions`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${directApi.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: directApi.modelId,
+          messages: requestMessages,
+          stream: true,
+          max_tokens: 16384,
+        }),
+        signal: this.abortController.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API request failed (${response.status}): ${errorText}`);
+      }
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      // Parse SSE stream from the chat completions endpoint
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        if (this.abortController?.signal.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "data: [DONE]") continue;
+          if (!trimmed.startsWith("data: ")) continue;
+
+          try {
+            const data = JSON.parse(trimmed.slice(6));
+            const choice = data.choices?.[0];
+            if (!choice) continue;
+
+            const delta = choice.delta;
+            if (!delta) continue;
+
+            // Handle reasoning content (e.g. GLM's reasoning_content)
+            if (delta.reasoning_content) {
+              fullReasoning += delta.reasoning_content;
+              const notification = createNotification("session/update", {
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_thought_chunk",
+                  content: { type: "text", text: delta.reasoning_content },
+                },
+              });
+              this.onNotification(notification);
+              yield formatSseEvent(notification);
+            }
+
+            // Handle regular text content
+            if (delta.content) {
+              fullContent += delta.content;
+              const notification = createNotification("session/update", {
+                sessionId,
+                update: {
+                  sessionUpdate: "agent_message_chunk",
+                  content: { type: "text", text: delta.content },
+                },
+              });
+              this.onNotification(notification);
+              yield formatSseEvent(notification);
+            }
+
+            // Track finish reason
+            if (choice.finish_reason) {
+              stopReason = choice.finish_reason === "stop" ? "end_turn" : choice.finish_reason;
+            }
+
+            // Track usage from final chunk (some APIs include it)
+            if (data.usage) {
+              inputTokens = data.usage.prompt_tokens ?? inputTokens;
+              outputTokens = data.usage.completion_tokens ?? outputTokens;
+            }
+          } catch {
+            // Skip unparseable SSE lines
+          }
+        }
+      }
+
+      // Save assistant response to history for multi-turn
+      if (fullContent) {
+        this.messages.push({ role: "assistant", content: fullContent });
+      }
+
+      // Yield turn_complete
+      const completeNotification = createNotification("session/update", {
+        sessionId,
+        update: {
+          sessionUpdate: "turn_complete",
+          stopReason,
+          usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+        },
+      });
+      this.onNotification(completeNotification);
+      yield formatSseEvent(completeNotification);
+
+    } catch (error) {
+      if (!this.abortController?.signal.aborted) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("[OpencodeSdkDirectAdapter] promptStream failed:", errorMessage);
+        const errorNotification = createNotification("session/update", {
+          sessionId,
+          type: "error",
+          error: { message: errorMessage },
+        });
+        this.onNotification(errorNotification);
+        yield formatSseEvent(errorNotification);
+      }
+      throw error;
+    } finally {
+      this.abortController = null;
+    }
+  }
+
+  /**
+   * Cancel the in-progress prompt.
+   */
+  cancel(): void {
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+  }
+
+  /**
+   * Close the session and disconnect.
+   */
+  async close(): Promise<void> {
+    this.cancel();
+    this.sessionId = null;
+    this.messages = [];
+    this._alive = false;
+  }
+
+  /**
+   * Synchronous alias for close.
+   */
+  kill(): void {
+    this.close().catch(() => {});
+  }
 }
 

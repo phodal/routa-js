@@ -196,11 +196,11 @@ export async function POST(request: NextRequest) {
       let acpSessionId: string;
 
       if (isOpencodeSdk) {
-        // ── OpenCode SDK: connect to remote OpenCode server ──────────────
+        // ── OpenCode SDK: remote server or direct API mode ──────────────
         if (!isOpencodeServerConfigured()) {
           return jsonrpcResponse(id ?? null, null, {
             code: -32002,
-            message: "OpenCode SDK not configured. Set OPENCODE_SERVER_URL environment variable.",
+            message: "OpenCode SDK not configured. Set OPENCODE_SERVER_URL or OPENCODE_API_KEY (or ANTHROPIC_AUTH_TOKEN) environment variable.",
           });
         }
 
@@ -946,8 +946,8 @@ export async function POST(request: NextRequest) {
           id: "opencode-sdk",
           name: "OpenCode SDK",
           description: sdkConfigured
-            ? "Connect to remote OpenCode server (configured)"
-            : "Connect to remote OpenCode server (set OPENCODE_SERVER_URL)",
+            ? "OpenCode via SDK (configured)"
+            : "OpenCode SDK (set OPENCODE_SERVER_URL or OPENCODE_API_KEY)",
           command: "sdk",
           status: sdkConfigured ? "available" : "unavailable",
           source: "static",
