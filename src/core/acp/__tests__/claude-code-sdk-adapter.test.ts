@@ -78,6 +78,15 @@ describe("isClaudeCodeSdkConfigured", () => {
 });
 
 describe("getClaudeCodeSdkConfig", () => {
+  beforeEach(() => {
+    // Clean up env vars before each test to ensure clean state
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_BASE_URL;
+    delete process.env.ANTHROPIC_MODEL;
+    delete process.env.API_TIMEOUT_MS;
+  });
+
   afterEach(() => {
     delete process.env.ANTHROPIC_AUTH_TOKEN;
     delete process.env.ANTHROPIC_API_KEY;

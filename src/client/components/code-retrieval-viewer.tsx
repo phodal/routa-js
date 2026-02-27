@@ -113,14 +113,8 @@ export function parseCodeRetrievalOutput(output: string): CodeSection[] {
     }
   };
 
-  // Format 1: Plain text starting with "The following code sections"
-  if (output.includes("code sections") && output.includes("Path:")) {
-    extractSectionsFromText(output);
-    return sections;
-  }
-
   try {
-    // Parse the JSON output
+    // Try JSON parsing first (most common format from tool outputs)
     const parsed = JSON.parse(output);
 
     // Format 2: Object with "output" field (e.g., {output: "The following..."})
@@ -143,7 +137,10 @@ export function parseCodeRetrievalOutput(output: string): CodeSection[] {
     }
   } catch (e) {
     // If JSON parsing fails, try plain text extraction
-    console.error("Failed to parse codebase-retrieval output as JSON:", e);
+    // Format 1: Plain text starting with "The following code sections"
+    if (output.includes("code sections") && output.includes("Path:")) {
+      extractSectionsFromText(output);
+    }
   }
 
   return sections;
