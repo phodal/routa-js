@@ -157,7 +157,8 @@ export function HomeInput({
 
         if (result?.sessionId) {
           const url = wsId ? `/${wsId}/${result.sessionId}` : `/${result.sessionId}`;
-          storePendingPrompt(result.sessionId, text);
+          const promptText = context.skill ? `/${context.skill} ${text}` : text;
+          storePendingPrompt(result.sessionId, promptText);
           onSessionCreated?.(result.sessionId);
           router.push(url);
         }
