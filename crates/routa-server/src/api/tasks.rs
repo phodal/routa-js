@@ -21,6 +21,7 @@ pub fn router() -> Router<AppState> {
 #[serde(rename_all = "camelCase")]
 struct ListTasksQuery {
     workspace_id: Option<String>,
+    session_id: Option<String>,
     status: Option<String>,
     assigned_to: Option<String>,
 }
@@ -31,7 +32,10 @@ async fn list_tasks(
 ) -> Result<Json<serde_json::Value>, ServerError> {
     let workspace_id = query.workspace_id.as_deref().unwrap_or("default");
 
-    let tasks = if let Some(assignee) = &query.assigned_to {
+    let tasks = if let Some(session_id) = &query.session_id {
+        // Filter by session_id takes priority
+        state.task_store.list_by_session(session_id).await?
+    } else if let Some(assignee) = &query.assigned_to {
         state.task_store.list_by_assignee(assignee).await?
     } else if let Some(status_str) = &query.status {
         let status = TaskStatus::from_str(status_str)
@@ -65,6 +69,7 @@ struct CreateTaskRequest {
     title: String,
     objective: String,
     workspace_id: Option<String>,
+    session_id: Option<String>,
     scope: Option<String>,
     acceptance_criteria: Option<Vec<String>>,
     verification_commands: Option<Vec<String>>,
@@ -83,6 +88,7 @@ async fn create_task(
         body.title,
         body.objective,
         workspace_id,
+        body.session_id,
         body.scope,
         body.acceptance_criteria,
         body.verification_commands,

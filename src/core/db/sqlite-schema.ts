@@ -74,6 +74,8 @@ export const tasks = sqliteTable("tasks", {
   dependencies: text("dependencies", { mode: "json" }).$type<string[]>().default([]),
   parallelGroup: text("parallel_group"),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  /** Session ID that created this task (for session-scoped filtering) */
+  sessionId: text("session_id"),
   completionSummary: text("completion_summary"),
   verificationVerdict: text("verification_verdict"),
   verificationReport: text("verification_report"),

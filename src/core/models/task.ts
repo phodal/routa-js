@@ -32,6 +32,8 @@ export interface Task {
   dependencies: string[];
   parallelGroup?: string;
   workspaceId: string;
+  /** Session ID that created this task (for session-scoped filtering) */
+  sessionId?: string;
   createdAt: Date;
   updatedAt: Date;
   completionSummary?: string;
@@ -44,6 +46,7 @@ export function createTask(params: {
   title: string;
   objective: string;
   workspaceId: string;
+  sessionId?: string;
   scope?: string;
   acceptanceCriteria?: string[];
   verificationCommands?: string[];
@@ -62,6 +65,7 @@ export function createTask(params: {
     dependencies: params.dependencies ?? [],
     parallelGroup: params.parallelGroup,
     workspaceId: params.workspaceId,
+    sessionId: params.sessionId,
     createdAt: now,
     updatedAt: now,
   };

@@ -21,9 +21,9 @@ impl TaskStore {
             .with_conn_async(move |conn| {
                 conn.execute(
                     "INSERT INTO tasks (id, title, objective, scope, acceptance_criteria, verification_commands,
-                     assigned_to, status, dependencies, parallel_group, workspace_id,
+                     assigned_to, status, dependencies, parallel_group, workspace_id, session_id,
                      completion_summary, verification_verdict, verification_report, version, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 1, ?15, ?16)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, ?17)
                      ON CONFLICT(id) DO UPDATE SET
                        title = excluded.title,
                        objective = excluded.objective,
@@ -34,6 +34,7 @@ impl TaskStore {
                        status = excluded.status,
                        dependencies = excluded.dependencies,
                        parallel_group = excluded.parallel_group,
+                       session_id = excluded.session_id,
                        completion_summary = excluded.completion_summary,
                        verification_verdict = excluded.verification_verdict,
                        verification_report = excluded.verification_report,
@@ -50,6 +51,7 @@ impl TaskStore {
                         serde_json::to_string(&t.dependencies).unwrap_or_default(),
                         t.parallel_group,
                         t.workspace_id,
+                        t.session_id,
                         t.completion_summary,
                         t.verification_verdict.as_ref().map(|v| v.as_str()),
                         t.verification_report,
@@ -68,7 +70,7 @@ impl TaskStore {
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
-                     assigned_to, status, dependencies, parallel_group, workspace_id,
+                     assigned_to, status, dependencies, parallel_group, workspace_id, session_id,
                      completion_summary, verification_verdict, verification_report, created_at, updated_at
                      FROM tasks WHERE id = ?1",
                 )?;
@@ -84,12 +86,30 @@ impl TaskStore {
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
-                     assigned_to, status, dependencies, parallel_group, workspace_id,
+                     assigned_to, status, dependencies, parallel_group, workspace_id, session_id,
                      completion_summary, verification_verdict, verification_report, created_at, updated_at
                      FROM tasks WHERE workspace_id = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
                     .query_map(rusqlite::params![ws_id], |row| Ok(row_to_task(row)))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(rows)
+            })
+            .await
+    }
+
+    pub async fn list_by_session(&self, session_id: &str) -> Result<Vec<Task>, ServerError> {
+        let sid = session_id.to_string();
+        self.db
+            .with_conn_async(move |conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
+                     assigned_to, status, dependencies, parallel_group, workspace_id, session_id,
+                     completion_summary, verification_verdict, verification_report, created_at, updated_at
+                     FROM tasks WHERE session_id = ?1 ORDER BY created_at DESC",
+                )?;
+                let rows = stmt
+                    .query_map(rusqlite::params![sid], |row| Ok(row_to_task(row)))?
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(rows)
             })
@@ -107,7 +127,7 @@ impl TaskStore {
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
-                     assigned_to, status, dependencies, parallel_group, workspace_id,
+                     assigned_to, status, dependencies, parallel_group, workspace_id, session_id,
                      completion_summary, verification_verdict, verification_report, created_at, updated_at
                      FROM tasks WHERE workspace_id = ?1 AND status = ?2 ORDER BY created_at DESC",
                 )?;
@@ -127,7 +147,7 @@ impl TaskStore {
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT id, title, objective, scope, acceptance_criteria, verification_commands,
-                     assigned_to, status, dependencies, parallel_group, workspace_id,
+                     assigned_to, status, dependencies, parallel_group, workspace_id, session_id,
                      completion_summary, verification_verdict, verification_report, created_at, updated_at
                      FROM tasks WHERE assigned_to = ?1 ORDER BY created_at DESC",
                 )?;
@@ -189,8 +209,12 @@ impl TaskStore {
 use rusqlite::Row;
 
 fn row_to_task(row: &Row<'_>) -> Task {
-    let created_ms: i64 = row.get(14).unwrap_or(0);
-    let updated_ms: i64 = row.get(15).unwrap_or(0);
+    // Column order: id(0), title(1), objective(2), scope(3), acceptance_criteria(4),
+    // verification_commands(5), assigned_to(6), status(7), dependencies(8), parallel_group(9),
+    // workspace_id(10), session_id(11), completion_summary(12), verification_verdict(13),
+    // verification_report(14), created_at(15), updated_at(16)
+    let created_ms: i64 = row.get(15).unwrap_or(0);
+    let updated_ms: i64 = row.get(16).unwrap_or(0);
 
     let acceptance_criteria: Option<Vec<String>> = row
         .get::<_, Option<String>>(4)
@@ -219,12 +243,13 @@ fn row_to_task(row: &Row<'_>) -> Task {
         dependencies,
         parallel_group: row.get(9).unwrap_or(None),
         workspace_id: row.get(10).unwrap_or_default(),
-        completion_summary: row.get(11).unwrap_or(None),
+        session_id: row.get(11).unwrap_or(None),
+        completion_summary: row.get(12).unwrap_or(None),
         verification_verdict: row
-            .get::<_, Option<String>>(12)
+            .get::<_, Option<String>>(13)
             .unwrap_or(None)
             .and_then(|s| VerificationVerdict::from_str(&s)),
-        verification_report: row.get(13).unwrap_or(None),
+        verification_report: row.get(14).unwrap_or(None),
         created_at: chrono::DateTime::from_timestamp_millis(created_ms)
             .unwrap_or_else(|| Utc::now()),
         updated_at: chrono::DateTime::from_timestamp_millis(updated_ms)

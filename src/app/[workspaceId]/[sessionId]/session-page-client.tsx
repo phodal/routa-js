@@ -748,6 +748,7 @@ export function SessionPageClient() {
         title: task.title,
         objective: task.objective,
         scope: task.scope || undefined,
+        sessionId,
         acceptanceCriteria: task.definitionOfDone
           ? task.definitionOfDone.split("\n").filter(Boolean).map((l) => l.replace(/^\d+[.)]\s*/, "").trim())
           : undefined,
@@ -917,6 +918,7 @@ export function SessionPageClient() {
         title: note.title,
         objective: note.content || note.title,
         workspaceId,
+        sessionId,
       });
 
       const resultText = createResult?.content?.[0]?.text ?? "{}";

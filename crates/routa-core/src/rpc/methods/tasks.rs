@@ -23,6 +23,7 @@ use crate::state::AppState;
 pub struct ListParams {
     #[serde(default = "default_workspace_id")]
     pub workspace_id: String,
+    pub session_id: Option<String>,
     pub status: Option<String>,
     pub assigned_to: Option<String>,
 }
@@ -37,7 +38,10 @@ pub struct ListResult {
 }
 
 pub async fn list(state: &AppState, params: ListParams) -> Result<ListResult, RpcError> {
-    let tasks = if let Some(assignee) = &params.assigned_to {
+    let tasks = if let Some(session_id) = &params.session_id {
+        // Filter by session_id takes priority
+        state.task_store.list_by_session(session_id).await?
+    } else if let Some(assignee) = &params.assigned_to {
         state.task_store.list_by_assignee(assignee).await?
     } else if let Some(status_str) = &params.status {
         let status = TaskStatus::from_str(status_str)
@@ -85,6 +89,7 @@ pub struct CreateParams {
     pub objective: String,
     #[serde(default = "default_workspace_id")]
     pub workspace_id: String,
+    pub session_id: Option<String>,
     pub scope: Option<String>,
     pub acceptance_criteria: Option<Vec<String>>,
     pub verification_commands: Option<Vec<String>>,
@@ -103,6 +108,7 @@ pub async fn create(state: &AppState, params: CreateParams) -> Result<CreateResu
         params.title,
         params.objective,
         params.workspace_id,
+        params.session_id,
         params.scope,
         params.acceptance_criteria,
         params.verification_commands,

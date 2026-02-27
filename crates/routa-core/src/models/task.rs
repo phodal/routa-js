@@ -95,6 +95,9 @@ pub struct Task {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_group: Option<String>,
     pub workspace_id: String,
+    /// Session ID that created this task (for session-scoped filtering)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,6 +114,7 @@ impl Task {
         title: String,
         objective: String,
         workspace_id: String,
+        session_id: Option<String>,
         scope: Option<String>,
         acceptance_criteria: Option<Vec<String>>,
         verification_commands: Option<Vec<String>>,
@@ -130,6 +134,7 @@ impl Task {
             dependencies: dependencies.unwrap_or_default(),
             parallel_group,
             workspace_id,
+            session_id,
             created_at: now,
             updated_at: now,
             completion_summary: None,

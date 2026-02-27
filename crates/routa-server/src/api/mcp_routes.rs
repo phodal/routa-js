@@ -589,12 +589,14 @@ async fn execute_tool(
         "create_task" => {
             let title = args.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled");
             let objective = args.get("objective").and_then(|v| v.as_str()).unwrap_or("");
+            let session_id = args.get("sessionId").and_then(|v| v.as_str()).map(|s| s.to_string());
             let task_id = uuid::Uuid::new_v4().to_string();
             let task = crate::models::task::Task::new(
                 task_id.clone(),
                 title.to_string(),
                 objective.to_string(),
                 workspace_id.to_string(),
+                session_id,
                 args.get("scope").and_then(|v| v.as_str()).map(|s| s.to_string()),
                 None, None, None, None,
             );

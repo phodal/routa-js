@@ -169,6 +169,7 @@ impl Database {
                     dependencies            TEXT NOT NULL DEFAULT '[]',
                     parallel_group          TEXT,
                     workspace_id            TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    session_id              TEXT,
                     completion_summary      TEXT,
                     verification_verdict    TEXT,
                     verification_report     TEXT,
@@ -176,6 +177,7 @@ impl Database {
                     created_at              INTEGER NOT NULL,
                     updated_at              INTEGER NOT NULL
                 );
+                CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 
                 CREATE TABLE IF NOT EXISTS notes (
                     id                  TEXT NOT NULL,
