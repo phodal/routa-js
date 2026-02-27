@@ -1081,10 +1081,16 @@ export class OpencodeSdkDirectAdapter {
 
             console.log(`[OpencodeSdkDirectAdapter] tool_call: ${tc.name}`, args);
 
-            // Notify client that a tool call is starting
+            // Notify client that a tool call is starting (use same field names as other adapters)
             const tcStart = createNotification("session/update", {
               sessionId,
-              update: { sessionUpdate: "tool_call", toolName: tc.name, toolArgs: args },
+              update: {
+                sessionUpdate: "tool_call",
+                title: tc.name,
+                toolCallId: tc.id,
+                status: "running",
+                rawInput: args,
+              },
             });
             this.onNotification(tcStart);
             yield formatSseEvent(tcStart);
@@ -1101,10 +1107,24 @@ export class OpencodeSdkDirectAdapter {
               toolResult = { content: [{ type: "text", text: JSON.stringify({ error: e instanceof Error ? e.message : String(e) }) }], isError: true };
             }
 
+            // Extract text content from result for rawOutput
+            const resultAny = toolResult as { content?: Array<{ type: string; text?: string }>; isError?: boolean } | null;
+            const resultText = Array.isArray(resultAny?.content)
+              ? resultAny!.content.map((c) => c.text ?? "").join("\n")
+              : JSON.stringify(toolResult);
+
             // Notify client with tool result
             const tcResult = createNotification("session/update", {
               sessionId,
-              update: { sessionUpdate: "tool_call_update", toolName: tc.name, toolResult },
+              update: {
+                sessionUpdate: "tool_call_update",
+                title: tc.name,
+                toolCallId: tc.id,
+                status: resultAny?.isError ? "failed" : "completed",
+                rawInput: args,
+                rawOutput: resultText,
+                content: resultAny?.content ?? [{ type: "text", text: resultText }],
+              },
             });
             this.onNotification(tcResult);
             yield formatSseEvent(tcResult);

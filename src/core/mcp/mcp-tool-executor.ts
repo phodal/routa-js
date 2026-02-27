@@ -24,6 +24,7 @@ const ESSENTIAL_TOOL_NAMES = new Set([
   "delegate_task_to_agent",
   "send_message_to_agent",
   "report_to_parent",
+  "fetch_webpage",
 ]);
 
 export async function executeMcpTool(
@@ -33,6 +34,50 @@ export async function executeMcpTool(
   noteTools?: NoteTools,
   workspaceTools?: WorkspaceTools
 ) {
+  // ── Tools that don't require workspaceId ─────────────────────────────
+  if (name === "fetch_webpage") {
+    const url = args.url as string;
+    if (!url) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "url is required" }) }], isError: true };
+    }
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Routa/1.0)" },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: `HTTP ${res.status}: ${res.statusText}` }) }], isError: true };
+      }
+      const contentType = res.headers.get("content-type") ?? "";
+      const raw = await res.text();
+      let text: string;
+      if (contentType.includes("text/html")) {
+        // Strip HTML tags and condense whitespace
+        text = raw
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+      } else {
+        text = raw;
+      }
+      // Truncate to ~12k chars to avoid context overflow
+      if (text.length > 12000) {
+        text = text.slice(0, 12000) + `\n\n[...truncated ${text.length - 12000} chars]`;
+      }
+      return { content: [{ type: "text", text }], isError: false };
+    } catch (e) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: e instanceof Error ? e.message : String(e) }) }], isError: true };
+    }
+  }
+
   const workspace = args.workspaceId as string;
   if (!workspace) {
     return {
@@ -338,6 +383,19 @@ function formatResult(result: { success: boolean; data?: unknown; error?: string
  */
 export function getMcpToolDefinitions(toolMode: ToolMode = "essential") {
   const allTools = [
+    // ── Web fetch tool ───────────────────────────────────────────────
+    {
+      name: "fetch_webpage",
+      description: "Fetch the content of a web page or URL and return its text. Strips HTML tags. Use this to read GitHub issues, documentation, or any web resource.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "The URL to fetch" },
+          query: { type: "string", description: "Optional search query to help focus on relevant content" },
+        },
+        required: ["url"],
+      },
+    },
     // ── Task tools ──────────────────────────────────────────────────
     {
       name: "create_task",
