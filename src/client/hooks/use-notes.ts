@@ -61,6 +61,26 @@ export interface UseNotesReturn {
   deleteNote: (noteId: string) => Promise<void>;
 }
 
+/**
+ * Normalize a Note from SSE/API to ensure consistent NoteData shape.
+ * SSE broadcasts raw Note objects with Date timestamps; API returns serialized strings.
+ */
+function normalizeNote(raw: Record<string, unknown>): NoteData {
+  return {
+    id: raw.id as string,
+    title: raw.title as string,
+    content: (raw.content as string) ?? "",
+    workspaceId: raw.workspaceId as string,
+    metadata: (raw.metadata ?? { type: "general" }) as NoteData["metadata"],
+    createdAt: typeof raw.createdAt === "string"
+      ? raw.createdAt
+      : (raw.createdAt as Date)?.toISOString?.() ?? new Date().toISOString(),
+    updatedAt: typeof raw.updatedAt === "string"
+      ? raw.updatedAt
+      : (raw.updatedAt as Date)?.toISOString?.() ?? new Date().toISOString(),
+  };
+}
+
 export function useNotes(workspaceId: string): UseNotesReturn {
   const [notes, setNotes] = useState<NoteData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -218,23 +238,31 @@ export function useNotes(workspaceId: string): UseNotesReturn {
 
         if (data.type === "connected") {
           setConnected(true);
+          // Re-fetch notes on reconnect to catch any missed events
+          fetchNotes();
           return;
         }
 
         if (data.type === "note:created" && data.note) {
+          const note = normalizeNote(data.note);
           setNotes((prev) => {
             // Avoid duplicates
-            if (prev.some((n) => n.id === data.note.id)) {
-              return prev.map((n) => (n.id === data.note.id ? data.note : n));
+            if (prev.some((n) => n.id === note.id)) {
+              return prev.map((n) => (n.id === note.id ? note : n));
             }
-            return [...prev, data.note];
+            return [...prev, note];
           });
         }
 
         if (data.type === "note:updated" && data.note) {
-          setNotes((prev) =>
-            prev.map((n) => (n.id === data.note.id ? data.note : n))
-          );
+          const note = normalizeNote(data.note);
+          setNotes((prev) => {
+            // If note doesn't exist yet (missed create event), add it
+            if (!prev.some((n) => n.id === note.id)) {
+              return [...prev, note];
+            }
+            return prev.map((n) => (n.id === note.id ? note : n));
+          });
         }
 
         if (data.type === "note:deleted") {

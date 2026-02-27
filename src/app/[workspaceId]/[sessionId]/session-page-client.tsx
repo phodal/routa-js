@@ -868,6 +868,17 @@ export function SessionPageClient() {
     const note = notesHook.notes.find((n) => n.id === noteId);
     if (!note) return null;
 
+    // Enforce concurrency limit: if concurrency=1 and another task is running, skip
+    if (concurrency <= 1) {
+      const runningTask = notesHook.notes.find(
+        (n) => n.id !== noteId && n.metadata.type === "task" && n.metadata.taskStatus === "IN_PROGRESS"
+      );
+      if (runningTask) {
+        console.warn(`[CollabEditor] Concurrency limit reached (${concurrency}). Task "${runningTask.title}" is still running.`);
+        return null;
+      }
+    }
+
     // Mark note as in-progress
     await notesHook.updateNote(noteId, {
       metadata: { ...note.metadata, taskStatus: "IN_PROGRESS" },
@@ -943,7 +954,7 @@ export function SessionPageClient() {
       });
       return null;
     }
-  }, [notesHook, workspaceId, sessionId, acp, callMcpTool, activeCrafterId]);
+  }, [notesHook, workspaceId, sessionId, acp, callMcpTool, activeCrafterId, concurrency]);
 
   /**
    * Execute all pending collaborative task notes with configurable concurrency.

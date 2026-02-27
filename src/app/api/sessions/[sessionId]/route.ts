@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
+import { getDatabaseDriver } from "@/core/db/index";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,24 @@ export async function PATCH(
     );
   }
 
+  // Persist rename to database
+  try {
+    const driver = getDatabaseDriver();
+    if (driver === "sqlite") {
+      const { getSqliteDatabase } = await import("@/core/db/sqlite");
+      const { SqliteAcpSessionStore } = await import("@/core/db/sqlite-stores");
+      const db = getSqliteDatabase();
+      await new SqliteAcpSessionStore(db).rename(sessionId, name.trim());
+    } else if (driver === "postgres") {
+      const { getPostgresDatabase } = await import("@/core/db/index");
+      const { PgAcpSessionStore } = await import("@/core/db/pg-acp-session-store");
+      const db = getPostgresDatabase();
+      await new PgAcpSessionStore(db).rename(sessionId, name.trim());
+    }
+  } catch (err) {
+    console.error("[Sessions API] Failed to persist rename to database:", err);
+  }
+
   return NextResponse.json({ ok: true });
 }
 
@@ -84,6 +103,24 @@ export async function DELETE(
       { error: "Session not found" },
       { status: 404 }
     );
+  }
+
+  // Persist deletion to database
+  try {
+    const driver = getDatabaseDriver();
+    if (driver === "sqlite") {
+      const { getSqliteDatabase } = await import("@/core/db/sqlite");
+      const { SqliteAcpSessionStore } = await import("@/core/db/sqlite-stores");
+      const db = getSqliteDatabase();
+      await new SqliteAcpSessionStore(db).delete(sessionId);
+    } else if (driver === "postgres") {
+      const { getPostgresDatabase } = await import("@/core/db/index");
+      const { PgAcpSessionStore } = await import("@/core/db/pg-acp-session-store");
+      const db = getPostgresDatabase();
+      await new PgAcpSessionStore(db).delete(sessionId);
+    }
+  } catch (err) {
+    console.error("[Sessions API] Failed to persist deletion to database:", err);
   }
 
   return NextResponse.json({ ok: true });

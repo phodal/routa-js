@@ -309,6 +309,7 @@ export function CollaborativeTaskEditor({
                     ? () => onExecuteTask(note.id)
                     : undefined
                 }
+                executeDisabled={concurrency <= 1 && hasRunning}
               />
             ))}
 
@@ -348,6 +349,7 @@ interface TaskNoteCardProps {
   onDelete?: () => void;
   onStatusChange: (status: string) => Promise<void>;
   onExecute?: () => void;
+  executeDisabled?: boolean;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -505,6 +507,7 @@ function TaskNoteCard({
   onDelete,
   onStatusChange,
   onExecute,
+  executeDisabled,
 }: TaskNoteCardProps) {
   const status = note.metadata.taskStatus ?? "PENDING";
   const statusInfo = STATUS_LABELS[status] ?? STATUS_LABELS.PENDING;
@@ -656,7 +659,13 @@ function TaskNoteCard({
                       e.stopPropagation();
                       onExecute();
                     }}
-                    className="text-xs font-medium px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                    disabled={executeDisabled}
+                    className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${
+                      executeDisabled
+                        ? "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                        : "bg-emerald-600 text-white hover:bg-emerald-700"
+                    }`}
+                    title={executeDisabled ? "Another task is running (concurrency limit)" : undefined}
                   >
                     Execute
                   </button>

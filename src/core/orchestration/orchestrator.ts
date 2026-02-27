@@ -304,10 +304,11 @@ export class RoutaOrchestrator {
     this.agentSessionMap.set(agentId, childSessionId);
 
     // 8.5 Register child session in UI sidebar
+    const sessionDisplayName = `${task.title.slice(0, 50)}`;
     if (this.sessionRegistrationHandler) {
       this.sessionRegistrationHandler({
         sessionId: childSessionId,
-        name: agentName,
+        name: sessionDisplayName,
         cwd,
         workspaceId,
         routaAgentId: agentId,

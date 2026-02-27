@@ -30,6 +30,8 @@ export interface RoutaSessionRecord {
   createdAt: string;
   /** Whether the first prompt has been sent (for coordinator prompt injection) */
   firstPromptSent?: boolean;
+  /** Parent session ID for crafter subtasks */
+  parentSessionId?: string;
 }
 
 type Controller = ReadableStreamDefaultController<Uint8Array>;
@@ -319,6 +321,72 @@ class HttpSessionStore {
       controller.enqueue(encoder.encode(event));
     } catch {
       // controller closed - drop silently
+    }
+  }
+
+  /** Whether DB hydration has been performed */
+  private hydrated = false;
+
+  /**
+   * Load sessions from the database into the in-memory store.
+   * Only runs once per process lifecycle (idempotent).
+   */
+  async hydrateFromDb(): Promise<void> {
+    if (this.hydrated) return;
+    this.hydrated = true;
+
+    try {
+      const { getDatabaseDriver } = await import("@/core/db/index");
+      const driver = getDatabaseDriver();
+
+      if (driver === "sqlite") {
+        const { getSqliteDatabase } = await import("@/core/db/sqlite");
+        const { SqliteAcpSessionStore } = await import("@/core/db/sqlite-stores");
+        const db = getSqliteDatabase();
+        const sqliteStore = new SqliteAcpSessionStore(db);
+        const dbSessions = await sqliteStore.list();
+        for (const s of dbSessions) {
+          // Don't overwrite sessions that are already in memory (active)
+          if (!this.sessions.has(s.id)) {
+            this.upsertSession({
+              sessionId: s.id,
+              name: s.name,
+              cwd: s.cwd,
+              workspaceId: s.workspaceId,
+              routaAgentId: s.routaAgentId,
+              provider: s.provider,
+              role: s.role,
+              modeId: s.modeId,
+              createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
+            });
+          }
+        }
+        console.log(`[HttpSessionStore] Hydrated ${dbSessions.length} sessions from SQLite`);
+      } else if (driver === "postgres") {
+        const { getPostgresDatabase } = await import("@/core/db/index");
+        const { PgAcpSessionStore } = await import("@/core/db/pg-acp-session-store");
+        const db = getPostgresDatabase();
+        const pgStore = new PgAcpSessionStore(db);
+        const dbSessions = await pgStore.list();
+        for (const s of dbSessions) {
+          if (!this.sessions.has(s.id)) {
+            this.upsertSession({
+              sessionId: s.id,
+              name: s.name,
+              cwd: s.cwd,
+              workspaceId: s.workspaceId,
+              routaAgentId: s.routaAgentId,
+              provider: s.provider,
+              role: s.role,
+              modeId: s.modeId,
+              createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
+            });
+          }
+        }
+        console.log(`[HttpSessionStore] Hydrated ${dbSessions.length} sessions from Postgres`);
+      }
+    } catch (err) {
+      console.error("[HttpSessionStore] Failed to hydrate from database:", err);
     }
   }
 }

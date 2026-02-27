@@ -12,6 +12,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const store = getHttpSessionStore();
+
+  // Hydrate from database on first access (loads persisted sessions)
+  await store.hydrateFromDb();
+
   const workspaceId = request.nextUrl.searchParams.get("workspaceId");
 
   let sessions = store.listSessions();
