@@ -610,7 +610,7 @@ export async function POST(request: NextRequest) {
         const stream = new ReadableStream({
           async start(controller) {
             try {
-              for await (const event of opcAdapter.promptStream(promptText, sessionId, skillContent)) {
+              for await (const event of opcAdapter.promptStream(promptText, sessionId, skillContent, sessionRecord?.workspaceId ?? undefined)) {
                 controller.enqueue(encoder.encode(event));
               }
               store.flushAgentBuffer(sessionId);

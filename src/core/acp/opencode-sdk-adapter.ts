@@ -31,6 +31,8 @@
 
 import type { NotificationHandler, JsonRpcMessage } from "@/core/acp/processer";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
+import { getMcpToolDefinitions, executeMcpTool } from "@/core/mcp/mcp-tool-executor";
+import { createRoutaMcpServer } from "@/core/mcp/routa-mcp-server";
 
 /**
  * Helper to create a JSON-RPC notification message
@@ -800,12 +802,21 @@ export function createOpencodeAdapterIfAvailable(
 // ─── Direct API Adapter ────────────────────────────────────────────────────
 
 /**
- * Chat message for conversation history (OpenAI-compatible format)
+ * Chat message for conversation history (OpenAI-compatible format).
+ * Supports plain messages, tool result messages, and assistant messages with tool_calls.
  */
 interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
   reasoning_content?: string;
+  /** Populated on assistant turns that produced function calls */
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+  /** Populated on tool-result turns */
+  tool_call_id?: string;
 }
 
 /**
@@ -878,12 +889,15 @@ export class OpencodeSdkDirectAdapter {
 
   /**
    * Send a prompt and return a streaming async generator of SSE events.
-   * Uses OpenAI-compatible chat completions with streaming.
+   * Uses OpenAI-compatible chat completions with streaming and agentic tool-call loop.
+   *
+   * @param workspaceId - The workspace ID used for tool execution context.
    */
   async *promptStream(
     text: string,
     acpSessionId?: string,
     skillContent?: string,
+    workspaceId?: string,
   ): AsyncGenerator<string, void, unknown> {
     if (!this._alive || !this.sessionId) {
       throw new Error("No active session");
@@ -903,129 +917,215 @@ export class OpencodeSdkDirectAdapter {
       return `data: ${JSON.stringify(notification)}\n\n`;
     };
 
-    // Build messages array
+    // Build OpenAI-compatible tool definitions for function calling
+    const toolDefs = getMcpToolDefinitions("essential").map((t) => ({
+      type: "function" as const,
+      function: { name: t.name, description: t.description, parameters: t.inputSchema },
+    }));
+
+    // Build message history for this turn
     const requestMessages: ChatMessage[] = [];
     if (skillContent) {
       requestMessages.push({ role: "system", content: skillContent });
     }
-    // Add conversation history
     requestMessages.push(...this.messages);
-    // Add current user message
     requestMessages.push({ role: "user", content: text });
-    // Save to history
     this.messages.push({ role: "user", content: text });
 
     let fullContent = "";
-    let fullReasoning = "";
     let inputTokens = 0;
     let outputTokens = 0;
     let stopReason = "end_turn";
 
+    const url = `${directApi.baseUrl}/chat/completions`;
+    const MAX_TOOL_ROUNDS = 10;
+
     try {
-      const url = `${directApi.baseUrl}/chat/completions`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${directApi.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: directApi.modelId,
-          messages: requestMessages,
-          stream: true,
-          max_tokens: 16384,
-        }),
-        signal: this.abortController.signal,
-      });
+      // ── Agentic tool-call loop ────────────────────────────────────────
+      for (let toolRound = 0; toolRound < MAX_TOOL_ROUNDS; toolRound++) {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${directApi.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: directApi.modelId,
+            messages: requestMessages,
+            stream: true,
+            max_tokens: 16384,
+            tools: toolDefs,
+            tool_choice: "auto",
+          }),
+          signal: this.abortController.signal,
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API request failed (${response.status}): ${errorText}`);
-      }
-
-      if (!response.body) {
-        throw new Error("No response body");
-      }
-
-      // Parse SSE stream from the chat completions endpoint
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        if (this.abortController?.signal.aborted) {
-          stopReason = "cancelled";
-          break;
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API request failed (${response.status}): ${errorText}`);
         }
+        if (!response.body) throw new Error("No response body");
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        // Keep the last incomplete line in the buffer
-        buffer = lines.pop() || "";
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === "data: [DONE]") continue;
-          if (!trimmed.startsWith("data: ")) continue;
+        // Accumulator for streaming tool_calls delta chunks
+        type ToolCallAcc = { id: string; name: string; argumentStr: string };
+        const toolCallAcc: Record<number, ToolCallAcc> = {};
+        let roundContent = "";
+        let roundFinishReason = "";
 
-          try {
-            const data = JSON.parse(trimmed.slice(6));
-            const choice = data.choices?.[0];
-            if (!choice) continue;
+        // ── Stream reading loop ─────────────────────────────────────────
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-            const delta = choice.delta;
-            if (!delta) continue;
+          if (this.abortController?.signal.aborted) {
+            stopReason = "cancelled";
+            break;
+          }
 
-            // Handle reasoning content (e.g. GLM's reasoning_content)
-            if (delta.reasoning_content) {
-              fullReasoning += delta.reasoning_content;
-              const notification = createNotification("session/update", {
-                sessionId,
-                update: {
-                  sessionUpdate: "agent_thought_chunk",
-                  content: { type: "text", text: delta.reasoning_content },
-                },
-              });
-              this.onNotification(notification);
-              yield formatSseEvent(notification);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (!trimmed.startsWith("data: ")) continue;
+
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              const choice = data.choices?.[0];
+              if (!choice) continue;
+              const delta = choice.delta;
+              if (!delta) continue;
+
+              // Accumulate tool_call delta chunks by index
+              if (Array.isArray(delta.tool_calls)) {
+                for (const tc of delta.tool_calls) {
+                  const idx: number = tc.index ?? 0;
+                  if (!toolCallAcc[idx]) {
+                    toolCallAcc[idx] = { id: tc.id ?? "", name: tc.function?.name ?? "", argumentStr: "" };
+                  } else {
+                    if (tc.id) toolCallAcc[idx].id = tc.id;
+                    if (tc.function?.name) toolCallAcc[idx].name += tc.function.name;
+                  }
+                  if (tc.function?.arguments) {
+                    toolCallAcc[idx].argumentStr += tc.function.arguments;
+                  }
+                }
+              }
+
+              // Reasoning content (GLM-specific)
+              if (delta.reasoning_content) {
+                const n = createNotification("session/update", {
+                  sessionId,
+                  update: { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: delta.reasoning_content } },
+                });
+                this.onNotification(n);
+                yield formatSseEvent(n);
+              }
+
+              // Regular text content
+              if (delta.content) {
+                roundContent += delta.content;
+                fullContent += delta.content;
+                const n = createNotification("session/update", {
+                  sessionId,
+                  update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: delta.content } },
+                });
+                this.onNotification(n);
+                yield formatSseEvent(n);
+              }
+
+              if (choice.finish_reason) {
+                roundFinishReason = choice.finish_reason;
+                stopReason = choice.finish_reason === "stop" ? "end_turn" : choice.finish_reason;
+              }
+
+              if (data.usage) {
+                inputTokens = data.usage.prompt_tokens ?? inputTokens;
+                outputTokens = data.usage.completion_tokens ?? outputTokens;
+              }
+            } catch {
+              // Skip unparseable SSE lines
             }
-
-            // Handle regular text content
-            if (delta.content) {
-              fullContent += delta.content;
-              const notification = createNotification("session/update", {
-                sessionId,
-                update: {
-                  sessionUpdate: "agent_message_chunk",
-                  content: { type: "text", text: delta.content },
-                },
-              });
-              this.onNotification(notification);
-              yield formatSseEvent(notification);
-            }
-
-            // Track finish reason
-            if (choice.finish_reason) {
-              stopReason = choice.finish_reason === "stop" ? "end_turn" : choice.finish_reason;
-            }
-
-            // Track usage from final chunk (some APIs include it)
-            if (data.usage) {
-              inputTokens = data.usage.prompt_tokens ?? inputTokens;
-              outputTokens = data.usage.completion_tokens ?? outputTokens;
-            }
-          } catch {
-            // Skip unparseable SSE lines
           }
         }
-      }
 
-      // Save assistant response to history for multi-turn
-      if (fullContent) {
-        this.messages.push({ role: "assistant", content: fullContent });
+        // ── Handle tool calls ───────────────────────────────────────────
+        const pendingCalls = Object.entries(toolCallAcc);
+        if (roundFinishReason === "tool_calls" && pendingCalls.length > 0) {
+          // Append assistant turn with tool_calls to conversation
+          requestMessages.push({
+            role: "assistant",
+            content: roundContent || null,
+            tool_calls: pendingCalls.map(([, tc]) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: { name: tc.name, arguments: tc.argumentStr },
+            })),
+          });
+
+          // Execute each tool call and append result
+          for (const [, tc] of pendingCalls) {
+            let args: Record<string, unknown> = {};
+            try { args = JSON.parse(tc.argumentStr); } catch { /* use empty args */ }
+
+            // Inject workspaceId when the tool requires it but the model didn't supply it
+            if (workspaceId && !args.workspaceId) {
+              args.workspaceId = workspaceId;
+            }
+
+            console.log(`[OpencodeSdkDirectAdapter] tool_call: ${tc.name}`, args);
+
+            // Notify client that a tool call is starting
+            const tcStart = createNotification("session/update", {
+              sessionId,
+              update: { sessionUpdate: "tool_call", toolName: tc.name, toolArgs: args },
+            });
+            this.onNotification(tcStart);
+            yield formatSseEvent(tcStart);
+
+            let toolResult: unknown;
+            try {
+              if (workspaceId) {
+                const { system } = createRoutaMcpServer({ workspaceId, toolMode: "essential" });
+                toolResult = await executeMcpTool(system.tools, tc.name, args, system.noteTools, system.workspaceTools);
+              } else {
+                toolResult = { content: [{ type: "text", text: JSON.stringify({ error: "workspaceId not available" }) }], isError: true };
+              }
+            } catch (e) {
+              toolResult = { content: [{ type: "text", text: JSON.stringify({ error: e instanceof Error ? e.message : String(e) }) }], isError: true };
+            }
+
+            // Notify client with tool result
+            const tcResult = createNotification("session/update", {
+              sessionId,
+              update: { sessionUpdate: "tool_call_update", toolName: tc.name, toolResult },
+            });
+            this.onNotification(tcResult);
+            yield formatSseEvent(tcResult);
+
+            // Append tool result message to conversation
+            requestMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: typeof toolResult === "string" ? toolResult : JSON.stringify(toolResult),
+            });
+          }
+
+          // Continue loop — model will respond with the tool results in context
+          continue;
+        }
+
+        // ── Normal completion (no tool calls) ───────────────────────────
+        if (roundContent) {
+          this.messages.push({ role: "assistant", content: roundContent });
+        }
+        break;
       }
 
       // Yield turn_complete
