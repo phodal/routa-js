@@ -24,6 +24,7 @@ import { getStandardPresets, getPresetById, resolveCommand } from "@/core/acp/ac
 import { which } from "@/core/acp/utils";
 import { fetchRegistry, detectPlatformTarget } from "@/core/acp/acp-registry";
 import { ensureMcpForProvider } from "@/core/acp/mcp-setup";
+import { getDefaultRoutaMcpConfig } from "@/core/acp/mcp-config-generator";
 import { v4 as uuidv4 } from "uuid";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
@@ -151,6 +152,7 @@ export async function POST(request: NextRequest) {
       const modeId = (p.modeId as string | undefined) ?? (p.mode as string | undefined);
       const role = (p.role as string | undefined)?.toUpperCase();
       const model = (p.model as string | undefined);
+      const workspaceId = (p.workspaceId as string) || "default";
       const idempotencyKey = p.idempotencyKey as string | undefined;
 
       // ── Idempotency check ──────────────────────────────────────────────
@@ -214,7 +216,7 @@ export async function POST(request: NextRequest) {
         );
       } else if (isClaudeCode) {
         // ── Claude Code: stream-json protocol with MCP (CLI process) ───
-        const mcpConfigs = buildMcpConfigForClaude();
+        const mcpConfigs = buildMcpConfigForClaude(workspaceId);
 
         acpSessionId = await manager.createClaudeSession(
           sessionId,
@@ -316,7 +318,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Persist session for UI listing
-      const workspaceId = (p.workspaceId as string) || "default";
       const now = new Date();
       store.upsertSession({
         sessionId,
@@ -485,7 +486,7 @@ export async function POST(request: NextRequest) {
             );
           } else if (isClaudeCode) {
             // Claude Code CLI session
-            const mcpConfigs = buildMcpConfigForClaude();
+            const mcpConfigs = buildMcpConfigForClaude(workspaceId);
             acpSessionId = await manager.createClaudeSession(
               sessionId,
               cwd,
@@ -1007,10 +1008,12 @@ function jsonrpcResponse(
  * Claude Code accepts --mcp-config with an inline JSON object.
  * We reuse the shared provider setup path to avoid config drift.
  */
-function buildMcpConfigForClaude(): string[] {
+function buildMcpConfigForClaude(workspaceId?: string): string[] {
   // Keep Claude MCP setup consistent with all other providers.
-  // This path uses streamable HTTP via /api/mcp and includes workspace env.
-  const result = ensureMcpForProvider("claude");
+  // Pass workspace ID so it's embedded in the MCP endpoint URL (?wsId=...)
+  // allowing the MCP server to bind the session to the correct workspace.
+  const config = workspaceId ? getDefaultRoutaMcpConfig(workspaceId) : undefined;
+  const result = ensureMcpForProvider("claude", config);
   console.log(`[ACP Route] MCP config for Claude Code: ${result.summary}`);
   return result.mcpConfigs;
 }

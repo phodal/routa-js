@@ -28,6 +28,7 @@ import { getGlobalToolMode } from "@/core/mcp/tool-mode-config";
 
 interface McpSession {
   transport: WebStandardStreamableHTTPServerTransport;
+  workspaceId: string;
 }
 
 const sessions = new Map<string, McpSession>();
@@ -36,12 +37,15 @@ const sessions = new Map<string, McpSession>();
  * Create a new MCP session: transport + MCP server + tool registrations.
  * Returns the transport so it can handle the current request.
  *
+ * @param workspaceId - Workspace ID to use for this session (from request header or env)
  * @param enableStatelessMode - If true, uses stateless session ID ("mcp-stateless")
  *                              for clients that don't follow full MCP protocol
  */
 async function createSession(
+  workspaceId?: string,
   enableStatelessMode = false,
 ): Promise<WebStandardStreamableHTTPServerTransport> {
+  const effectiveWorkspaceId = workspaceId || process.env.ROUTA_WORKSPACE_ID || "default";
   const sessionId = enableStatelessMode
     ? "mcp-stateless"
     : crypto.randomUUID();
@@ -53,15 +57,15 @@ async function createSession(
     // that may not send Accept: text/event-stream header (causing 406 errors).
     enableJsonResponse: true,
     onsessioninitialized: (sid: string) => {
-      sessions.set(sid, { transport });
+      sessions.set(sid, { transport, workspaceId: effectiveWorkspaceId });
       console.log(
-        `[MCP Route] Session created: ${sid} (active: ${sessions.size})`,
+        `[MCP Route] Session created: ${sid} workspaceId=${effectiveWorkspaceId} (active: ${sessions.size})`,
       );
     },
   });
 
   const { server } = createRoutaMcpServer({
-    workspaceId: process.env.ROUTA_WORKSPACE_ID ?? "unset",
+    workspaceId: effectiveWorkspaceId,
     toolMode: getGlobalToolMode(),
   });
   await server.connect(transport);
@@ -82,6 +86,8 @@ async function createSession(
 
 /**
  * Find an existing session or create a new one for the incoming request.
+ * Reads Routa-Workspace-Id header to bind the session to a workspace.
+ * Also reads ?wsId= query param for AI agent HTTP calls (where headers aren't available).
  */
 async function getOrCreateSession(
   request: NextRequest,
@@ -93,8 +99,18 @@ async function getOrCreateSession(
     return existing.transport;
   }
 
+  // Extract workspace ID from:
+  // 1. Custom header (browser client sends Routa-Workspace-Id)
+  // 2. URL query param (AI agents call via URL like /api/mcp?wsId=myWorkspace)
+  // 3. Environment variable (server-level default)
+  const workspaceId =
+    request.headers.get("routa-workspace-id") ||
+    new URL(request.url).searchParams.get("wsId") ||
+    process.env.ROUTA_WORKSPACE_ID ||
+    "default";
+
   // New session needed (initialize request)
-  return createSession();
+  return createSession(workspaceId);
 }
 
 /**
@@ -106,7 +122,7 @@ function withCorsHeaders(response: Response): Response {
   headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   headers.set(
     "Access-Control-Allow-Headers",
-    "Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID",
+    "Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID, Routa-Workspace-Id",
   );
   headers.set(
     "Access-Control-Expose-Headers",
@@ -199,8 +215,13 @@ export async function POST(request: NextRequest) {
             );
 
             try {
+              // Extract workspace ID from the original request headers
+              const wsId = request.headers.get("routa-workspace-id") ||
+                process.env.ROUTA_WORKSPACE_ID ||
+                "default";
+
               // Create a fresh session and send an initialize request to it
-              const freshTransport = await createSession();
+              const freshTransport = await createSession(wsId);
               const initBody = JSON.stringify({
                 jsonrpc: "2.0",
                 id: `auto-init-${Date.now()}`,
@@ -216,6 +237,7 @@ export async function POST(request: NextRequest) {
                 headers: {
                   "Content-Type": "application/json",
                   "Accept": "application/json, text/event-stream",
+                  "Routa-Workspace-Id": wsId,
                 },
                 body: initBody,
               });
@@ -379,7 +401,7 @@ export async function OPTIONS() {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers":
-        "Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID",
+        "Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID, Routa-Workspace-Id",
       "Access-Control-Expose-Headers":
         "Mcp-Session-Id, MCP-Protocol-Version",
     },

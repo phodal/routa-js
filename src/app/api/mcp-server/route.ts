@@ -51,7 +51,7 @@ export async function GET() {
  */
 export async function POST() {
   try {
-    const workspaceId = process.env.ROUTA_WORKSPACE_ID ?? "unset";
+    const workspaceId = process.env.ROUTA_WORKSPACE_ID ?? "default";
     const server = await getOrStartMcpServer(workspaceId);
     return NextResponse.json({
       running: true,

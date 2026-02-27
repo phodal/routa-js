@@ -107,6 +107,15 @@ export function generateMultipleRoutaMcpConfigs(
  * @returns Default MCP configuration
  */
 export function getDefaultRoutaMcpConfig(workspaceId?: string): RoutaMcpConfig {
+  const effectiveWorkspaceId = workspaceId || process.env.ROUTA_WORKSPACE_ID || "default";
+
+  // Helper to append workspace ID as a query param to the MCP endpoint URL
+  // so that AI agents calling the HTTP MCP server include the workspace context
+  const withWsParam = (url: string) =>
+    effectiveWorkspaceId && effectiveWorkspaceId !== "default"
+      ? `${url}?wsId=${encodeURIComponent(effectiveWorkspaceId)}`
+      : url;
+
   // Try to determine the server URL
   let routaServerUrl = process.env.ROUTA_SERVER_URL;
   
@@ -123,8 +132,8 @@ export function getDefaultRoutaMcpConfig(workspaceId?: string): RoutaMcpConfig {
         const host = process.env.HOST || "localhost";
         return {
           routaServerUrl: `http://${host}:${port}`,
-          mcpEndpoint: standaloneServer.mcpUrl,
-          workspaceId: workspaceId || process.env.ROUTA_WORKSPACE_ID,
+          mcpEndpoint: withWsParam(standaloneServer.mcpUrl),
+          workspaceId: effectiveWorkspaceId,
         };
       }
     } catch {
@@ -139,7 +148,8 @@ export function getDefaultRoutaMcpConfig(workspaceId?: string): RoutaMcpConfig {
   
   return {
     routaServerUrl,
-    workspaceId: workspaceId || process.env.ROUTA_WORKSPACE_ID || "default",
+    mcpEndpoint: withWsParam(`${routaServerUrl}/api/mcp`),
+    workspaceId: effectiveWorkspaceId,
   };
 }
 

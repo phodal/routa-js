@@ -615,6 +615,7 @@ export function SessionPageClient() {
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
+        "Routa-Workspace-Id": workspaceId,
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
@@ -630,10 +631,10 @@ export function SessionPageClient() {
     const mcpSessionId = initRes.headers.get("mcp-session-id");
     if (mcpSessionId) {
       mcpSessionRef.current = mcpSessionId;
-      console.log(`[MCP] Session initialized: ${mcpSessionId}`);
+      console.log(`[MCP] Session initialized: ${mcpSessionId} (workspace: ${workspaceId})`);
     }
     return mcpSessionId;
-  }, []);
+  }, [workspaceId]);
 
   const callMcpTool = useCallback(async (toolName: string, args: Record<string, unknown>) => {
     // Ensure MCP session is initialized
@@ -647,6 +648,7 @@ export function SessionPageClient() {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json, text/event-stream",
+          "Routa-Workspace-Id": workspaceId,
           ...(mcpSessionRef.current ? { "Mcp-Session-Id": mcpSessionRef.current } : {}),
         },
         body: JSON.stringify({
@@ -679,7 +681,7 @@ export function SessionPageClient() {
 
     if (data.error) throw new Error(data.error.message || "MCP tool call failed");
     return data.result;
-  }, [initMcpSession]);
+  }, [initMcpSession, workspaceId]);
 
   const handleConfirmAllTasks = useCallback(() => {
     setRoutaTasks((prev) =>
