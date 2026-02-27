@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { SpecialistManager } from "./specialist-manager";
 
 /**
  * Agent roles that can have default providers configured.
@@ -57,8 +58,11 @@ interface SettingsPanelProps {
   providers: ProviderOption[];
 }
 
+type SettingsTab = "providers" | "specialists";
+
 export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) {
   const [settings, setSettings] = useState<DefaultProviderSettings>({});
+  const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
 
   useEffect(() => {
     if (open) {
@@ -105,42 +109,95 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-5 py-4 space-y-5">
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-              Default Provider per Agent Type
-            </h3>
-            <div className="space-y-3">
-              {AGENT_ROLES.map((role) => (
-                <div key={role} className="flex items-center gap-3">
-                  <div className="min-w-[110px]">
-                    <div className="text-xs font-medium text-gray-700 dark:text-gray-300">{role}</div>
-                    <div className="text-[10px] text-gray-400 dark:text-gray-500">{ROLE_DESCRIPTIONS[role]}</div>
-                  </div>
-                  <select
-                    value={settings[role] ?? ""}
-                    onChange={(e) => handleChange(role, e.target.value)}
-                    className="flex-1 text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                  >
-                    <option value="">Auto (system default)</option>
-                    {availableProviders.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {availableProviders.length === 0 && (
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 italic">
-              No providers available. Connect to load providers.
-            </p>
-          )}
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => setActiveTab("providers")}
+            className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+              activeTab === "providers"
+                ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+            }`}
+          >
+            Providers
+          </button>
+          <button
+            onClick={() => setActiveTab("specialists")}
+            className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+              activeTab === "specialists"
+                ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+            }`}
+          >
+            Specialists
+          </button>
         </div>
+
+        {/* Body */}
+        {activeTab === "providers" ? (
+          <div className="px-5 py-4 space-y-5">
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                Default Provider per Agent Type
+              </h3>
+              <div className="space-y-3">
+                {AGENT_ROLES.map((role) => (
+                  <div key={role} className="flex items-center gap-3">
+                    <div className="min-w-[110px]">
+                      <div className="text-xs font-medium text-gray-700 dark:text-gray-300">{role}</div>
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500">{ROLE_DESCRIPTIONS[role]}</div>
+                    </div>
+                    <select
+                      value={settings[role] ?? ""}
+                      onChange={(e) => handleChange(role, e.target.value)}
+                      className="flex-1 text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                    >
+                      <option value="">Auto (system default)</option>
+                      {availableProviders.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {availableProviders.length === 0 && (
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 italic">
+                No providers available. Connect to load providers.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="px-5 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Agent Specialists
+              </h3>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                Manage custom agent configurations
+              </p>
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">
+              Configure custom specialists for different agent roles. Changes are stored in the database and shared across all sessions.
+            </p>
+            <button
+              onClick={() => {
+                // Open specialist manager in a separate modal
+                const event = new CustomEvent('open-specialist-manager');
+                window.dispatchEvent(event);
+              }}
+              className="w-full px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Manage Specialists
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
@@ -152,6 +209,12 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
           </button>
         </div>
       </div>
+
+      {/* Specialist Manager Modal */}
+      <SpecialistManager
+        open={false}
+        onClose={() => {}}
+      />
     </div>
   );
 }

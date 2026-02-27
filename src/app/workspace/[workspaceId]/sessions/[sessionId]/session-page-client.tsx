@@ -18,6 +18,7 @@ import {useRouter, useParams} from "next/navigation";
 import {SkillPanel} from "@/client/components/skill-panel";
 import {ChatPanel} from "@/client/components/chat-panel";
 import {SessionPanel} from "@/client/components/session-panel";
+import {SpecialistManager} from "@/client/components/specialist-manager";
 import {type CrafterAgent, TaskPanel} from "@/client/components/task-panel";
 import {CollaborativeTaskEditor} from "@/client/components/collaborative-task-editor";
 import {AgentInstallPanel} from "@/client/components/agent-install-panel";
@@ -102,6 +103,16 @@ export function SessionPageClient() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [showSpecialistManager, setShowSpecialistManager] = useState(false);
+
+  // Handle custom events for specialist manager
+  useEffect(() => {
+    const handleOpenSpecialistManager = () => setShowSpecialistManager(true);
+    window.addEventListener('open-specialist-manager', handleOpenSpecialistManager);
+    return () => {
+      window.removeEventListener('open-specialist-manager', handleOpenSpecialistManager);
+    };
+  }, []);
   const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -1490,6 +1501,12 @@ export function SessionPageClient() {
         open={showSettingsPanel}
         onClose={() => setShowSettingsPanel(false)}
         providers={acp.providers}
+      />
+
+      {/* ─── Specialist Manager ──────────────────────────────────── */}
+      <SpecialistManager
+        open={showSpecialistManager}
+        onClose={() => setShowSpecialistManager(false)}
       />
     </div>
   );
