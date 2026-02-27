@@ -12,8 +12,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  desktopStaticApiError,
-  isDesktopStaticRuntime,
+  desktopAwareFetch,
+  getDesktopApiBaseUrl,
   logRuntime,
   toErrorMessage,
 } from "../utils/diagnostics";
@@ -92,14 +92,10 @@ export function useNotes(workspaceId: string): UseNotesReturn {
   // ─── Fetch Notes ──────────────────────────────────────────────────
 
   const fetchNotes = useCallback(async () => {
-    if (isDesktopStaticRuntime()) {
-      setError(desktopStaticApiError("Notes").message);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/notes?workspaceId=${encodeURIComponent(workspaceId)}`);
+      const res = await desktopAwareFetch(`/api/notes?workspaceId=${encodeURIComponent(workspaceId)}`);
       if (!res.ok) throw new Error(`Failed to fetch notes: ${res.status}`);
       const data = await res.json();
       setNotes(data.notes ?? []);
@@ -113,12 +109,8 @@ export function useNotes(workspaceId: string): UseNotesReturn {
 
   const fetchNote = useCallback(
     async (noteId: string): Promise<NoteData | null> => {
-      if (isDesktopStaticRuntime()) {
-        setError(desktopStaticApiError("Notes").message);
-        return null;
-      }
       try {
-        const res = await fetch(
+        const res = await desktopAwareFetch(
           `/api/notes?workspaceId=${encodeURIComponent(workspaceId)}&noteId=${encodeURIComponent(noteId)}`
         );
         if (!res.ok) return null;
@@ -141,12 +133,8 @@ export function useNotes(workspaceId: string): UseNotesReturn {
       type?: "spec" | "task" | "general";
       metadata?: Record<string, unknown>;
     }): Promise<NoteData | null> => {
-      if (isDesktopStaticRuntime()) {
-        setError(desktopStaticApiError("Notes").message);
-        return null;
-      }
       try {
-        const res = await fetch("/api/notes", {
+        const res = await desktopAwareFetch("/api/notes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...params, workspaceId, source: "user" }),
@@ -168,12 +156,8 @@ export function useNotes(workspaceId: string): UseNotesReturn {
       noteId: string,
       update: { title?: string; content?: string; metadata?: Record<string, unknown> }
     ): Promise<NoteData | null> => {
-      if (isDesktopStaticRuntime()) {
-        setError(desktopStaticApiError("Notes").message);
-        return null;
-      }
       try {
-        const res = await fetch("/api/notes", {
+        const res = await desktopAwareFetch("/api/notes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ noteId, ...update, workspaceId, source: "user" }),
@@ -192,12 +176,8 @@ export function useNotes(workspaceId: string): UseNotesReturn {
 
   const deleteNote = useCallback(
     async (noteId: string): Promise<void> => {
-      if (isDesktopStaticRuntime()) {
-        setError(desktopStaticApiError("Notes").message);
-        return;
-      }
       try {
-        const res = await fetch(
+        const res = await desktopAwareFetch(
           `/api/notes?noteId=${encodeURIComponent(noteId)}&workspaceId=${encodeURIComponent(workspaceId)}`,
           { method: "DELETE" }
         );
@@ -213,17 +193,13 @@ export function useNotes(workspaceId: string): UseNotesReturn {
   // ─── SSE Subscription ────────────────────────────────────────────
 
   const connectSSE = useCallback(() => {
-    if (isDesktopStaticRuntime()) {
-      setConnected(false);
-      setError(desktopStaticApiError("Notes SSE").message);
-      return;
-    }
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
+    const base = getDesktopApiBaseUrl();
     const es = new EventSource(
-      `/api/notes/events?workspaceId=${encodeURIComponent(workspaceId)}`
+      `${base}/api/notes/events?workspaceId=${encodeURIComponent(workspaceId)}`
     );
     eventSourceRef.current = es;
 

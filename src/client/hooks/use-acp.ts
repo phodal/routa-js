@@ -20,8 +20,8 @@ import {
   AcpAuthMethod,
 } from "../acp-client";
 import {
-  desktopStaticApiError,
-  isDesktopStaticRuntime,
+  getDesktopApiBaseUrl,
+  desktopAwareFetch,
   logRuntime,
   toErrorMessage,
 } from "../utils/diagnostics";
@@ -96,12 +96,11 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
   /** Connect (initialize only). Session creation is explicit. */
   const connect = useCallback(async () => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("ACP");
-      }
       setState((s) => ({ ...s, loading: true, error: null }));
 
-      const client = new BrowserAcpClient(baseUrl);
+      // In Tauri desktop static mode, use the embedded Rust server URL
+      const effectiveBaseUrl = baseUrl || getDesktopApiBaseUrl();
+      const client = new BrowserAcpClient(effectiveBaseUrl);
 
       await client.initialize();
 
@@ -208,9 +207,6 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       const client = clientRef.current;
       if (!client) return null;
       try {
-        if (isDesktopStaticRuntime()) {
-          throw desktopStaticApiError("ACP");
-        }
         setState((s) => ({ ...s, loading: true, error: null, authError: null, updates: [] }));
         const activeProvider = provider ?? state.selectedProvider;
         const result = await client.newSession({
@@ -289,7 +285,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     setState((s) => ({ ...s, sessionId, updates: [] }));
 
     // Restore message history so the chat panel shows previous messages
-    fetch(`/api/sessions/${sessionId}/history?consolidated=true`)
+    desktopAwareFetch(`/api/sessions/${sessionId}/history?consolidated=true`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const history: AcpSessionNotification[] = data?.history ?? [];

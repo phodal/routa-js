@@ -8,6 +8,7 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef, useState,} from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 import {createPortal} from "react-dom";
 import {v4 as uuidv4} from "uuid";
 import type {AcpSessionNotification} from "../acp-client";
@@ -227,7 +228,7 @@ export function ChatPanel({
     if (loadedHistoryRef.current.has(sessionId)) return;
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/history`, { cache: "no-store" });
+      const res = await desktopAwareFetch(`/api/sessions/${sessionId}/history`, { cache: "no-store" });
       const data = await res.json();
       const history = Array.isArray(data?.history) ? data.history as AcpSessionNotification[] : [];
 
@@ -387,7 +388,7 @@ export function ChatPanel({
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch("/api/sessions", { cache: "no-store" });
+      const res = await desktopAwareFetch("/api/sessions", { cache: "no-store" });
       const data = await res.json();
       const list = Array.isArray(data?.sessions) ? data.sessions : [];
       setSessions(list);

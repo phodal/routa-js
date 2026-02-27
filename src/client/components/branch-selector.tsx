@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -61,13 +62,13 @@ export function BranchSelector({
         let res;
         if (doFetch) {
           // POST triggers git fetch then returns
-          res = await fetch("/api/clone/branches", {
+          res = await desktopAwareFetch("/api/clone/branches", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ repoPath }),
           });
         } else {
-          res = await fetch(
+          res = await desktopAwareFetch(
             `/api/clone/branches?repoPath=${encodeURIComponent(repoPath)}`
           );
         }
@@ -108,7 +109,7 @@ export function BranchSelector({
       }
       setSwitching(true);
       try {
-        const res = await fetch("/api/clone/branches", {
+        const res = await desktopAwareFetch("/api/clone/branches", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repoPath, branch, pull: true }),
@@ -134,7 +135,7 @@ export function BranchSelector({
     if (!repoPath) return;
     setLoading(true);
     try {
-      await fetch("/api/clone/branches", {
+      await desktopAwareFetch("/api/clone/branches", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repoPath, branch: currentBranch, pull: true }),

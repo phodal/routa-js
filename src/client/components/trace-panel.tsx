@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 import type { TraceRecord } from "@/core/trace";
 import { CodeBlock } from "./code-block";
 import { CodeRetrievalViewer } from "./code-retrieval-viewer";
@@ -1087,7 +1088,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
 
     try {
       const params = new URLSearchParams({ sessionId });
-      const res = await fetch(`/api/traces?${params}`, { cache: "no-store" });
+      const res = await desktopAwareFetch(`/api/traces?${params}`, { cache: "no-store" });
 
       if (!res.ok) {
         throw new Error(`Failed to fetch traces: ${res.statusText}`);
@@ -1105,7 +1106,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/traces/stats", { cache: "no-store" });
+      const res = await desktopAwareFetch("/api/traces/stats", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setStats(data.stats || null);
@@ -1125,7 +1126,7 @@ export function TracePanel({ sessionId }: TracePanelProps) {
 
     try {
       const params = new URLSearchParams({ sessionId });
-      const res = await fetch(`/api/traces/export?${params}`, { cache: "no-store" });
+      const res = await desktopAwareFetch(`/api/traces/export?${params}`, { cache: "no-store" });
 
       if (!res.ok) {
         throw new Error(`Failed to export traces: ${res.statusText}`);

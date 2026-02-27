@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 import { SpecialistManager } from "./specialist-manager";
 
 /**
@@ -111,7 +112,7 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
   const fetchMemoryData = useCallback(async () => {
     setMemoryLoading(true);
     try {
-      const res = await fetch("/api/memory?history=true");
+      const res = await desktopAwareFetch("/api/memory?history=true");
       if (res.ok) {
         const data = await res.json();
         setMemoryStats(data);
@@ -127,7 +128,7 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
   const triggerCleanup = useCallback(async (aggressive = false) => {
     setMemoryLoading(true);
     try {
-      const res = await fetch("/api/memory", {
+      const res = await desktopAwareFetch("/api/memory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ aggressive }),

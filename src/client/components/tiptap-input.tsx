@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 import { useEditor, EditorContent, ReactRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -296,7 +297,7 @@ function createAtMention(
             limit: "15",
           });
 
-          const response = await fetch(`/api/files/search?${params}`, {
+          const response = await desktopAwareFetch(`/api/files/search?${params}`, {
             signal: controller.signal,
           });
 

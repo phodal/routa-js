@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useRef } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 
 export interface SessionInfo {
   sessionId: string;
@@ -61,8 +62,8 @@ export function SessionPanel({
     try {
       setLoading(true);
       const [sessionsRes, workspacesRes] = await Promise.all([
-        fetch(workspaceId ? `/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}` : "/api/sessions", { cache: "no-store" }),
-        fetch("/api/workspaces?status=active")
+        desktopAwareFetch(workspaceId ? `/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}` : "/api/sessions", { cache: "no-store" }),
+        desktopAwareFetch("/api/workspaces?status=active")
       ]);
       
       const sessionsData = await sessionsRes.json();
@@ -91,7 +92,7 @@ export function SessionPanel({
 
   const handleRename = async (sessionId: string, name: string) => {
     try {
-      await fetch(`/api/sessions/${sessionId}`, {
+      await desktopAwareFetch(`/api/sessions/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
@@ -104,7 +105,7 @@ export function SessionPanel({
 
   const handleDelete = async (sessionId: string) => {
     try {
-      await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+      await desktopAwareFetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
       fetchSessions();
       onSessionDeleted?.(sessionId);
     } catch (e) {

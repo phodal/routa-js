@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 
 export interface WorkspaceData {
   id: string;
@@ -38,7 +39,7 @@ export function useWorkspaces(): UseWorkspacesReturn {
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/workspaces?status=active");
+      const res = await desktopAwareFetch("/api/workspaces?status=active");
       if (!res.ok) return;
       const data = await res.json();
       setWorkspaces(data.workspaces ?? []);
@@ -48,7 +49,7 @@ export function useWorkspaces(): UseWorkspacesReturn {
   }, []);
 
   const createWorkspace = useCallback(async (title: string): Promise<WorkspaceData | null> => {
-    const res = await fetch("/api/workspaces", {
+    const res = await desktopAwareFetch("/api/workspaces", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
@@ -60,7 +61,7 @@ export function useWorkspaces(): UseWorkspacesReturn {
   }, [fetchWorkspaces]);
 
   const archiveWorkspace = useCallback(async (id: string): Promise<void> => {
-    await fetch(`/api/workspaces/${id}/archive`, {
+    await desktopAwareFetch(`/api/workspaces/${id}/archive`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ archived: true }),
@@ -83,7 +84,7 @@ export function useCodebases(workspaceId: string): {
 
   const fetchCodebases = useCallback(async () => {
     if (!workspaceId) return;
-    const res = await fetch(`/api/workspaces/${workspaceId}/codebases`);
+    const res = await desktopAwareFetch(`/api/workspaces/${workspaceId}/codebases`);
     if (!res.ok) return;
     const data = await res.json();
     setCodebases(data.codebases ?? []);

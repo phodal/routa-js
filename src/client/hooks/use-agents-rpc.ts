@@ -10,8 +10,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { rpc } from "../rpc-client";
 import {
-  isDesktopStaticRuntime,
-  desktopStaticApiError,
   logRuntime,
   toErrorMessage,
 } from "../utils/diagnostics";
@@ -54,10 +52,6 @@ export function useAgentsRpc(
   const [error, setError] = useState<string | null>(null);
 
   const fetchAgents = useCallback(async () => {
-    if (isDesktopStaticRuntime()) {
-      setError(desktopStaticApiError("Agents").message);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
@@ -82,10 +76,6 @@ export function useAgentsRpc(
       modelTier?: string;
       metadata?: Record<string, string>;
     }): Promise<AgentInfo | null> => {
-      if (isDesktopStaticRuntime()) {
-        setError(desktopStaticApiError("Agents").message);
-        return null;
-      }
       try {
         const result = await rpc.call<{ agentId: string; agent: AgentInfo }>(
           "agents.create",
@@ -105,10 +95,6 @@ export function useAgentsRpc(
 
   const deleteAgent = useCallback(
     async (id: string): Promise<void> => {
-      if (isDesktopStaticRuntime()) {
-        setError(desktopStaticApiError("Agents").message);
-        return;
-      }
       try {
         await rpc.call("agents.delete", { id });
         await fetchAgents();
@@ -122,10 +108,6 @@ export function useAgentsRpc(
 
   const updateAgentStatus = useCallback(
     async (id: string, status: string): Promise<void> => {
-      if (isDesktopStaticRuntime()) {
-        setError(desktopStaticApiError("Agents").message);
-        return;
-      }
       try {
         await rpc.call("agents.updateStatus", { id, status });
         await fetchAgents();

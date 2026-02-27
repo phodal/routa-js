@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ export function useFileSearch({
           limit: String(limit),
         });
 
-        const response = await fetch(`/api/files/search?${params}`, {
+        const response = await desktopAwareFetch(`/api/files/search?${params}`, {
           signal: controller.signal,
         });
 

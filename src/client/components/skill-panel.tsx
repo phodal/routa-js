@@ -12,6 +12,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 import { useSkills, type UseSkillsState, type UseSkillsActions, type CatalogType } from "../hooks/use-skills";
 import type { SkillsShSkill, GithubCatalogSkill } from "../skill-client";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
@@ -989,7 +990,7 @@ function SkillUploadModal({
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const res = await fetch("/api/skills/upload", {
+      const res = await desktopAwareFetch("/api/skills/upload", {
         method: "POST",
         body: formData,
       });

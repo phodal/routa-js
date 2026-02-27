@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/specialists");
+      const response = await desktopAwareFetch("/api/specialists");
       if (!response.ok) {
         if (response.status === 501) {
           setError("Specialist management requires Postgres database");
@@ -113,7 +114,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
     setSyncing(true);
     setError(null);
     try {
-      const response = await fetch("/api/specialists", {
+      const response = await desktopAwareFetch("/api/specialists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sync" }),
@@ -131,7 +132,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/specialists", {
+      const response = await desktopAwareFetch("/api/specialists", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -156,7 +157,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/specialists?id=${id}`, {
+      const response = await desktopAwareFetch(`/api/specialists?id=${id}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete specialist");

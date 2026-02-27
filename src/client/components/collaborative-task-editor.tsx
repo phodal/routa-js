@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 import type { NoteData } from "../hooks/use-notes";
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { type CrafterAgent, CraftersView } from "./task-panel";
@@ -777,7 +778,7 @@ function TaskNoteEditor({
       debounceRef.current = setTimeout(async () => {
         try {
           // Auto-save via API (don't close editor)
-          const res = await fetch("/api/notes", {
+          const res = await desktopAwareFetch("/api/notes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

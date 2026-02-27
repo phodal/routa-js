@@ -22,8 +22,7 @@ import {
   CatalogInstallResult,
 } from "../skill-client";
 import {
-  desktopStaticApiError,
-  isDesktopStaticRuntime,
+  getDesktopApiBaseUrl,
   logRuntime,
   toErrorMessage,
 } from "../utils/diagnostics";
@@ -69,7 +68,9 @@ export interface UseSkillsActions {
 export function useSkills(
   baseUrl: string = ""
 ): UseSkillsState & UseSkillsActions {
-  const clientRef = useRef(new SkillClient(baseUrl));
+  // In Tauri desktop static mode, resolve the embedded Rust server URL
+  const effectiveBaseUrl = baseUrl || getDesktopApiBaseUrl();
+  const clientRef = useRef(new SkillClient(effectiveBaseUrl));
   const [state, setState] = useState<UseSkillsState>({
     skills: [],
     repoSkills: [],
@@ -85,9 +86,6 @@ export function useSkills(
 
   const refresh = useCallback(async () => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills");
-      }
       setState((s) => ({ ...s, loading: true, error: null }));
       const skills = await clientRef.current.list();
       setState((s) => ({ ...s, skills, loading: false }));
@@ -103,9 +101,6 @@ export function useSkills(
 
   const loadSkill = useCallback(async (name: string, repoPath?: string) => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills");
-      }
       setState((s) => ({ ...s, loading: true, error: null }));
       const skill = await clientRef.current.load(name, repoPath);
       setState((s) => ({ ...s, loadedSkill: skill, loading: false }));
@@ -123,9 +118,6 @@ export function useSkills(
 
   const reloadFromDisk = useCallback(async () => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills");
-      }
       setState((s) => ({ ...s, loading: true, error: null }));
       await clientRef.current.reload();
       const skills = await clientRef.current.list();
@@ -142,9 +134,6 @@ export function useSkills(
 
   const cloneFromGithub = useCallback(async (url: string) => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills");
-      }
       setState((s) => ({ ...s, cloning: true, error: null }));
       const result = await clientRef.current.cloneFromGithub(url);
 
@@ -182,9 +171,6 @@ export function useSkills(
 
   const loadRepoSkills = useCallback(async (repoPath: string) => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills");
-      }
       const repoSkills = await clientRef.current.listFromRepo(repoPath);
       setState((s) => ({ ...s, repoSkills }));
     } catch (err) {
@@ -200,9 +186,6 @@ export function useSkills(
 
   const searchCatalog = useCallback(async (query: string) => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills Catalog");
-      }
       setState((s) => ({ ...s, catalogLoading: true, error: null }));
       const result = await clientRef.current.searchSkillsSh(query);
       setState((s) => ({ ...s, catalogSkills: result.skills, catalogLoading: false }));
@@ -220,9 +203,6 @@ export function useSkills(
 
   const listGithubCatalog = useCallback(async (repo?: string, catalogPath?: string) => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills Catalog");
-      }
       setState((s) => ({ ...s, catalogLoading: true, error: null }));
       const result = await clientRef.current.listGithubCatalog(repo, catalogPath);
       setState((s) => ({ ...s, githubCatalogSkills: result.skills, catalogLoading: false }));
@@ -242,9 +222,6 @@ export function useSkills(
     skills: Array<{ name: string; source: string }>
   ) => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills Catalog");
-      }
       setState((s) => ({ ...s, catalogInstalling: true, error: null }));
       const result = await clientRef.current.installFromSkillsSh(skills);
 
@@ -280,9 +257,6 @@ export function useSkills(
     catalogPath?: string,
   ) => {
     try {
-      if (isDesktopStaticRuntime()) {
-        throw desktopStaticApiError("Skills Catalog");
-      }
       setState((s) => ({ ...s, catalogInstalling: true, error: null }));
       const result = await clientRef.current.installFromGithubCatalog(skills, repo, catalogPath);
 

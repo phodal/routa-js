@@ -14,7 +14,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { isTauriRuntime } from "@/client/utils/diagnostics";
+import { isTauriRuntime, desktopAwareFetch } from "@/client/utils/diagnostics";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -228,7 +228,7 @@ export function AgentInstallPanel() {
           await tauriInvoke<TauriInstalledAgentInfo>("install_acp_agent", { agentId });
         } else {
           // Web: Use API route
-          const res = await fetch("/api/acp/install", {
+          const res = await desktopAwareFetch("/api/acp/install", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ agentId, distributionType: _distType }),
@@ -262,7 +262,7 @@ export function AgentInstallPanel() {
           await tauriInvoke<void>("uninstall_acp_agent", { agentId });
         } else {
           // Web: Use API route
-          const res = await fetch("/api/acp/install", {
+          const res = await desktopAwareFetch("/api/acp/install", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ agentId }),

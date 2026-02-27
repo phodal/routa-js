@@ -72,3 +72,46 @@ export function desktopStaticApiError(feature: string): Error {
       `请使用 \`npm run dev\` + \`npm run tauri dev\` 调试，或为桌面版提供内置/本地 API 服务。`
   );
 }
+
+/**
+ * Default port for the embedded Rust backend server in desktop mode.
+ * Matches the default in `routa-server::ServerConfig` and `api_port()` in lib.rs.
+ */
+const DESKTOP_API_DEFAULT_PORT = 3210;
+
+/**
+ * Cache for the resolved desktop API base URL.
+ */
+let _desktopApiBaseUrlCache: string | null = null;
+
+/**
+ * Resolve the API base URL for the current runtime environment.
+ *
+ * - In HTTP mode (web or Tauri after redirect): returns `""` (relative to origin).
+ * - In desktop static mode (Tauri webview loading from `tauri://`):
+ *   returns `http://127.0.0.1:3210` (the embedded Rust server URL).
+ *
+ * The embedded Rust server (routa-server) starts on port 3210 by default
+ * and has CORS configured to accept any origin, so cross-origin requests
+ * from `tauri://localhost` work fine.
+ */
+export function getDesktopApiBaseUrl(): string {
+  if (!isDesktopStaticRuntime()) return "";
+  if (_desktopApiBaseUrlCache !== null) return _desktopApiBaseUrlCache;
+  _desktopApiBaseUrlCache = `http://127.0.0.1:${DESKTOP_API_DEFAULT_PORT}`;
+  return _desktopApiBaseUrlCache;
+}
+
+/**
+ * Resolve a full API URL, automatically prefixing with the desktop server
+ * base URL when running in Tauri static mode.
+ *
+ * Usage: `desktopAwareFetch("/api/notes?workspaceId=abc")`
+ */
+export function desktopAwareFetch(
+  path: string,
+  options?: RequestInit,
+): Promise<Response> {
+  const base = getDesktopApiBaseUrl();
+  return fetch(`${base}${path}`, options);
+}

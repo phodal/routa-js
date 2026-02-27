@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { desktopAwareFetch } from "../utils/diagnostics";
 import { createPortal } from "react-dom";
 import { BranchSelector } from "./branch-selector";
 
@@ -79,7 +80,7 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
   const fetchRepos = useCallback(async () => {
     setLoadingRepos(true);
     try {
-      const res = await fetch("/api/clone");
+      const res = await desktopAwareFetch("/api/clone");
       const data = await res.json();
       setRepos(data.repos || []);
     } catch {
@@ -150,7 +151,7 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
       setCloneProgress({ phase: "starting", percent: 0, message: "Starting clone..." });
 
       try {
-        const res = await fetch("/api/clone/progress", {
+        const res = await desktopAwareFetch("/api/clone/progress", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: url.trim() }),
