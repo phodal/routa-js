@@ -41,9 +41,10 @@ export interface ParseResult {
 }
 
 // ─── Regex patterns ──────────────────────────────────────────────────────
+// Match @@@task, @@@tasks, or bare @@@ blocks (for backwards compatibility)
 
-const AT_TASK_BLOCK_REGEX = /@@@tasks?[ \t]*\r?\n([\s\S]*?)@@@/;
-const AT_TASK_BLOCK_REGEX_GLOBAL = /@@@tasks?[ \t]*\r?\n([\s\S]*?)@@@/g;
+const AT_TASK_BLOCK_REGEX = /@@@(?:tasks?)?[ \t]*\r?\n([\s\S]*?)@@@/;
+const AT_TASK_BLOCK_REGEX_GLOBAL = /@@@(?:tasks?)?[ \t]*\r?\n([\s\S]*?)@@@/g;
 
 /**
  * Normalize line endings to \n

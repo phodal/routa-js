@@ -27,30 +27,55 @@ pub async fn run(
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| ".".to_string());
 
-    // ── 1. Ensure workspace exists ──────────────────────────────────────
-    let ws_response = router
-        .handle_value(serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "workspaces.get",
-            "params": { "id": workspace_id }
-        }))
-        .await;
-
-    if ws_response.get("error").is_some() {
-        // Create workspace if it doesn't exist
-        let create_resp = router
+    // ── 1. Use default workspace (always exists) ────────────────────────
+    let workspace_id = if workspace_id == "default" {
+        "default".to_string()
+    } else {
+        // For non-default workspaces, try to get or create
+        let ws_response = router
             .handle_value(serde_json::json!({
                 "jsonrpc": "2.0",
-                "id": 2,
-                "method": "workspaces.create",
-                "params": { "name": workspace_id }
+                "id": 1,
+                "method": "workspaces.get",
+                "params": { "id": workspace_id }
             }))
             .await;
-        if let Some(err) = create_resp.get("error") {
-            tracing::warn!("Workspace creation warning: {}", err);
+
+        if ws_response.get("error").is_some() {
+            // Create workspace if it doesn't exist
+            let create_resp = router
+                .handle_value(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "workspaces.create",
+                    "params": { 
+                        "title": workspace_id 
+                    }
+                }))
+                .await;
+            
+            if let Some(err) = create_resp.get("error") {
+                let err_msg = err.get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Unknown error");
+                return Err(format!("Failed to create workspace: {}", err_msg));
+            }
+            
+            // Get the created workspace ID
+            let created_ws_id = create_resp
+                .get("result")
+                .and_then(|r| r.get("workspace"))
+                .and_then(|w| w.get("id"))
+                .and_then(|id| id.as_str())
+                .ok_or("Failed to get created workspace ID")?
+                .to_string();
+            
+            println!("Created workspace: {}", created_ws_id);
+            created_ws_id
+        } else {
+            workspace_id.to_string()
         }
-    }
+    };
 
     // ── 2. Create ROUTA coordinator agent ───────────────────────────────
     let agent_name = "cli-coordinator";
@@ -62,7 +87,7 @@ pub async fn run(
             "params": {
                 "name": agent_name,
                 "role": "ROUTA",
-                "workspaceId": workspace_id
+                "workspaceId": &workspace_id
             }
         }))
         .await;
@@ -71,7 +96,14 @@ pub async fn run(
         .get("result")
         .and_then(|r| r.get("agentId"))
         .and_then(|v| v.as_str())
-        .ok_or("Failed to create coordinator agent")?
+        .ok_or_else(|| {
+            let error_msg = create_response
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown error");
+            format!("Failed to create coordinator agent: {}", error_msg)
+        })?
         .to_string();
 
     // ── 3. Build coordinator prompt ─────────────────────────────────────
@@ -84,7 +116,7 @@ pub async fn run(
          **Workspace ID:** {}\n\n\
          ## User Request\n\n{}\n\n\
          ---\n**Reminder:** {}\n",
-        specialist.system_prompt, agent_id, workspace_id, prompt, specialist.role_reminder
+        specialist.system_prompt, agent_id, &workspace_id, prompt, specialist.role_reminder
     );
 
     // ── 4. Create ACP session for the coordinator ───────────────────────
@@ -93,7 +125,7 @@ pub async fn run(
     println!("╔══════════════════════════════════════════════════════════╗");
     println!("║  Routa CLI — Multi-Agent Coordinator                    ║");
     println!("╠══════════════════════════════════════════════════════════╣");
-    println!("║  Workspace : {:<42} ║", workspace_id);
+    println!("║  Workspace : {:<42} ║", &workspace_id);
     println!("║  Agent     : {} (ROUTA)  {:<27} ║", &agent_id[..8], "");
     println!("║  Provider  : {:<42} ║", provider);
     println!("║  CWD       : {:<42} ║", truncate_path(&cwd, 42));
@@ -107,7 +139,7 @@ pub async fn run(
         .create_session(
             session_id.clone(),
             cwd.clone(),
-            workspace_id.to_string(),
+            workspace_id.clone(),
             Some(provider.to_string()),
             Some("ROUTA".to_string()),
             None,
@@ -190,7 +222,7 @@ pub async fn run(
 
     // ── 9. Print summary ────────────────────────────────────────────────
     println!();
-    print_session_summary(&router, workspace_id).await;
+    print_session_summary(&router, &workspace_id).await;
 
     // ── 10. Cleanup ─────────────────────────────────────────────────────
     state.acp_manager.kill_session(&session_id).await;
