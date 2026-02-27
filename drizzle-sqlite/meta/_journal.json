@@ -29,6 +29,13 @@
       "when": 1772177016430,
       "tag": "0003_strange_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1772195849125,
+      "tag": "0004_new_madame_hydra",
+      "breakpoints": true
     }
   ]
 }

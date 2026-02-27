@@ -10,6 +10,13 @@ export {
   InMemoryWorkspaceStore,
   PgWorkspaceStore,
 } from "../db/pg-workspace-store";
+export type {
+  SpecialistStore,
+  SpecialistCreateInput,
+  SpecialistUpdateInput,
+  SpecialistFilter,
+} from "./specialist-store";
+export { PostgresSpecialistStore } from "./specialist-store";
 
 // SQLite stores — for desktop platforms (Tauri/Electron)
 // NOTE: Only import these in environments where better-sqlite3 is available.

@@ -4,11 +4,13 @@
  * The core orchestration engine that bridges MCP tool calls with actual
  * ACP process spawning. When a coordinator delegates a task, the orchestrator:
  *
- * 1. Creates a child agent record
- * 2. Spawns a real ACP process for the child agent
- * 3. Sends the task as the initial prompt
- * 4. Subscribes for completion events
- * 5. When the child reports back, wakes the parent agent
+ * 1. Checks delegation depth (max 2 levels to prevent infinite recursion)
+ * 2. Resolves specialist configuration
+ * 3. Creates a child agent record with delegation depth metadata
+ * 4. Spawns a real ACP process for the child agent
+ * 5. Sends the task as the initial prompt
+ * 6. Subscribes for completion events
+ * 7. When the child reports back, wakes the parent agent
  *
  * This enables the full Coordinator → Implementor → Verifier lifecycle.
  */
@@ -29,6 +31,11 @@ import {
 import type { RoutaSystem } from "../routa-system";
 import type { AcpProcessManager } from "../acp/acp-process-manager";
 import type { NotificationHandler } from "../acp/processer";
+import {
+  checkDelegationDepth,
+  calculateChildDepth,
+  buildAgentMetadata,
+} from "./delegation-depth";
 
 export interface DelegateWithSpawnParams {
   /** Task ID to delegate */
@@ -191,6 +198,12 @@ export class RoutaOrchestrator {
       waitMode = "immediate",
     } = params;
 
+    // 0. Check delegation depth (prevents infinite recursion)
+    const depthCheck = await checkDelegationDepth(this.system.agentStore, callerAgentId);
+    if (!depthCheck.allowed) {
+      return errorResult(depthCheck.error!);
+    }
+
     // 1. Resolve specialist config
     const specialistConfig = this.resolveSpecialist(specialistInput);
     if (!specialistConfig) {
@@ -222,17 +235,26 @@ export class RoutaOrchestrator {
 
     const cwd = params.cwd ?? this.config.defaultCwd;
 
-    // 4. Create agent record
+    // 4. Create agent record with delegation depth metadata
     const agentName = `${specialistConfig.id}-${task.title
       .slice(0, 30)
       .replace(/\s+/g, "-")
       .toLowerCase()}`;
+
+    // Build metadata including delegation depth
+    const agentMetadata = buildAgentMetadata(
+      calculateChildDepth(depthCheck.currentDepth),
+      callerAgentId,
+      specialistConfig.id
+    );
+
     const agentResult = await this.system.tools.createAgent({
       name: agentName,
       role: specialistConfig.role,
       workspaceId,
       parentId: callerAgentId,
       modelTier: specialistConfig.defaultModelTier,
+      metadata: agentMetadata,
     });
 
     if (!agentResult.success || !agentResult.data) {

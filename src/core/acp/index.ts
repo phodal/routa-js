@@ -32,6 +32,23 @@ export {
   getPresetByIdWithRegistry,
   syncPresetsWithRegistry,
 } from "./acp-presets";
+
+// Provider Registry exports
+export {
+  ProviderRegistry,
+  parseCompoundModelId,
+  createCompoundModelId,
+  isModelValidForProvider,
+  getModelForProvider,
+  getDefaultProviderId,
+  resolveModelForSpecialist,
+  extractProviderIdFromModel,
+  PROVIDER_MODEL_TIERS,
+  type ParsedModelId,
+  type ProviderFactory,
+  type ProviderCreateConfig,
+} from "./provider-registry";
+
 export { which } from "./utils";
 
 // ACP Registry exports

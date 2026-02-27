@@ -4,12 +4,20 @@
  * Defines the system prompts, behavior instructions, and role reminders
  * for each agent role: ROUTA (Coordinator), CRAFTER (Implementor), GATE (Verifier), DEVELOPER.
  *
- * Specialists are loaded from .md files (resources/specialists/) with YAML frontmatter.
- * Hardcoded prompts serve as fallback when files are unavailable.
+ * Specialists are loaded from multiple sources with priority:
+ * 1. Database user specialists (highest priority)
+ * 2. File-based user specialists (~/.routa/specialists/)
+ * 3. File-based bundled specialists (resources/specialists/)
+ * 4. Hardcoded fallback (lowest priority)
  */
 
 import { AgentRole, ModelTier } from "../models/agent";
 import { loadAllSpecialists } from "../specialists/specialist-file-loader";
+import {
+  loadSpecialistsFromAllSources,
+  reloadSpecialistsFromAllSources,
+  invalidateSpecialistCache,
+} from "../specialists/specialist-db-loader";
 
 export interface SpecialistConfig {
   id: string;
@@ -318,21 +326,65 @@ const HARDCODED_SPECIALISTS: readonly SpecialistConfig[] = [
   },
 ] as const;
 
-// ─── Specialist Registry (with file loading) ─────────────────────────────
+// ─── Specialist Registry (with file and database loading) ────────────────
 
 let _cachedSpecialists: SpecialistConfig[] | null = null;
+let _useDatabase = false;
 
 /**
- * Load all specialists from files, falling back to hardcoded defaults.
+ * Enable or disable database loading for specialists.
+ * Call this before loadSpecialists() to use database-backed specialists.
+ */
+export function setSpecialistDatabaseEnabled(enabled: boolean): void {
+  _useDatabase = enabled;
+}
+
+/**
+ * Load all specialists from files and optionally database, falling back to hardcoded defaults.
  * Results are cached after first load.
  */
-export function loadSpecialists(): SpecialistConfig[] {
+export async function loadSpecialists(): Promise<SpecialistConfig[]> {
+  if (_cachedSpecialists) return _cachedSpecialists;
+
+  if (_useDatabase) {
+    // Use the new database-aware loader
+    _cachedSpecialists = await loadSpecialistsFromAllSources();
+  } else {
+    // Use the original file-based loader
+    try {
+      const fromFiles = loadAllSpecialists();
+      if (fromFiles.length > 0) {
+        // Merge: file-based specialists + hardcoded ones not overridden
+        const fileIds = new Set(fromFiles.map((s) => s.id));
+        const hardcodedExtras = HARDCODED_SPECIALISTS.filter(
+          (s) => !fileIds.has(s.id)
+        );
+        _cachedSpecialists = [...fromFiles, ...hardcodedExtras];
+        console.log(
+          `[Specialists] Loaded ${fromFiles.length} from files, ${hardcodedExtras.length} hardcoded fallbacks`
+        );
+        return _cachedSpecialists;
+      }
+    } catch (err) {
+      console.warn("[Specialists] Failed to load from files, using hardcoded:", err);
+    }
+
+    _cachedSpecialists = [...HARDCODED_SPECIALISTS];
+  }
+
+  return _cachedSpecialists;
+}
+
+/**
+ * Synchronous version of loadSpecialists for backward compatibility.
+ * Returns cached specialists or loads from files (not database).
+ */
+export function loadSpecialistsSync(): SpecialistConfig[] {
   if (_cachedSpecialists) return _cachedSpecialists;
 
   try {
     const fromFiles = loadAllSpecialists();
     if (fromFiles.length > 0) {
-      // Merge: file-based specialists + hardcoded ones not overridden
       const fileIds = new Set(fromFiles.map((s) => s.id));
       const hardcodedExtras = HARDCODED_SPECIALISTS.filter(
         (s) => !fileIds.has(s.id)
@@ -352,18 +404,27 @@ export function loadSpecialists(): SpecialistConfig[] {
 }
 
 /**
- * Force reload specialists from disk (clears cache).
+ * Force reload specialists from disk/database (clears cache).
  */
-export function reloadSpecialists(): SpecialistConfig[] {
+export async function reloadSpecialists(): Promise<SpecialistConfig[]> {
+  invalidateSpecialistCache();
   _cachedSpecialists = null;
   return loadSpecialists();
 }
 
 /**
  * Get all specialists. Alias kept for backward compatibility.
+ * Now returns Promise to support database loading.
  */
-export function getSpecialists(): readonly SpecialistConfig[] {
+export async function getSpecialists(): Promise<readonly SpecialistConfig[]> {
   return loadSpecialists();
+}
+
+/**
+ * Synchronous version of getSpecialists for backward compatibility.
+ */
+export function getSpecialistsSync(): readonly SpecialistConfig[] {
+  return loadSpecialistsSync();
 }
 
 /**
@@ -374,16 +435,18 @@ export const SPECIALISTS: readonly SpecialistConfig[] = HARDCODED_SPECIALISTS;
 
 /**
  * Get specialist config by role.
+ * Uses synchronous version for immediate access.
  */
 export function getSpecialistByRole(role: AgentRole): SpecialistConfig | undefined {
-  return loadSpecialists().find((s) => s.role === role);
+  return loadSpecialistsSync().find((s) => s.role === role);
 }
 
 /**
  * Get specialist config by ID.
+ * Uses synchronous version for immediate access.
  */
 export function getSpecialistById(id: string): SpecialistConfig | undefined {
-  return loadSpecialists().find((s) => s.id === id.toLowerCase());
+  return loadSpecialistsSync().find((s) => s.id === id.toLowerCase());
 }
 
 /**
@@ -444,7 +507,7 @@ export function buildCoordinatorPrompt(params: {
  * Returns a markdown table describing available specialists.
  */
 export function formatSpecialistsForPrompt(): string {
-  const specialists = loadSpecialists();
+  const specialists = loadSpecialistsSync();
   const lines = [
     "| ID | Name | Role | Model Tier | Description |",
     "|-----|------|------|-----------|-------------|",

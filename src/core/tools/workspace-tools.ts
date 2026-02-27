@@ -264,7 +264,7 @@ export class WorkspaceTools {
   // ─── List Specialists ──────────────────────────────────────────────
 
   async listSpecialists(): Promise<ToolResult> {
-    const specialists = loadSpecialists();
+    const specialists = await loadSpecialists();
     return successResult(
       specialists.map((s) => ({
         id: s.id,

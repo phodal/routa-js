@@ -207,3 +207,34 @@ export const workspaceSkills = sqliteTable("workspace_skills", {
   skillId: text("skill_id").notNull().references(() => skills.id, { onDelete: "cascade" }),
   installedAt: integer("installed_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [primaryKey({ columns: [table.workspaceId, table.skillId] })]);
+
+// ─── Specialists (user-defined agent specialist configurations) ───────────
+
+export const specialists = sqliteTable("specialists", {
+  /** Unique identifier (e.g., "routa", "crafter", or custom ID) */
+  id: text("id").primaryKey(),
+  /** Human-readable name */
+  name: text("name").notNull(),
+  /** Short description */
+  description: text("description").notNull().default(""),
+  /** Source of this specialist: "user" | "bundled" | "hardcoded" */
+  source: text("source").notNull().default("user"),
+  /** Agent role: "ROUTA" | "CRAFTER" | "GATE" | "DEVELOPER" */
+  role: text("role").notNull(),
+  /** Default model tier: "FAST" | "BALANCED" | "SMART" */
+  defaultModelTier: text("default_model_tier").notNull().default("SMART"),
+  /** System prompt / behavior prompt */
+  systemPrompt: text("system_prompt").notNull(),
+  /** Short role reminder */
+  roleReminder: text("role_reminder").notNull().default(""),
+  /** Optional specific model override */
+  model: text("model"),
+  /** Whether this specialist is enabled (stored as 0/1) */
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  /** Created by user ID (for future multi-tenant support) */
+  createdBy: text("created_by"),
+  /** Creation timestamp */
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  /** Last update timestamp */
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});

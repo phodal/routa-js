@@ -169,6 +169,7 @@ export class AgentTools {
     workspaceId: string;
     parentId?: string;
     modelTier?: string;
+    metadata?: Record<string, string>;
   }): Promise<ToolResult> {
     const role = params.role.toUpperCase() as AgentRole;
     if (!Object.values(AgentRole).includes(role)) {
@@ -188,6 +189,7 @@ export class AgentTools {
       workspaceId: params.workspaceId,
       parentId: params.parentId,
       modelTier,
+      metadata: params.metadata ?? {},
     });
 
     await this.agentStore.save(agent);
@@ -196,7 +198,11 @@ export class AgentTools {
       type: AgentEventType.AGENT_CREATED,
       agentId: agent.id,
       workspaceId: agent.workspaceId,
-      data: { name: agent.name, role: agent.role },
+      data: {
+        name: agent.name,
+        role: agent.role,
+        metadata: agent.metadata,
+      },
       timestamp: new Date(),
     });
 
