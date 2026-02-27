@@ -2,12 +2,14 @@
  * /api/notes - REST API for collaborative note editing.
  *
  * GET    /api/notes?workspaceId=...&type=...  → List notes
+ * GET    /api/notes?workspaceId=...&groupBy=session  → List notes grouped by session
  * POST   /api/notes                           → Create/update a note
  * DELETE /api/notes?noteId=...&workspaceId=... → Delete a note
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
+import { getHttpSessionStore } from "@/core/acp/http-session-store";
 import { createNote, Note } from "@/core/models/note";
 
 export async function GET(request: NextRequest) {
@@ -15,6 +17,7 @@ export async function GET(request: NextRequest) {
   const workspaceId = searchParams.get("workspaceId");
   const type = searchParams.get("type") as "spec" | "task" | "general" | null;
   const noteId = searchParams.get("noteId");
+  const groupBy = searchParams.get("groupBy");
 
   if (!workspaceId) {
     return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
@@ -36,6 +39,59 @@ export async function GET(request: NextRequest) {
     ? await system.noteStore.listByType(workspaceId, type)
     : await system.noteStore.listByWorkspace(workspaceId);
 
+  // Group by session if requested
+  if (groupBy === "session") {
+    // Collect unique session IDs
+    const sessionIds = [...new Set(notes.map((n) => n.sessionId).filter(Boolean))] as string[];
+
+    // Fetch session info for all unique session IDs from HttpSessionStore
+    const httpSessionStore = getHttpSessionStore();
+    await httpSessionStore.hydrateFromDb();
+    const allSessions = httpSessionStore.listSessions();
+    const sessionMap = new Map<string, { id: string; name?: string }>();
+    for (const sessionId of sessionIds) {
+      const session = allSessions.find((s) => s.sessionId === sessionId);
+      if (session) {
+        sessionMap.set(sessionId, { id: session.sessionId, name: session.name });
+      }
+    }
+
+    // Group notes by sessionId
+    interface SessionGroup {
+      sessionId: string | null;
+      sessionName: string | null;
+      notes: ReturnType<typeof serializeNote>[];
+    }
+
+    const groups: SessionGroup[] = [];
+    const notesBySession = new Map<string | null, Note[]>();
+
+    for (const note of notes) {
+      const key = note.sessionId ?? null;
+      const existing = notesBySession.get(key) ?? [];
+      existing.push(note);
+      notesBySession.set(key, existing);
+    }
+
+    for (const [sessionId, sessionNotes] of notesBySession) {
+      const sessionInfo = sessionId ? sessionMap.get(sessionId) : null;
+      groups.push({
+        sessionId: sessionId,
+        sessionName: sessionInfo?.name ?? null,
+        notes: sessionNotes.map(serializeNote),
+      });
+    }
+
+    // Sort: groups with session first (by name), then ungrouped at the end
+    groups.sort((a, b) => {
+      if (a.sessionId === null && b.sessionId !== null) return 1;
+      if (a.sessionId !== null && b.sessionId === null) return -1;
+      return (a.sessionName ?? "").localeCompare(b.sessionName ?? "");
+    });
+
+    return NextResponse.json({ groups });
+  }
+
   return NextResponse.json({
     notes: notes.map(serializeNote),
   });
@@ -48,6 +104,7 @@ export async function POST(request: NextRequest) {
     title,
     content,
     workspaceId,
+    sessionId,
     type = "general",
     metadata,
     source: rawSource = "user",
@@ -69,6 +126,7 @@ export async function POST(request: NextRequest) {
     if (existing) {
       if (content !== undefined) existing.content = content;
       if (title !== undefined) existing.title = title;
+      if (sessionId !== undefined) existing.sessionId = sessionId;
       if (metadata) Object.assign(existing.metadata, metadata);
       existing.updatedAt = new Date();
 
@@ -87,6 +145,7 @@ export async function POST(request: NextRequest) {
     title: title ?? "Untitled",
     content: content ?? "",
     workspaceId,
+    sessionId,
     metadata: {
       type,
       ...metadata,
@@ -128,6 +187,7 @@ function serializeNote(note: Note) {
     title: note.title,
     content: note.content,
     workspaceId: note.workspaceId,
+    sessionId: note.sessionId,
     metadata: note.metadata,
     createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : note.createdAt,
     updatedAt: note.updatedAt instanceof Date ? note.updatedAt.toISOString() : note.updatedAt,

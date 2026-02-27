@@ -104,6 +104,7 @@ function initializeSqliteTables(db: SqliteDatabase): void {
     CREATE TABLE IF NOT EXISTS notes (
       id TEXT NOT NULL,
       workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      session_id TEXT,
       title TEXT NOT NULL,
       content TEXT NOT NULL DEFAULT '',
       type TEXT NOT NULL DEFAULT 'general',

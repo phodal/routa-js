@@ -18,6 +18,7 @@ export class PgNoteStore implements NoteStore {
       .values({
         id: note.id,
         workspaceId: note.workspaceId,
+        sessionId: note.sessionId,
         title: note.title,
         content: note.content,
         type: note.metadata.type,
@@ -32,6 +33,7 @@ export class PgNoteStore implements NoteStore {
       .onConflictDoUpdate({
         target: [notes.workspaceId, notes.id],
         set: {
+          sessionId: note.sessionId,
           title: note.title,
           content: note.content,
           type: note.metadata.type,
@@ -108,6 +110,7 @@ export class PgNoteStore implements NoteStore {
       title: row.title,
       content: row.content,
       workspaceId: row.workspaceId,
+      sessionId: row.sessionId ?? undefined,
       metadata,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

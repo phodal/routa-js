@@ -89,6 +89,8 @@ export const notes = pgTable(
   {
     id: text("id").notNull(),
     workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    /** Session ID that created this note (for session-scoped grouping) */
+    sessionId: text("session_id"),
     title: text("title").notNull(),
     content: text("content").notNull().default(""),
     type: text("type").notNull().default("general"), // spec | task | general

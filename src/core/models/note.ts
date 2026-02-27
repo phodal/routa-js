@@ -32,6 +32,8 @@ export interface Note {
   title: string;
   content: string;
   workspaceId: string;
+  /** Session ID that created this note (for session-scoped grouping) */
+  sessionId?: string;
   metadata: NoteMetadata;
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +47,7 @@ export function createNote(params: {
   title: string;
   content?: string;
   workspaceId: string;
+  sessionId?: string;
   metadata?: Partial<NoteMetadata>;
 }): Note {
   const now = new Date();
@@ -53,6 +56,7 @@ export function createNote(params: {
     title: params.title,
     content: params.content ?? "",
     workspaceId: params.workspaceId,
+    sessionId: params.sessionId,
     metadata: {
       type: params.metadata?.type ?? "general",
       taskStatus: params.metadata?.taskStatus,

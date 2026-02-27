@@ -89,6 +89,8 @@ export const tasks = sqliteTable("tasks", {
 export const notes = sqliteTable("notes", {
   id: text("id").notNull(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  /** Session ID that created this note (for session-scoped grouping) */
+  sessionId: text("session_id"),
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
   type: text("type").notNull().default("general"),
