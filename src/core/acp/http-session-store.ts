@@ -112,6 +112,14 @@ class HttpSessionStore {
   private traceRecorder = new TraceRecorder();
 
   upsertSession(record: RoutaSessionRecord) {
+    const existing = this.sessions.get(record.sessionId);
+    if (existing?.name && !record.name) {
+      this.sessions.set(record.sessionId, {
+        ...record,
+        name: existing.name,
+      });
+      return;
+    }
     this.sessions.set(record.sessionId, record);
   }
 

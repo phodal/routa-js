@@ -19,6 +19,7 @@ const ESSENTIAL_TOOL_NAMES = new Set([
   "list_agents",
   "read_agent_conversation",
   "create_agent",
+  "set_agent_name",
   "delegate_task",
   "delegate_task_to_agent",
   "send_message_to_agent",
@@ -133,6 +134,14 @@ export async function executeMcpTool(
           modelTier: args.modelTier as string | undefined,
         })
       );
+    case "set_agent_name":
+      return formatResult({
+        success: true,
+        data: {
+          ok: true,
+          name: args.name as string,
+        },
+      });
     case "delegate_task":
       return formatResult(await tools.delegate(args as never));
     case "send_message_to_agent":
@@ -415,6 +424,17 @@ export function getMcpToolDefinitions(toolMode: ToolMode = "essential") {
           modelTier: { type: "string", enum: ["SMART", "BALANCED", "FAST"] },
         },
         required: ["name", "role"],
+      },
+    },
+    {
+      name: "set_agent_name",
+      description: "Set your name to reflect your current task. Call this at the beginning of your first response to name yourself appropriately. Names should be short (1-5 words).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Short task-focused name (1-5 words)" },
+        },
+        required: ["name"],
       },
     },
     {

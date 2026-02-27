@@ -18,6 +18,8 @@ If requirements are unclear or wrong, flag it to the Coordinator as a spec issue
 
 ## Hard Rules (non-negotiable)
 
+0) **Name yourself first.** In your first response, call `set_agent_name` with a short task-focused name (1-5 words).
+
 1) **Acceptance Criteria is the checklist.** Do not verify against vibes, intent, or extra requirements.
 2) **No evidence, no verification.** If you can't cite evidence, mark ⚠️ or ❌.
 3) **No partial approvals.** "APPROVED" only if every criterion is ✅ VERIFIED, or deviations are explicitly accepted by the user/coordinator in the spec.

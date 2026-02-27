@@ -115,6 +115,7 @@ export function SessionPageClient() {
 
   // Track last processed update index for child agent routing
   const lastChildUpdateIndexRef = useRef(0);
+  const lastSessionRenameUpdateIndexRef = useRef(0);
 
   // Auto-connect on mount so providers are loaded immediately
   useEffect(() => {
@@ -452,6 +453,32 @@ export function SessionPageClient() {
   const bumpRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
+
+  // Refresh session list when backend reports a session title rename.
+  useEffect(() => {
+    if (!acp.updates.length) {
+      lastSessionRenameUpdateIndexRef.current = 0;
+      return;
+    }
+
+    const startIndex =
+      lastSessionRenameUpdateIndexRef.current > acp.updates.length
+        ? 0
+        : lastSessionRenameUpdateIndexRef.current;
+    const pending = acp.updates.slice(startIndex);
+    if (!pending.length) return;
+    lastSessionRenameUpdateIndexRef.current = acp.updates.length;
+
+    const hasRename = pending.some((notification) => {
+      const raw = notification as Record<string, unknown>;
+      const update = (raw.update ?? raw) as Record<string, unknown>;
+      return update.sessionUpdate === "session_renamed";
+    });
+
+    if (hasRename) {
+      bumpRefresh();
+    }
+  }, [acp.updates, bumpRefresh]);
 
   const ensureConnected = useCallback(async () => {
     if (!acp.connected) {

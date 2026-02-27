@@ -80,6 +80,7 @@ export class RoutaMcpToolManager {
       this.registerListAgents(server);
       this.registerReadAgentConversation(server);
       this.registerCreateAgent(server);
+      this.registerSetAgentName(server);
       this.registerDelegateTask(server);
       this.registerDelegateTaskToNewAgent(server);
       this.registerSendMessageToAgent(server);
@@ -103,6 +104,7 @@ export class RoutaMcpToolManager {
     this.registerListAgents(server);
     this.registerReadAgentConversation(server);
     this.registerCreateAgent(server);
+    this.registerSetAgentName(server);
     this.registerDelegateTask(server);
     this.registerDelegateTaskToNewAgent(server);
     this.registerSendMessageToAgent(server);
@@ -327,6 +329,25 @@ You can also use convert_task_blocks to convert @@@task blocks into tasks, or li
           workspaceId: params.workspaceId ?? this.workspaceId,
         });
         return this.toMcpResult(result);
+      }
+    );
+  }
+
+  private registerSetAgentName(server: McpServer) {
+    server.tool(
+      "set_agent_name",
+      "Set your name to reflect your current task. Call this at the beginning of your first response to name yourself appropriately. Names should be short (1-5 words).",
+      {
+        name: z.string().describe("Short task-focused name (1-5 words)"),
+      },
+      async (params) => {
+        return this.toMcpResult({
+          success: true,
+          data: {
+            ok: true,
+            name: params.name,
+          },
+        });
       }
     );
   }

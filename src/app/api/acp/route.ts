@@ -41,8 +41,9 @@ import {
   withConversation,
   recordTrace,
 } from "@/core/trace";
-import { persistSessionToDb } from "@/core/acp/session-db-persister";
+import { persistSessionToDb, renameSessionInDb } from "@/core/acp/session-db-persister";
 import { resolveSkillContent } from "@/core/skills/skill-resolver";
+import type { SessionUpdateNotification } from "@/core/acp/http-session-store";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +183,7 @@ export async function POST(request: NextRequest) {
 
       const store = getHttpSessionStore();
       const manager = getAcpProcessManager();
+      const forwardSessionUpdate = createSessionUpdateForwarder(store, sessionId);
 
       const preset = getPresetById(provider);
       const isClaudeCode = preset?.nonStandardApi === true || provider === "claude";
@@ -203,15 +205,7 @@ export async function POST(request: NextRequest) {
         acpSessionId = await manager.createClaudeCodeSdkSession(
           sessionId,
           cwd,
-          (msg) => {
-            if (msg.method === "session/update" && msg.params) {
-              const params = msg.params as Record<string, unknown>;
-              store.pushNotification({
-                ...params,
-                sessionId,
-              } as never);
-            }
-          }
+          forwardSessionUpdate
         );
       } else if (isClaudeCode) {
         // ── Claude Code: stream-json protocol with MCP (CLI process) ───
@@ -220,15 +214,7 @@ export async function POST(request: NextRequest) {
         acpSessionId = await manager.createClaudeSession(
           sessionId,
           cwd,
-          (msg) => {
-            if (msg.method === "session/update" && msg.params) {
-              const params = msg.params as Record<string, unknown>;
-              store.pushNotification({
-                ...params,
-                sessionId,
-              } as never);
-            }
-          },
+          forwardSessionUpdate,
           mcpConfigs,
           modeId,
           role, // Pass role so ROUTA gets bypassPermissions
@@ -244,15 +230,7 @@ export async function POST(request: NextRequest) {
         acpSessionId = await manager.createSession(
           sessionId,
           cwd,
-          (msg) => {
-            if (msg.method === "session/update" && msg.params) {
-              const params = msg.params as Record<string, unknown>;
-              store.pushNotification({
-                ...params,
-                sessionId,
-              } as never);
-            }
-          },
+          forwardSessionUpdate,
           provider,
           modeId,
           extraArgs.length > 0 ? extraArgs : undefined,
@@ -397,6 +375,7 @@ export async function POST(request: NextRequest) {
 
       const manager = getAcpProcessManager();
       const store = getHttpSessionStore();
+      const forwardSessionUpdate = createSessionUpdateForwarder(store, sessionId);
 
       // Extract prompt text - handle both string and array formats
       const rawPrompt = p.prompt;
@@ -462,15 +441,7 @@ export async function POST(request: NextRequest) {
             acpSessionId = await manager.createClaudeCodeSdkSession(
               sessionId,
               cwd,
-              (msg) => {
-                if (msg.method === "session/update" && msg.params) {
-                  const params = msg.params as Record<string, unknown>;
-                  store.pushNotification({
-                    ...params,
-                    sessionId,
-                  } as never);
-                }
-              }
+              forwardSessionUpdate
             );
           } else if (isClaudeCode) {
             // Claude Code CLI session
@@ -478,15 +449,7 @@ export async function POST(request: NextRequest) {
             acpSessionId = await manager.createClaudeSession(
               sessionId,
               cwd,
-              (msg) => {
-                if (msg.method === "session/update" && msg.params) {
-                  const params = msg.params as Record<string, unknown>;
-                  store.pushNotification({
-                    ...params,
-                    sessionId,
-                  } as never);
-                }
-              },
+              forwardSessionUpdate,
               mcpConfigs,
               undefined, // modeId
               role,
@@ -496,15 +459,7 @@ export async function POST(request: NextRequest) {
             acpSessionId = await manager.createSession(
               sessionId,
               cwd,
-              (msg) => {
-                if (msg.method === "session/update" && msg.params) {
-                  const params = msg.params as Record<string, unknown>;
-                  store.pushNotification({
-                    ...params,
-                    sessionId,
-                  } as never);
-                }
-              },
+              forwardSessionUpdate,
               provider,
               undefined, // modeId
               undefined, // extraArgs
@@ -600,15 +555,7 @@ export async function POST(request: NextRequest) {
         // Use getOrRecreate to handle serverless cold starts - recreate adapter if needed
         const adapter = await manager.getOrRecreateClaudeCodeSdkAdapter(
           sessionId,
-          (msg) => {
-            if (msg.method === "session/update" && msg.params) {
-              const params = msg.params as Record<string, unknown>;
-              store.pushNotification({
-                ...params,
-                sessionId,
-              } as never);
-            }
-          }
+          forwardSessionUpdate
         );
 
         if (!adapter) {
@@ -745,15 +692,7 @@ export async function POST(request: NextRequest) {
           // Try to get existing adapter, or recreate for cancel (though cancel is less critical)
           const adapter = await manager.getOrRecreateClaudeCodeSdkAdapter(
             sessionId,
-            (msg) => {
-              if (msg.method === "session/update" && msg.params) {
-                const params = msg.params as Record<string, unknown>;
-                store.pushNotification({
-                  ...params,
-                  sessionId,
-                } as never);
-              }
-            }
+            createSessionUpdateForwarder(store, sessionId)
           );
           if (adapter) {
             adapter.cancel();
@@ -965,6 +904,90 @@ interface JsonRpcError {
   message: string;
   authMethods?: Array<{ id: string; name: string; description: string }>;
   agentInfo?: { name: string; version: string };
+}
+
+function createSessionUpdateForwarder(
+  store: ReturnType<typeof getHttpSessionStore>,
+  sessionId: string,
+) {
+  return (msg: { method?: string; params?: Record<string, unknown> }) => {
+    if (msg.method !== "session/update" || !msg.params) return;
+
+    const params = msg.params as Record<string, unknown>;
+    const notification = {
+      ...params,
+      sessionId,
+    } as SessionUpdateNotification;
+
+    const renamedTitle = extractSetAgentNameTitle(notification);
+    if (renamedTitle) {
+      void renameSessionFromToolCall(store, sessionId, renamedTitle);
+    }
+
+    store.pushNotification(notification);
+  };
+}
+
+function extractSetAgentNameTitle(notification: SessionUpdateNotification): string | undefined {
+  const update = notification.update as Record<string, unknown> | undefined;
+  if (!update) return undefined;
+
+  const sessionUpdate = update.sessionUpdate as string | undefined;
+  if (!sessionUpdate || !sessionUpdate.startsWith("tool_call")) return undefined;
+
+  const candidates = [
+    update.kind,
+    update.title,
+    update.toolName,
+  ]
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.toLowerCase());
+
+  const isSetAgentNameCall = candidates.some((c) =>
+    c.includes("set_agent_name") || c.includes("set agent name")
+  );
+  if (!isSetAgentNameCall) return undefined;
+
+  const rawInput =
+    typeof update.rawInput === "object" && update.rawInput !== null
+      ? (update.rawInput as Record<string, unknown>)
+      : undefined;
+  const rawName = rawInput?.name;
+
+  if (typeof rawName !== "string") return undefined;
+  return normalizeAgentSessionTitle(rawName);
+}
+
+function normalizeAgentSessionTitle(rawName: string): string | undefined {
+  const trimmed = rawName.trim().replace(/\s+/g, " ");
+  if (!trimmed) return undefined;
+
+  const words = trimmed.split(" ").slice(0, 5);
+  const normalized = words.join(" ").slice(0, 80).trim();
+  return normalized || undefined;
+}
+
+async function renameSessionFromToolCall(
+  store: ReturnType<typeof getHttpSessionStore>,
+  sessionId: string,
+  name: string,
+): Promise<void> {
+  const existing = store.getSession(sessionId);
+  if (!existing) return;
+  if (existing.name === name) return;
+
+  const renamed = store.renameSession(sessionId, name);
+  if (!renamed) return;
+
+  await renameSessionInDb(sessionId, name);
+
+  store.pushNotification({
+    sessionId,
+    update: {
+      sessionUpdate: "session_renamed",
+      name,
+    },
+  });
 }
 
 function jsonrpcResponse(
