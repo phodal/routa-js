@@ -4,11 +4,7 @@
  * Trace Page - /traces
  *
  * Full-page view for browsing and analyzing Agent Trace records.
- * Features:
- * - Session list sidebar for selecting sessions
- * - Main trace panel showing detailed trace records
- * - Statistics overview
- * - Export functionality
+ * Sessions are cross-referenced with /api/sessions to show names.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -16,6 +12,8 @@ import { TracePanel } from "@/client/components/trace-panel";
 
 interface Session {
   sessionId: string;
+  name?: string;
+  provider?: string;
   count: number;
   firstTimestamp: string;
   lastTimestamp: string;
@@ -27,17 +25,25 @@ export default function TracePage() {
   const [loading, setLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
-  // Fetch all sessions
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/traces", { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(`Failed to fetch traces: ${res.statusText}`);
-      }
+      // Fetch traces and session metadata in parallel
+      const [tracesRes, sessionsRes] = await Promise.all([
+        fetch("/api/traces", { cache: "no-store" }),
+        fetch("/api/sessions", { cache: "no-store" }),
+      ]);
 
-      const data = await res.json();
-      const traces = data.traces || [];
+      const tracesData = tracesRes.ok ? await tracesRes.json() : { traces: [] };
+      const sessionsData = sessionsRes.ok ? await sessionsRes.json() : { sessions: [] };
+
+      const traces = tracesData.traces || [];
+      const sessionMeta = new Map<string, { name?: string; provider?: string }>(
+        (sessionsData.sessions || []).map((s: { sessionId: string; name?: string; provider?: string }) => [
+          s.sessionId,
+          { name: s.name, provider: s.provider },
+        ])
+      );
 
       // Group traces by session
       const sessionMap = new Map<string, { count: number; first: string; last: string }>();
@@ -45,11 +51,7 @@ export default function TracePage() {
         const sid = trace.sessionId || "unknown";
         const existing = sessionMap.get(sid);
         if (!existing) {
-          sessionMap.set(sid, {
-            count: 1,
-            first: trace.timestamp,
-            last: trace.timestamp,
-          });
+          sessionMap.set(sid, { count: 1, first: trace.timestamp, last: trace.timestamp });
         } else {
           existing.count++;
           if (trace.timestamp < existing.first) existing.first = trace.timestamp;
@@ -57,10 +59,11 @@ export default function TracePage() {
         }
       }
 
-      // Convert to array and sort by last timestamp (newest first)
       const sessionList = Array.from(sessionMap.entries())
         .map(([sessionId, { count, first, last }]) => ({
           sessionId,
+          name: sessionMeta.get(sessionId)?.name,
+          provider: sessionMeta.get(sessionId)?.provider,
           count,
           firstTimestamp: first,
           lastTimestamp: last,
@@ -69,7 +72,6 @@ export default function TracePage() {
 
       setSessions(sessionList);
 
-      // Auto-select first session if none selected
       if (!selectedSessionId && sessionList.length > 0) {
         setSelectedSessionId(sessionList[0].sessionId);
       }
@@ -186,17 +188,24 @@ export default function TracePage() {
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <code className="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
-                          {session.sessionId.length > 20
-                            ? `${session.sessionId.slice(0, 10)}...${session.sessionId.slice(-6)}`
-                            : session.sessionId}
-                        </code>
+                        <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {session.name || (
+                            <code className="font-mono">
+                              {session.sessionId.slice(0, 8)}…
+                            </code>
+                          )}
+                        </span>
                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">
                           {session.count}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         <span>{formatTimestamp(session.lastTimestamp)}</span>
+                        {session.provider && (
+                          <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[10px]">
+                            {session.provider}
+                          </span>
+                        )}
                       </div>
                     </button>
                   ))}
@@ -240,4 +249,3 @@ export default function TracePage() {
     </div>
   );
 }
-
