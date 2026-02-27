@@ -24,7 +24,12 @@ const nextConfig: NextConfig = {
   // bundle. It's not statically imported so file-tracing won't pick it up
   // automatically; this forces Vercel to copy the whole SDK package.
   outputFileTracingIncludes: {
-    "/api/**": ["./node_modules/@anthropic-ai/claude-agent-sdk/**/*"],
+    "/api/**": [
+      "./node_modules/@anthropic-ai/claude-agent-sdk/**/*",
+      // Include skill definitions so Claude Code SDK can discover them on Vercel
+      "./.claude/skills/**/*",
+      "./.agents/skills/**/*",
+    ],
   },
   ...(isDesktopServerBuild ? { distDir: ".next-desktop" } : {}),
   ...(isDesktopStandaloneBuild

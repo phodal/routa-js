@@ -418,6 +418,10 @@ export async function POST(request: NextRequest) {
           .join("\n");
       }
 
+      // Extract skill context (passed from UI when user selects a /skill)
+      const skillName = p.skillName as string | undefined;
+      const skillContent = p.skillContent as string | undefined;
+
       // ── Auto-create session if it doesn't exist ────────────────────────
       // Check if session exists in any of the process managers
       const sessionExists =
@@ -632,11 +636,12 @@ export async function POST(request: NextRequest) {
         // Return streaming SSE response to prevent serverless timeout
         // Each event is sent immediately as it's received from the SDK
         // Pass the ACP sessionId so notifications match what client expects
+        // Pass skill content as appendSystemPrompt for proper skill integration
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           async start(controller) {
             try {
-              for await (const event of adapter.promptStream(promptText, sessionId)) {
+              for await (const event of adapter.promptStream(promptText, sessionId, skillContent)) {
                 controller.enqueue(encoder.encode(event));
               }
               store.flushAgentBuffer(sessionId);

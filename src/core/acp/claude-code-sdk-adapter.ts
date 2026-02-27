@@ -173,8 +173,9 @@ export class ClaudeCodeSdkAdapter {
    *
    * @param text - The prompt text
    * @param acpSessionId - The ACP session ID to use in notifications (must match client's session)
+   * @param skillContent - Optional skill content to inject via systemPrompt.append
    */
-  async *promptStream(text: string, acpSessionId?: string): AsyncGenerator<string, void, unknown> {
+  async *promptStream(text: string, acpSessionId?: string, skillContent?: string): AsyncGenerator<string, void, unknown> {
     if (!this._alive || !this.sessionId) {
       throw new Error("No active session");
     }
@@ -220,6 +221,19 @@ export class ClaudeCodeSdkAdapter {
         settingSources: ["user", "project"],
         // Enable the Skill tool so Claude can invoke SKILL.md-defined skills
         allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        // When a skill is explicitly selected via /skill in the UI, inject its
+        // content into the system prompt using the preset+append mechanism.
+        // This is the official SDK approach for skill integration — see:
+        // https://platform.claude.com/docs/en/agent-sdk/skills
+        ...(skillContent
+          ? {
+              systemPrompt: {
+                type: "preset" as const,
+                preset: "claude_code" as const,
+                append: skillContent,
+              },
+            }
+          : {}),
         env: {
           ...process.env,
           CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? "/tmp/.claude",

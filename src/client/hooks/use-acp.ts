@@ -62,7 +62,7 @@ export interface UseAcpActions {
   selectSession: (sessionId: string) => void;
   setProvider: (provider: string) => void;
   setMode: (modeId: string) => Promise<void>;
-  prompt: (text: string) => Promise<void>;
+  prompt: (text: string, skillContext?: { skillName: string; skillContent: string }) => Promise<void>;
   cancel: () => Promise<void>;
   disconnect: () => void;
   /** Clear auth error (e.g., when user dismisses the popup) */
@@ -289,14 +289,17 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
   }, []);
 
   /** Send a prompt to current session (content streams over SSE). */
-  const prompt = useCallback(async (text: string): Promise<void> => {
+  const prompt = useCallback(async (
+    text: string,
+    skillContext?: { skillName: string; skillContent: string },
+  ): Promise<void> => {
     const client = clientRef.current;
     const sessionId = sessionIdRef.current;
     if (!client || !sessionId) return;
 
     try {
       setState((s) => ({ ...s, loading: true, error: null }));
-      await client.prompt(sessionId, text);
+      await client.prompt(sessionId, text, skillContext);
       setState((s) => ({ ...s, loading: false }));
     } catch (err) {
       logRuntime("error", "useAcp.prompt", "Failed to send prompt", err);

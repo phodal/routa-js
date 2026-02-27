@@ -1028,6 +1028,9 @@ export function buildClaudeCodeConfig(
         env: extraEnv,
         displayName: "Claude Code",
         permissionMode: permissionMode ?? "bypassPermissions",
+        // Enable Skill tool so Claude Code CLI can discover and use skills
+        // from .claude/skills/ and ~/.claude/skills/ directories
+        allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         mcpConfigs: mcpConfigs ?? [],
     };
 }

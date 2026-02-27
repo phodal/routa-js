@@ -194,9 +194,29 @@ export class BrowserAcpClient {
    * Send a prompt to the session.
    * Content streams via SSE session/update notifications.
    * In serverless environments, the POST response itself streams SSE events.
+   *
+   * @param sessionId - The session to send to
+   * @param text - The prompt text
+   * @param skillContext - Optional skill context (name + content) from UI /skill selection
    */
-  async prompt(sessionId: string, text: string): Promise<AcpPromptResult> {
+  async prompt(
+    sessionId: string,
+    text: string,
+    skillContext?: { skillName: string; skillContent: string },
+  ): Promise<AcpPromptResult> {
     const id = ++this.requestId;
+
+    const params: Record<string, unknown> = {
+      sessionId,
+      prompt: [{ type: "text", text }],
+    };
+
+    // Pass skill context so the backend can inject it via appendSystemPrompt (SDK)
+    // or prepend to prompt (CLI) for proper skill integration
+    if (skillContext) {
+      params.skillName = skillContext.skillName;
+      params.skillContent = skillContext.skillContent;
+    }
 
     const response = await fetch(`${this.baseUrl}/api/acp`, {
       method: "POST",
@@ -205,7 +225,7 @@ export class BrowserAcpClient {
         jsonrpc: "2.0",
         id,
         method: "session/prompt",
-        params: { sessionId, prompt: [{ type: "text", text }] },
+        params,
       }),
     });
 

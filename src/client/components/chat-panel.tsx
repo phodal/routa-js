@@ -1025,11 +1025,16 @@ export function ChatPanel({
     streamingThoughtIdRef.current[sid] = null;
 
     // Build the final prompt:
-    // - If a skill is selected, prepend its content
+    // - If a skill is selected, load its content and pass as structured context
+    //   to the backend so it can inject via appendSystemPrompt (SDK) or
+    //   prepend to prompt (CLI) for proper skill integration.
     let finalPrompt = text;
+    let skillContext: { skillName: string; skillContent: string } | undefined;
     if (context.skill && onLoadSkill) {
       const skillContent = await onLoadSkill(context.skill);
       if (skillContent) {
+        skillContext = { skillName: context.skill, skillContent };
+        // Also prepend as fallback for providers that don't support appendSystemPrompt
         finalPrompt = `[Skill: ${context.skill}]\n${skillContent}\n\n---\n\n${text}`;
       }
     }
@@ -1056,7 +1061,7 @@ export function ChatPanel({
       return next;
     });
 
-    await prompt(finalPrompt);
+    await prompt(finalPrompt, skillContext);
 
     streamingMsgIdRef.current[sid] = null;
     streamingThoughtIdRef.current[sid] = null;
