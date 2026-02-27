@@ -816,3 +816,138 @@ export class SqliteAcpSessionStore implements AcpSessionStore {
     };
   }
 }
+
+// ─── SQLite Skill Store ──────────────────────────────────────────────────
+
+import type { SkillFileEntry } from "./schema";
+import type { SkillDefinition } from "../skills/skill-loader";
+
+export interface StoredSkill {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  catalogType: string;
+  files: SkillFileEntry[];
+  license?: string;
+  metadata: Record<string, string>;
+  installs: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class SqliteSkillStore {
+  constructor(private db: SqliteDb) {}
+
+  /**
+   * Save or update a skill.
+   */
+  async save(skill: {
+    id: string;
+    name: string;
+    description: string;
+    source: string;
+    catalogType: string;
+    files: SkillFileEntry[];
+    license?: string;
+    metadata?: Record<string, string>;
+  }): Promise<void> {
+    const existing = await this.get(skill.id);
+    if (existing) {
+      await this.db
+        .update(sqliteSchema.skills)
+        .set({
+          name: skill.name,
+          description: skill.description,
+          source: skill.source,
+          catalogType: skill.catalogType,
+          files: JSON.stringify(skill.files),
+          license: skill.license ?? null,
+          metadata: JSON.stringify(skill.metadata ?? {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(sqliteSchema.skills.id, skill.id));
+    } else {
+      await this.db.insert(sqliteSchema.skills).values({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        source: skill.source,
+        catalogType: skill.catalogType,
+        files: JSON.stringify(skill.files),
+        license: skill.license ?? null,
+        metadata: JSON.stringify(skill.metadata ?? {}),
+        installs: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+  }
+
+  /**
+   * Get a skill by ID (name).
+   */
+  async get(skillId: string): Promise<StoredSkill | undefined> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.skills)
+      .where(eq(sqliteSchema.skills.id, skillId))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
+  /**
+   * List all installed skills.
+   */
+  async list(): Promise<StoredSkill[]> {
+    const rows = await this.db.select().from(sqliteSchema.skills);
+    return rows.map(this.toModel);
+  }
+
+  /**
+   * Delete a skill by ID.
+   */
+  async delete(skillId: string): Promise<void> {
+    await this.db
+      .delete(sqliteSchema.skills)
+      .where(eq(sqliteSchema.skills.id, skillId));
+  }
+
+  /**
+   * Convert a stored skill to a SkillDefinition for API compatibility.
+   * Extracts content from the SKILL.md file in the files array.
+   */
+  toSkillDefinition(skill: StoredSkill): SkillDefinition {
+    // Find the main SKILL.md file
+    const skillFile = skill.files.find(
+      (f) => f.path === "SKILL.md" || f.path.endsWith("/SKILL.md")
+    );
+    const content = skillFile?.content ?? "";
+
+    return {
+      name: skill.name,
+      description: skill.description,
+      content,
+      source: `db:${skill.source}`,
+      license: skill.license,
+      metadata: skill.metadata,
+    };
+  }
+
+  private toModel(row: typeof sqliteSchema.skills.$inferSelect): StoredSkill {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      source: row.source,
+      catalogType: row.catalogType,
+      files: (JSON.parse(row.files ?? "[]") as SkillFileEntry[]) ?? [],
+      license: row.license ?? undefined,
+      metadata: (JSON.parse(row.metadata ?? "{}") as Record<string, string>) ?? {},
+      installs: row.installs,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+}
+

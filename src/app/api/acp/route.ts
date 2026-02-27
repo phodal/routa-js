@@ -42,8 +42,85 @@ import {
 } from "@/core/trace";
 import { getDatabaseDriver, getPostgresDatabase } from "@/core/db/index";
 import { PgAcpSessionStore } from "@/core/db/pg-acp-session-store";
+import { PgSkillStore } from "@/core/db/pg-skill-store";
+import { SkillRegistry } from "@/core/skills/skill-registry";
+import { discoverSkillsFromPath } from "@/core/skills";
 
 export const dynamic = "force-dynamic";
+
+// ─── Skill Content Loading Helper ──────────────────────────────────────
+/**
+ * Load skill content by name from:
+ *   1. Filesystem (project + global directories)
+ *   2. Database (for serverless/desktop environments)
+ *   3. Repository skills directory (if repoPath provided)
+ */
+async function loadSkillContent(
+  skillName: string,
+  repoPath?: string
+): Promise<string | undefined> {
+  try {
+    // Try filesystem first
+    const registry = new SkillRegistry({ projectDir: process.cwd() });
+    const fsSkill = registry.getSkill(skillName);
+    if (fsSkill?.content) {
+      return fsSkill.content;
+    }
+
+    // Try repository skills if path provided
+    if (repoPath) {
+      const repoSkills = discoverSkillsFromPath(repoPath);
+      const repoSkill = repoSkills.find((s) => s.name === skillName);
+      if (repoSkill?.content) {
+        return repoSkill.content;
+      }
+    }
+
+    // Try database (Postgres - serverless environments)
+    if (getDatabaseDriver() === "postgres") {
+      try {
+        const db = getPostgresDatabase();
+        const skillStore = new PgSkillStore(db);
+        const storedSkill = await skillStore.get(skillName);
+        if (storedSkill) {
+          const skillDef = skillStore.toSkillDefinition(storedSkill);
+          if (skillDef.content) {
+            return skillDef.content;
+          }
+        }
+      } catch (err) {
+        console.warn(`[Skill Loader] Failed to load skill from Postgres database: ${skillName}`, err);
+      }
+    }
+
+    // Try database (SQLite - desktop environments)
+    if (getDatabaseDriver() === "sqlite") {
+      try {
+        // Dynamically require SQLite to avoid bundling in web builds
+        const dynamicRequire = eval("require") as NodeRequire;
+        const { getSqliteDatabase } = dynamicRequire("@/core/db/sqlite");
+        const { SqliteSkillStore } = dynamicRequire("@/core/db/sqlite-stores");
+        const db = getSqliteDatabase();
+        const skillStore = new SqliteSkillStore(db);
+        const storedSkill = await skillStore.get(skillName);
+        if (storedSkill) {
+          const skillDef = skillStore.toSkillDefinition(storedSkill);
+          if (skillDef.content) {
+            return skillDef.content;
+          }
+        }
+      } catch (err) {
+        console.warn(`[Skill Loader] Failed to load skill from SQLite database: ${skillName}`, err);
+      }
+    }
+
+    console.warn(`[Skill Loader] Skill not found: ${skillName}`);
+    return undefined;
+  } catch (err) {
+    console.warn(`[Skill Loader] Error loading skill ${skillName}:`, err);
+    return undefined;
+  }
+}
 
 // ─── Idempotency cache for session/new requests ─────────────────────────
 // Prevents duplicate session creation when user clicks multiple times
@@ -420,7 +497,17 @@ export async function POST(request: NextRequest) {
 
       // Extract skill context (passed from UI when user selects a /skill)
       const skillName = p.skillName as string | undefined;
-      const skillContent = p.skillContent as string | undefined;
+      let skillContent = p.skillContent as string | undefined;
+
+      // Load skill content from filesystem/database if skillName is provided but content is missing
+      if (skillName && !skillContent) {
+        const cwd = (p.cwd as string | undefined) ?? process.cwd();
+        console.log(`[ACP Route] Loading skill content for: ${skillName}`);
+        skillContent = await loadSkillContent(skillName, cwd);
+        if (!skillContent) {
+          console.warn(`[ACP Route] Could not load skill content for: ${skillName}, proceeding without skill`);
+        }
+      }
 
       // ── Auto-create session if it doesn't exist ────────────────────────
       // Check if session exists in any of the process managers
