@@ -3,9 +3,11 @@
 //! Each submodule corresponds to a top-level CLI command and reuses
 //! the routa-core domain logic through `AppState`.
 
+pub mod acp_serve;
 pub mod agent;
 pub mod chat;
 pub mod delegate;
+pub mod prompt;
 pub mod rpc;
 pub mod server;
 pub mod skill;

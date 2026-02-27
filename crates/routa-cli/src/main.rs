@@ -15,8 +15,21 @@ pub struct Cli {
     #[arg(long, env = "ROUTA_DB_PATH", default_value = "routa.db")]
     db: String,
 
+    /// Quick prompt mode: run the full Routa coordinator flow.
+    /// Example: routa -p "Add a login page with OAuth support"
+    #[arg(short = 'p', long = "prompt")]
+    prompt: Option<String>,
+
+    /// Workspace ID (used with -p prompt mode)
+    #[arg(long, default_value = "default")]
+    workspace_id: String,
+
+    /// ACP provider for agent sessions (used with -p prompt mode)
+    #[arg(long, default_value = "opencode")]
+    provider: String,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -32,6 +45,17 @@ enum Commands {
         /// Path to static frontend directory (Next.js export)
         #[arg(long)]
         static_dir: Option<String>,
+    },
+
+    /// Run Routa as an ACP (Agent Client Protocol) server over stdio.
+    /// Other agents can connect to Routa as an ACP provider.
+    Acp {
+        /// Workspace ID
+        #[arg(long, default_value = "default")]
+        workspace_id: String,
+        /// Default ACP provider for child agents (e.g. "opencode", "claude")
+        #[arg(long, default_value = "opencode")]
+        provider: String,
     },
 
     /// Manage agents
@@ -226,12 +250,33 @@ async fn main() {
         )
         .init();
 
-    let result = match cli.command {
+    let result = if let Some(prompt_text) = cli.prompt {
+        // ── Quick prompt mode: routa -p "requirement" ───────────────
+        // Resolve full shell PATH so child processes can be found
+        let full_path = routa_core::shell_env::full_path();
+        std::env::set_var("PATH", full_path);
+
+        let state = commands::init_state(&cli.db).await;
+        commands::prompt::run(&state, &prompt_text, &cli.workspace_id, &cli.provider).await
+    } else if let Some(command) = cli.command {
+        match command {
         Commands::Server {
             host,
             port,
             static_dir,
         } => commands::server::run(host, port, cli.db, static_dir).await,
+
+        Commands::Acp {
+            workspace_id,
+            provider,
+        } => {
+            // Resolve full shell PATH so child processes can be found
+            let full_path = routa_core::shell_env::full_path();
+            std::env::set_var("PATH", full_path);
+
+            let state = commands::init_state(&cli.db).await;
+            commands::acp_serve::run(&state, &workspace_id, &provider).await
+        }
 
         Commands::Agent { action } => {
             let state = commands::init_state(&cli.db).await;
@@ -351,6 +396,13 @@ async fn main() {
             let state = commands::init_state(&cli.db).await;
             commands::chat::run(&state, &workspace_id, &provider, &role).await
         }
+        }
+    } else {
+        // No prompt and no subcommand — show help
+        use clap::CommandFactory;
+        Cli::command().print_help().ok();
+        println!();
+        Ok(())
     };
 
     if let Err(e) = result {
