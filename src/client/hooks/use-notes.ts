@@ -23,6 +23,7 @@ export interface NoteData {
   title: string;
   content: string;
   workspaceId: string;
+  sessionId?: string;
   metadata: {
     type: "spec" | "task" | "general";
     taskStatus?: string;
@@ -50,6 +51,7 @@ export interface UseNotesReturn {
     title: string;
     content?: string;
     type?: "spec" | "task" | "general";
+    sessionId?: string;
     metadata?: Record<string, unknown>;
   }) => Promise<NoteData | null>;
   /** Update an existing note */
@@ -71,6 +73,7 @@ function normalizeNote(raw: Record<string, unknown>): NoteData {
     title: raw.title as string,
     content: (raw.content as string) ?? "",
     workspaceId: raw.workspaceId as string,
+    sessionId: raw.sessionId as string | undefined,
     metadata: (raw.metadata ?? { type: "general" }) as NoteData["metadata"],
     createdAt: typeof raw.createdAt === "string"
       ? raw.createdAt
@@ -131,6 +134,7 @@ export function useNotes(workspaceId: string): UseNotesReturn {
       title: string;
       content?: string;
       type?: "spec" | "task" | "general";
+      sessionId?: string;
       metadata?: Record<string, unknown>;
     }): Promise<NoteData | null> => {
       try {

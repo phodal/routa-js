@@ -623,14 +623,14 @@ export function SessionPageClient() {
           title: task.title,
           content: taskContent,
           type: "task",
-          metadata: { taskStatus: "PENDING", custom: { sessionId } },
+          sessionId: sessionId,
+          metadata: { taskStatus: "PENDING" },
         });
       } catch {
         // Note may already exist, try updating
         await notesHook.updateNote(`task-${task.id}`, {
           title: task.title,
           content: taskContent,
-          metadata: { custom: { sessionId } },
         });
       }
     }
@@ -1030,7 +1030,7 @@ export function SessionPageClient() {
   // Filter notes for the active session
   // Task notes MUST have matching sessionId; spec/general notes can be workspace-wide
   const sessionNotes = notesHook.notes.filter((n) => {
-    const noteSessionId = n.metadata.custom?.sessionId;
+    const noteSessionId = n.sessionId;
     // Task notes require exact session match
     if (n.metadata.type === "task") {
       return noteSessionId === sessionId;
