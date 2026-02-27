@@ -112,7 +112,9 @@ export function createPgSystem(): RoutaSystem {
 
   const eventBus = new EventBus();
   const tools = new AgentTools(agentStore, conversationStore, taskStore, eventBus);
-  const noteTools = new NoteTools(noteStore, taskStore);
+  // PgNoteStore doesn't broadcast on save — pass the broadcaster so NoteTools can notify the
+  // real-time sidebar whenever set_note_content / create_note / append_to_note are called.
+  const noteTools = new NoteTools(noteStore, taskStore, noteBroadcaster);
   const workspaceTools = new WorkspaceTools(agentStore, taskStore, noteStore);
 
   // Wire workspace store and event bus
@@ -154,6 +156,9 @@ export function createSqliteSystem(): RoutaSystem {
   let noteStore: NoteStore;
   let workspaceStore: WorkspaceStore;
   let codebaseStore: CodebaseStore;
+  // True when noteStore doesn't broadcast on save (SqliteNoteStore); NoteTools will broadcast.
+  // False when CRDTNoteStore is used as fallback (it already broadcasts internally).
+  let noteToolsBroadcast = false;
 
   try {
     // Use indirect require to prevent webpack from statically analyzing these imports.
@@ -177,6 +182,7 @@ export function createSqliteSystem(): RoutaSystem {
     noteStore = new SqliteNoteStore(db);
     workspaceStore = new SqliteWorkspaceStore(db);
     codebaseStore = new SqliteCodebaseStore(db);
+    noteToolsBroadcast = true; // SqliteNoteStore doesn't broadcast — NoteTools must
   } catch (err) {
     // Standalone desktop bundles may not include sqlite dynamic modules.
     // Keep app usable by falling back to in-memory stores.
@@ -194,7 +200,8 @@ export function createSqliteSystem(): RoutaSystem {
 
   const eventBus = new EventBus();
   const tools = new AgentTools(agentStore, conversationStore, taskStore, eventBus);
-  const noteTools = new NoteTools(noteStore, taskStore);
+  // Pass broadcaster only when noteStore doesn't broadcast on its own (SqliteNoteStore case).
+  const noteTools = new NoteTools(noteStore, taskStore, noteToolsBroadcast ? noteBroadcaster : undefined);
   const workspaceTools = new WorkspaceTools(agentStore, taskStore, noteStore);
 
   workspaceTools.setWorkspaceStore(workspaceStore);

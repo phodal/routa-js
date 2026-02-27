@@ -13,11 +13,18 @@ import { createNote, Note, SPEC_NOTE_ID } from "../models/note";
 import { createTask as createTaskModel, TaskStatus } from "../models/task";
 import { extractTaskBlocks, hasTaskBlocks } from "../orchestration/task-block-parser";
 import { ToolResult, successResult, errorResult } from "./tool-result";
+import { NoteEventBroadcaster } from "../notes/note-event-broadcaster";
 
 export class NoteTools {
   constructor(
     private noteStore: NoteStore,
-    private taskStore: TaskStore
+    private taskStore: TaskStore,
+    /**
+     * Optional broadcaster for real-time SSE note updates.
+     * Pass this when noteStore doesn't broadcast on its own (PgNoteStore, SqliteNoteStore).
+     * CRDTNoteStore already broadcasts internally — omit to avoid double-broadcasting.
+     */
+    private broadcaster?: NoteEventBroadcaster,
   ) {}
 
   // ─── Create Note ───────────────────────────────────────────────────────
@@ -333,6 +340,10 @@ export class NoteTools {
     source: "agent" | "user" | "system"
   ): Promise<void> {
     await this.noteStore.save(note, source);
+    // Broadcast changes for real-time sidebar updates.
+    // note:updated is used for both new and existing notes because the useNotes
+    // hook adds the note if it isn't already in state (covers both cases).
+    this.broadcaster?.notifyUpdated(note, source);
   }
 
   // ─── Delete Note ──────────────────────────────────────────────────────

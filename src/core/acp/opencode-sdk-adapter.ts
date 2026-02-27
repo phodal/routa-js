@@ -682,7 +682,9 @@ export class OpencodeSdkAdapter {
               sessionId,
               update: {
                 sessionUpdate: "tool_call",
-                title: state.title ?? toolName,
+                // Always use part.tool as the canonical name; state.title from OpenCode
+                // may be a generic category like "other" for custom MCP tools.
+                title: toolName !== "unknown" ? toolName : (state.title ?? toolName),
                 toolCallId,
                 status: "running",
                 rawInput: state.input,
@@ -694,7 +696,9 @@ export class OpencodeSdkAdapter {
               sessionId,
               update: {
                 sessionUpdate: "tool_call_update",
-                title: state.title ?? toolName,
+                // Always use part.tool as the canonical name; state.title from OpenCode
+                // may be a generic category like "other" for custom MCP tools.
+                title: toolName !== "unknown" ? toolName : (state.title ?? toolName),
                 toolCallId,
                 status: "completed",
                 rawInput: state.input,
@@ -707,7 +711,7 @@ export class OpencodeSdkAdapter {
               sessionId,
               update: {
                 sessionUpdate: "tool_call_update",
-                title: toolName,
+                title: toolName !== "unknown" ? toolName : (state.title ?? toolName),
                 toolCallId,
                 status: "completed",
                 rawOutput: state.error ?? "Tool execution failed",
