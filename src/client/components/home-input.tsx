@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * HomeInput - Landing page input component
+ * HomeInput - Task-first input component
  *
- * A hero-style input for the home page that:
- * - Uses TiptapInput internally for skills, file mentions, etc.
- * - Provides mode selection (ROUTA vs CRAFTER)
- * - Shows provider/model selection
- * - Creates session and navigates to workspace
+ * An operational input that prioritizes the user's immediate intent:
+ * - TiptapInput for rich text, skills (/), file mentions (@)
+ * - Inline control bar: Agent dropdown, Workspace pill, Repo/Branch pill
+ * - Agent selection is lightweight — a small dropdown, not separate cards
+ * - Context (workspace/repo) is always visible but non-intrusive
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -19,7 +19,7 @@ import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
 import type { RepoSelection } from "./repo-picker";
 import { storePendingPrompt } from "../utils/pending-prompt";
 
-type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
+type AgentRole = "ROUTA" | "DEVELOPER";
 
 interface HomeInputProps {
   /** Initial workspace ID (optional) */
@@ -27,9 +27,19 @@ interface HomeInputProps {
   /** Called when workspace selection changes */
   onWorkspaceChange?: (workspaceId: string | null) => void;
   onSessionCreated?: (sessionId: string) => void;
+  /** Externally triggered skill (e.g. from grid card click) */
+  externalPendingSkill?: string | null;
+  /** Called after the external skill has been consumed */
+  onExternalSkillConsumed?: () => void;
 }
 
-export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onSessionCreated }: HomeInputProps) {
+export function HomeInput({
+  workspaceId: propWorkspaceId,
+  onWorkspaceChange,
+  onSessionCreated,
+  externalPendingSkill,
+  onExternalSkillConsumed,
+}: HomeInputProps) {
   const router = useRouter();
   const acp = useAcp();
   const skillsHook = useSkills();
@@ -43,6 +53,12 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const [pendingSkill, setPendingSkill] = useState<string | null>(null);
+
+  // Dropdown states
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
+  const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+  const agentDropdownRef = useRef<HTMLDivElement>(null);
+  const wsDropdownRef = useRef<HTMLDivElement>(null);
 
   // Sync with external workspaceId prop
   useEffect(() => {
@@ -60,10 +76,14 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
     }
   }, [workspacesHook.workspaces, selectedWorkspaceId, onWorkspaceChange]);
 
-  const handleWorkspaceChange = useCallback((wsId: string | null) => {
-    setSelectedWorkspaceId(wsId);
-    onWorkspaceChange?.(wsId);
-  }, [onWorkspaceChange]);
+  const handleWorkspaceChange = useCallback(
+    (wsId: string | null) => {
+      setSelectedWorkspaceId(wsId);
+      onWorkspaceChange?.(wsId);
+      setShowWorkspaceDropdown(false);
+    },
+    [onWorkspaceChange],
+  );
 
   // Auto-connect ACP
   useEffect(() => {
@@ -92,6 +112,28 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
     });
   }, [codebases]);
 
+  // Handle external pending skill from grid
+  useEffect(() => {
+    if (externalPendingSkill) {
+      setPendingSkill(externalPendingSkill);
+      onExternalSkillConsumed?.();
+    }
+  }, [externalPendingSkill, onExternalSkillConsumed]);
+
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setShowAgentDropdown(false);
+      }
+      if (wsDropdownRef.current && !wsDropdownRef.current.contains(e.target as Node)) {
+        setShowWorkspaceDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const handleSend = useCallback(
     async (text: string, context: InputContext) => {
       if (!text.trim() || !acp.connected) return;
@@ -109,205 +151,285 @@ export function HomeInput({ workspaceId: propWorkspaceId, onWorkspaceChange, onS
           selectedRole,
           wsId,
           context.model,
-          idempotencyKey
+          idempotencyKey,
         );
 
         if (result?.sessionId) {
-          const url = wsId
-            ? `/${wsId}/${result.sessionId}`
-            : `/${result.sessionId}`;
-
-          // Store the prompt for the session page to send after navigation
-          // This avoids ACP request cancellation during page transition
+          const url = wsId ? `/${wsId}/${result.sessionId}` : `/${result.sessionId}`;
           storePendingPrompt(result.sessionId, text);
-
           onSessionCreated?.(result.sessionId);
           router.push(url);
-          // Don't send prompt here - it will be sent by the session page
         }
       } finally {
         isSubmittingRef.current = false;
         setIsSubmitting(false);
       }
     },
-    [acp, repoSelection, selectedRole, selectedWorkspaceId, router, onSessionCreated]
+    [acp, repoSelection, selectedRole, selectedWorkspaceId, router, onSessionCreated],
   );
 
+  const activeWorkspace = workspacesHook.workspaces.find((w) => w.id === selectedWorkspaceId);
+
   return (
-    <div className="w-full max-w-3xl mx-auto">
-      {/* Hero title */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-          What would you like to build?
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          Describe your task and let the agents help you.
-        </p>
-      </div>
+    <div className="w-full max-w-2xl mx-auto">
+      {/* Input container with ambient glow on focus */}
+      <div className="group relative">
+        {/* Glow effect */}
+        <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-amber-500/20 opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500 pointer-events-none" />
 
-      {/* Skills chip list */}
-      {skillsHook.allSkills.length > 0 && (
-        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 scrollbar-none">
-          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Skills:</span>
-          {skillsHook.allSkills.map((skill) => (
-            <button
-              key={skill.name}
-              type="button"
-              onClick={() => setPendingSkill(skill.name)}
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                pendingSkill === skill.name
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-white dark:bg-[#1a1f2e] text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-600"
-              }`}
-              title={skill.description}
-            >
-              /{skill.name}
-            </button>
-          ))}
+        <div className="relative bg-white dark:bg-[#12141c] rounded-2xl border border-gray-200 dark:border-[#1c1f2e] shadow-sm dark:shadow-none overflow-hidden transition-colors group-focus-within:border-amber-400/50 dark:group-focus-within:border-amber-500/30">
+          {/* TiptapInput */}
+          <TiptapInput
+            onSend={handleSend}
+            placeholder="What are you working on? (@ files, / skills)"
+            disabled={!acp.connected || isSubmitting}
+            loading={isSubmitting}
+            skills={skillsHook.skills}
+            repoSkills={skillsHook.repoSkills}
+            providers={acp.providers}
+            selectedProvider={acp.selectedProvider}
+            onProviderChange={acp.setProvider}
+            repoSelection={repoSelection}
+            onRepoChange={setRepoSelection}
+            agentRole={selectedRole}
+            onFetchModels={acp.listProviderModels}
+            pendingSkill={pendingSkill}
+            onSkillInserted={() => setPendingSkill(null)}
+          />
+
+          {/* ─── Bottom Control Bar ─────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 dark:border-[#1c1f2e]">
+            {/* Agent Role Selector — lightweight dropdown */}
+            <div className="relative" ref={agentDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowAgentDropdown((v) => !v)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                  selectedRole === "ROUTA"
+                    ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40"
+                    : "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-800/40"
+                }`}
+              >
+                <span
+                  className={`w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold ${
+                    selectedRole === "ROUTA"
+                      ? "bg-amber-500 text-white"
+                      : "bg-violet-500 text-white"
+                  }`}
+                >
+                  {selectedRole === "ROUTA" ? "R" : "D"}
+                </span>
+                {selectedRole === "ROUTA" ? "Routa" : "Developer"}
+                <svg
+                  className="w-3 h-3 opacity-50"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showAgentDropdown && (
+                <div className="absolute bottom-full left-0 mb-1 w-56 rounded-xl border border-gray-200 dark:border-[#1c1f2e] bg-white dark:bg-[#181b26] shadow-xl z-50 overflow-hidden">
+                  <div className="p-1">
+                    <button
+                      onClick={() => {
+                        setSelectedRole("ROUTA");
+                        setShowAgentDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-3 transition-colors ${
+                        selectedRole === "ROUTA"
+                          ? "bg-amber-50 dark:bg-amber-900/15"
+                          : "hover:bg-gray-50 dark:hover:bg-[#1f2233]"
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold ${
+                          selectedRole === "ROUTA"
+                            ? "bg-amber-500 text-white"
+                            : "bg-gray-100 dark:bg-gray-800 text-gray-500"
+                        }`}
+                      >
+                        R
+                      </span>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          Routa
+                        </div>
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          Orchestrate & plan tasks
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedRole("DEVELOPER");
+                        setShowAgentDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-3 transition-colors ${
+                        selectedRole === "DEVELOPER"
+                          ? "bg-violet-50 dark:bg-violet-900/15"
+                          : "hover:bg-gray-50 dark:hover:bg-[#1f2233]"
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold ${
+                          selectedRole === "DEVELOPER"
+                            ? "bg-violet-500 text-white"
+                            : "bg-gray-100 dark:bg-gray-800 text-gray-500"
+                        }`}
+                      >
+                        D
+                      </span>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          Developer
+                        </div>
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          Direct implementation & coding
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="w-px h-4 bg-gray-200 dark:bg-[#1c1f2e]" />
+
+            {/* Workspace Pill */}
+            {workspacesHook.workspaces.length > 0 && (
+              <div className="relative" ref={wsDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowWorkspaceDropdown((v) => !v)}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c1f2e] border border-transparent hover:border-gray-200 dark:hover:border-[#2a2d3d] transition-all"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 opacity-50"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776"
+                    />
+                  </svg>
+                  <span className="max-w-[120px] truncate">
+                    {activeWorkspace?.title ?? "Workspace"}
+                  </span>
+                  <svg
+                    className="w-2.5 h-2.5 opacity-40"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showWorkspaceDropdown && (
+                  <div className="absolute bottom-full left-0 mb-1 w-52 rounded-xl border border-gray-200 dark:border-[#1c1f2e] bg-white dark:bg-[#181b26] shadow-xl z-50 overflow-hidden">
+                    <div className="p-1 max-h-48 overflow-y-auto">
+                      {workspacesHook.workspaces.map((ws) => (
+                        <button
+                          key={ws.id}
+                          onClick={() => handleWorkspaceChange(ws.id)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 ${
+                            ws.id === selectedWorkspaceId
+                              ? "bg-amber-50 dark:bg-amber-900/15 text-amber-700 dark:text-amber-400"
+                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1f2233]"
+                          }`}
+                        >
+                          <svg
+                            className="w-3.5 h-3.5 opacity-50"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={1.5}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776"
+                            />
+                          </svg>
+                          {ws.title}
+                          {ws.id === selectedWorkspaceId && (
+                            <svg
+                              className="w-3.5 h-3.5 ml-auto text-amber-500"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M4.5 12.75l6 6 9-13.5"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Repo / Branch Pill */}
+            {repoSelection && (
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c1f2e] border border-transparent hover:border-gray-200 dark:hover:border-[#2a2d3d] transition-all"
+                title={repoSelection.path}
+              >
+                <svg
+                  className="w-3.5 h-3.5 opacity-50"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"
+                  />
+                </svg>
+                <span className="max-w-[100px] truncate">{repoSelection.name}</span>
+                {repoSelection.branch && (
+                  <>
+                    <span className="text-gray-300 dark:text-gray-600">/</span>
+                    <span className="max-w-[80px] truncate font-mono text-[11px]">
+                      {repoSelection.branch}
+                    </span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Keyboard hint */}
+            <span className="hidden sm:inline text-[11px] text-gray-400 dark:text-gray-500">
+              <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1c1f2e] font-mono text-[10px]">
+                ⏎
+              </kbd>{" "}
+              send
+            </span>
+          </div>
         </div>
-      )}
-
-      {/* Mode selection cards */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <ModeCard
-          active={selectedRole === "ROUTA"}
-          onClick={() => setSelectedRole("ROUTA")}
-          icon="R"
-          name="Routa"
-          description="Task orchestration & planning. Generates specs and coordinates workflow."
-          color="indigo"
-          recommended
-        />
-        <ModeCard
-          active={selectedRole === "CRAFTER"}
-          onClick={() => setSelectedRole("CRAFTER")}
-          icon="C"
-          name="Crafter"
-          description="Direct implementation. Focuses on coding and execution."
-          color="violet"
-        />
-      </div>
-
-      {/* TiptapInput */}
-      <div className="bg-white dark:bg-[#1a1f2e] rounded-2xl border-2 border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden focus-within:border-indigo-400 dark:focus-within:border-indigo-600 transition-colors">
-        <TiptapInput
-          onSend={handleSend}
-          placeholder="Describe your task, question, or goal... (use @ for files, / for skills)"
-          disabled={!acp.connected || isSubmitting}
-          loading={isSubmitting}
-          skills={skillsHook.skills}
-          repoSkills={skillsHook.repoSkills}
-          providers={acp.providers}
-          selectedProvider={acp.selectedProvider}
-          onProviderChange={acp.setProvider}
-          repoSelection={repoSelection}
-          onRepoChange={setRepoSelection}
-          agentRole={selectedRole}
-          onFetchModels={acp.listProviderModels}
-          pendingSkill={pendingSkill}
-          onSkillInserted={() => setPendingSkill(null)}
-        />
-      </div>
-
-      {/* Workspace selector */}
-      {workspacesHook.workspaces.length > 0 && (
-        <div className="mt-4 flex items-center justify-center gap-3">
-          <label className="text-xs text-gray-500 dark:text-gray-400">Workspace:</label>
-          <select
-            value={selectedWorkspaceId ?? ""}
-            onChange={(e) => handleWorkspaceChange(e.target.value || null)}
-            className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          >
-            {workspacesHook.workspaces.map((ws) => (
-              <option key={ws.id} value={ws.id}>{ws.title}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Keyboard hint */}
-      <div className="mt-3 text-center text-xs text-gray-400 dark:text-gray-500">
-        Press <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">Enter</kbd> to send
       </div>
     </div>
-  );
-}
-
-// ─── Mode Card Component ───────────────────────────────────────────────
-
-interface ModeCardProps {
-  active: boolean;
-  onClick: () => void;
-  icon: string;
-  name: string;
-  description: string;
-  color: "indigo" | "violet";
-  recommended?: boolean;
-}
-
-function ModeCard({
-  active,
-  onClick,
-  icon,
-  name,
-  description,
-  color,
-  recommended,
-}: ModeCardProps) {
-  const colorClasses = {
-    indigo: {
-      active: "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/25",
-      icon: "bg-indigo-600 text-white",
-      iconInactive: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
-      text: "text-indigo-700 dark:text-indigo-300",
-      badge: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400",
-    },
-    violet: {
-      active: "border-violet-500 bg-violet-50 dark:bg-violet-900/25",
-      icon: "bg-violet-600 text-white",
-      iconInactive: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
-      text: "text-violet-700 dark:text-violet-300",
-      badge: "bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400",
-    },
-  };
-
-  const c = colorClasses[color];
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`p-4 rounded-xl border-2 text-left transition-all duration-150 ${
-        active
-          ? `${c.active} shadow-md`
-          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1a1f2e] hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm"
-      }`}
-    >
-      <div className="flex items-center gap-3 mb-2">
-        <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-            active ? c.icon : c.iconInactive
-          }`}
-        >
-          {icon}
-        </div>
-        <span
-          className={`font-semibold ${
-            active ? c.text : "text-gray-800 dark:text-gray-200"
-          }`}
-        >
-          {name}
-        </span>
-        {recommended && active && (
-          <span className={`ml-auto text-[10px] font-medium ${c.badge} px-2 py-0.5 rounded-full`}>
-            Recommended
-          </span>
-        )}
-      </div>
-      <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-        {description}
-      </p>
-    </button>
   );
 }
 

@@ -3,37 +3,32 @@
 /**
  * Routa JS - Home Page
  *
- * A hero-style landing page for starting new conversations.
- * Features:
- * - Centered hero input with TiptapInput (skills, file mentions, etc.)
- * - Mode selection (ROUTA vs CRAFTER)
- * - Recent sessions shown as compact cards below
- *
- * From here, users can:
- * 1. Start a new conversation (auto-creates session and navigates to /[workspaceId]/[sessionId])
- * 2. Resume recent sessions
- * 3. Create/manage workspaces
+ * Task-first, operational layout:
+ * - Input dominates the viewport — type immediately
+ * - Agent selection is lightweight (dropdown in control bar)
+ * - Context (Workspace / Repo) structured in input's bottom bar
+ * - Skills shown as scannable grid cards
+ * - Recent sessions as compact inline pills
  */
 
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { HomeInput } from "@/client/components/home-input";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { useAcp } from "@/client/hooks/use-acp";
-import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
+import { useSkills } from "@/client/hooks/use-skills";
 import { AgentInstallPanel } from "@/client/components/agent-install-panel";
-import { ProtocolBadge } from "@/app/protocol-badge";
 
 export default function HomePage() {
   const router = useRouter();
   const workspacesHook = useWorkspaces();
   const acp = useAcp();
+  const skillsHook = useSkills();
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
-  const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
-  const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
+  const [showAgentInstall, setShowAgentInstall] = useState(false);
+  const [gridPendingSkill, setGridPendingSkill] = useState<string | null>(null);
 
   // Auto-select first workspace on load
   useEffect(() => {
@@ -60,7 +55,6 @@ export default function HomePage() {
   }, [workspacesHook, handleWorkspaceSelect]);
 
   const handleSessionClick = useCallback((sessionId: string) => {
-    // Navigate to the workspace/session page
     if (activeWorkspaceId) {
       router.push(`/${activeWorkspaceId}/${sessionId}`);
     } else {
@@ -69,124 +63,89 @@ export default function HomePage() {
   }, [activeWorkspaceId, router]);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
-      {/* Top Bar */}
-      <header className="h-[52px] shrink-0 bg-white dark:bg-[#161922] border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-4 z-10">
-        {/* Logo */}
-        <div className="flex items-center gap-2">
-          <img
-            src="/logo.svg"
-            alt="Routa"
-            width={28}
-            height={28}
-            className="rounded-lg"
-          />
-          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+    <div className="h-screen flex flex-col bg-[#fafafa] dark:bg-[#0a0c12]">
+      {/* ─── Minimal Header ─────────────────────────────────────────── */}
+      <header className="h-11 shrink-0 flex items-center px-5 z-10 border-b border-gray-100 dark:border-[#151720]">
+        <div className="flex items-center gap-2.5">
+          <img src="/logo.svg" alt="Routa" width={22} height={22} className="rounded-md" />
+          <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-200 tracking-tight">
             Routa
           </span>
         </div>
 
-        {/* Workspace Selector */}
-        {workspacesHook.workspaces.length > 0 && (
-          <>
-            <div className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
-            <div className="flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-              </svg>
-              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                {workspacesHook.workspaces.find((w) => w.id === activeWorkspaceId)?.title ?? "Select workspace"}
-              </span>
-              <WorkspaceSwitcher
-                workspaces={workspacesHook.workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={handleWorkspaceSelect}
-                onCreate={handleWorkspaceCreate}
-                loading={workspacesHook.loading}
-                compact
-              />
-            </div>
-          </>
-        )}
-
         <div className="flex-1" />
 
-        {/* Protocol badges */}
-        <div className="hidden lg:flex items-center gap-2">
-          <ProtocolBadge name="MCP" endpoint="/api/mcp" />
-          <ProtocolBadge name="ACP" endpoint="/api/acp" />
-        </div>
+        <nav className="flex items-center gap-0.5">
+          <button
+            onClick={() => setShowAgentInstall(true)}
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+          >
+            Agents
+          </button>
+          <a
+            href="/mcp-tools"
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+          >
+            MCP
+          </a>
+          <a
+            href="/traces"
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+          >
+            Traces
+          </a>
+          <a
+            href="/settings"
+            className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </a>
 
-        {/* Install Agents Button */}
-        <button
-          ref={installAgentsButtonRef}
-          onClick={() => setShowAgentInstallPopup(true)}
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Install Agents
-        </button>
-
-        {/* MCP Tools link */}
-        <a
-          href="/mcp-tools"
-          className="hidden md:inline-flex px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-[11px] font-medium text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-        >
-          MCP Tools
-        </a>
-
-        {/* Traces link */}
-        <a
-          href="/traces"
-          className="hidden md:inline-flex px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-900/20 text-[11px] font-medium text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
-        >
-          Traces
-        </a>
+          {/* Protocol status indicators */}
+          <div className="ml-2 flex items-center gap-3 pl-3 border-l border-gray-200 dark:border-[#1f2233]">
+            <StatusDot label="MCP" />
+            <StatusDot label="ACP" />
+          </div>
+        </nav>
       </header>
 
-      {/* Main Content - Centered Hero Layout */}
+      {/* ─── Main Content ───────────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto">
         <div className="min-h-full flex flex-col">
-          {/* Hero Section */}
-          <div className="flex-1 flex items-center justify-center px-6 py-12">
-            {/* Empty Workspace Onboarding */}
+          {/* Input Section — vertically centered, dominant */}
+          <div className="flex-1 flex items-center justify-center px-6 pt-4 pb-6 min-h-[260px]">
             {!workspacesHook.loading && workspacesHook.workspaces.length === 0 ? (
-              <div className="w-full max-w-md bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl p-8 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-5 shadow-lg">
-                  <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                  </svg>
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Create your first workspace</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">A workspace organizes your sessions, notes, and codebases for a project.</p>
-                <button
-                  type="button"
-                  onClick={() => handleWorkspaceCreate("My Workspace")}
-                  className="px-8 py-3 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-xl transition-all shadow-md hover:shadow-lg"
-                >
-                  Create Workspace
-                </button>
-              </div>
+              <OnboardingCard onCreateWorkspace={handleWorkspaceCreate} />
             ) : (
-              /* Home Input with TiptapInput */
               <HomeInput
                 workspaceId={activeWorkspaceId ?? undefined}
                 onWorkspaceChange={(wsId) => {
                   setActiveWorkspaceId(wsId);
                   setRefreshKey((k) => k + 1);
                 }}
-                onSessionCreated={(sessionId) => {
+                onSessionCreated={() => {
                   setRefreshKey((k) => k + 1);
                 }}
+                externalPendingSkill={gridPendingSkill}
+                onExternalSkillConsumed={() => setGridPendingSkill(null)}
               />
             )}
           </div>
 
-          {/* Recent Sessions Section */}
+          {/* Skills Grid */}
+          {skillsHook.allSkills.length > 0 && (
+            <SkillsGrid
+              skills={skillsHook.allSkills}
+              onSkillClick={(name) => setGridPendingSkill(name)}
+            />
+          )}
+
+          {/* Recent Sessions */}
           {workspacesHook.workspaces.length > 0 && (
-            <RecentSessionsBar
+            <RecentSessions
               workspaceId={activeWorkspaceId}
               refreshKey={refreshKey}
               onSessionClick={handleSessionClick}
@@ -195,61 +154,115 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Agent Install Popup */}
-      {showAgentInstallPopup && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="agent-install-title"
-        >
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setShowAgentInstallPopup(false)}
-            aria-hidden="true"
-          />
-          <div
-            className="relative w-full max-w-5xl h-[80vh] bg-white dark:bg-[#161922] border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-11 px-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div id="agent-install-title" className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  Install Agents
-                </div>
-                <a
-                  href="/settings/agents"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                >
-                  Open in new tab
-                </a>
-              </div>
-              <button
-                ref={agentInstallCloseRef}
-                type="button"
-                onClick={() => setShowAgentInstallPopup(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                title="Close (Esc)"
-                aria-label="Close"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="h-[calc(80vh-44px)]">
-              <AgentInstallPanel />
-            </div>
-          </div>
-        </div>
+      {/* ─── Agent Install Modal ────────────────────────────────────── */}
+      {showAgentInstall && (
+        <OverlayModal onClose={() => setShowAgentInstall(false)} title="Install Agents">
+          <AgentInstallPanel />
+        </OverlayModal>
       )}
     </div>
   );
 }
 
-// ─── Recent Sessions Bar Component ─────────────────────────────────────
+// ─── Status Dot ────────────────────────────────────────────────────────
+
+function StatusDot({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-1.5" title={`${label} connected`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20" />
+      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">{label}</span>
+    </div>
+  );
+}
+
+// ─── Onboarding Card ──────────────────────────────────────────────────
+
+function OnboardingCard({ onCreateWorkspace }: { onCreateWorkspace: (title: string) => void }) {
+  return (
+    <div className="w-full max-w-sm text-center">
+      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-amber-500/20">
+        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
+        </svg>
+      </div>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1.5">
+        Create a workspace
+      </h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+        Organize your sessions and projects in one place.
+      </p>
+      <button
+        type="button"
+        onClick={() => onCreateWorkspace("My Workspace")}
+        className="px-6 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 rounded-xl transition-all shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40"
+      >
+        Get Started
+      </button>
+    </div>
+  );
+}
+
+// ─── Skills Grid ──────────────────────────────────────────────────────
+
+function SkillsGrid({
+  skills,
+  onSkillClick,
+}: {
+  skills: Array<{ name: string; description: string }>;
+  onSkillClick: (name: string) => void;
+}) {
+  const getSkillIcon = (name: string) => {
+    const n = name.toLowerCase();
+    if (n.includes("design") || n.includes("ui") || n.includes("frontend")) return "🎨";
+    if (n.includes("test")) return "🧪";
+    if (n.includes("debug")) return "🔍";
+    if (n.includes("doc")) return "📝";
+    if (n.includes("deploy")) return "🚀";
+    if (n.includes("refactor")) return "♻️";
+    if (n.includes("security")) return "🔒";
+    if (n.includes("api")) return "⚡";
+    if (n.includes("data")) return "📊";
+    if (n.includes("develop") || n.includes("code") || n.includes("crafter")) return "🔧";
+    if (n.includes("find")) return "🔎";
+    return "⚙️";
+  };
+
+  return (
+    <div className="px-6 pb-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+            Skills
+          </h3>
+          <div className="flex-1 h-px bg-gray-100 dark:bg-[#171a24]" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {skills.map((skill) => (
+            <button
+              key={skill.name}
+              onClick={() => onSkillClick(skill.name)}
+              className="group p-3 rounded-xl bg-white dark:bg-[#12141c] border border-gray-100 dark:border-[#1c1f2e] hover:border-amber-300 dark:hover:border-amber-700/50 transition-all text-left hover:shadow-sm"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-base">{getSkillIcon(skill.name)}</span>
+                <span className="text-[13px] font-medium text-gray-800 dark:text-gray-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors truncate">
+                  /{skill.name}
+                </span>
+              </div>
+              {skill.description && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed pl-7">
+                  {skill.description}
+                </p>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Recent Sessions ──────────────────────────────────────────────────
 
 interface SessionInfo {
   sessionId: string;
@@ -261,98 +274,142 @@ interface SessionInfo {
   createdAt: string;
 }
 
-interface RecentSessionsBarProps {
+function RecentSessions({
+  workspaceId,
+  refreshKey,
+  onSessionClick,
+}: {
   workspaceId: string | null;
   refreshKey: number;
-  onSessionClick: (sessionId: string) => void;
-}
-
-function RecentSessionsBar({ workspaceId, refreshKey, onSessionClick }: RecentSessionsBarProps) {
+  onSessionClick: (id: string) => void;
+}) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const fetchSessions = async () => {
       try {
-        setLoading(true);
         const url = workspaceId
-          ? `/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=6`
-          : "/api/sessions?limit=6";
+          ? `/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=8`
+          : "/api/sessions?limit=8";
         const res = await fetch(url, { cache: "no-store" });
         const data = await res.json();
-        setSessions(Array.isArray(data?.sessions) ? data.sessions.slice(0, 6) : []);
-      } catch (e) {
-        console.error("Failed to fetch sessions", e);
-      } finally {
-        setLoading(false);
+        setSessions(Array.isArray(data?.sessions) ? data.sessions.slice(0, 8) : []);
+      } catch {
+        /* ignore */
       }
     };
     fetchSessions();
   }, [workspaceId, refreshKey]);
 
-  // Don't render anything if there are no sessions (whether loading or not)
-  if (sessions.length === 0) {
-    return null;
-  }
+  if (sessions.length === 0) return null;
+
+  const formatTime = (dateStr: string) => {
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "now";
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    return `${Math.floor(hrs / 24)}d`;
+  };
 
   const getDisplayName = (s: SessionInfo) => {
     if (s.name) return s.name;
-    if (s.provider && s.role) return `${s.provider}-${s.role.toLowerCase()}`;
+    if (s.provider && s.role) return `${s.provider} · ${s.role.toLowerCase()}`;
     if (s.provider) return s.provider;
     return `Session ${s.sessionId.slice(0, 6)}`;
   };
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-  };
-
   return (
-    <div className="border-t border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-[#13151d]/50 backdrop-blur-sm">
-      <div className="max-w-5xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
-            Recent Sessions
+    <div className="px-6 pb-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+            Recent
           </h3>
+          <div className="flex-1 h-px bg-gray-100 dark:bg-[#171a24]" />
           <a
             href="/sessions"
-            className="text-xs text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+            className="text-[11px] text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
           >
             View all →
           </a>
         </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div className="flex flex-wrap gap-2">
           {sessions.map((s) => (
             <button
               key={s.sessionId}
               onClick={() => onSessionClick(s.sessionId)}
-              className="group p-3 rounded-xl bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all text-left"
+              className="group flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-[#12141c] border border-gray-100 dark:border-[#1c1f2e] hover:border-amber-300 dark:hover:border-amber-700/50 transition-all hover:shadow-sm"
             >
-              <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-amber-500 transition-colors" />
+              <span className="text-xs text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors max-w-[160px] truncate">
                 {getDisplayName(s)}
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                {s.provider && (
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
-                    {s.provider}
-                  </span>
-                )}
-                <span className="text-[10px] text-gray-300 dark:text-gray-600 ml-auto">
-                  {formatTime(s.createdAt)}
-                </span>
-              </div>
+              </span>
+              <span className="text-[10px] text-gray-300 dark:text-gray-600 font-mono">
+                {formatTime(s.createdAt)}
+              </span>
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Overlay Modal ────────────────────────────────────────────────────
+
+function OverlayModal({
+  onClose,
+  title,
+  children,
+}: {
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className="relative w-full max-w-5xl h-[80vh] bg-white dark:bg-[#12141c] border border-gray-200 dark:border-[#1c1f2e] rounded-xl shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="h-11 px-4 border-b border-gray-100 dark:border-[#1c1f2e] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {title}
+            </span>
+            <a
+              href="/settings/agents"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              Open in new tab
+            </a>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-[#1c1f2e] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            title="Close (Esc)"
+            aria-label="Close"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="h-[calc(80vh-44px)]">{children}</div>
       </div>
     </div>
   );

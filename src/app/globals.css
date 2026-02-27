@@ -5,16 +5,24 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
+  --background: #fafafa;
   --foreground: #171717;
   --sidebar-width: 300px;
-  --topbar-height: 52px;
+  --topbar-height: 44px;
+  --surface: #ffffff;
+  --border: #e5e7eb;
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0f1117;
+    --background: #0a0c12;
     --foreground: #ededed;
+    --surface: #12141c;
+    --border: #1c1f2e;
+    --accent: #f59e0b;
+    --accent-hover: #fbbf24;
   }
 }
 
