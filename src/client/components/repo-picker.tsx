@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { BranchSelector } from "./branch-selector";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -68,8 +69,10 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
   const [cloneError, setCloneError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cloneInputRef = useRef<HTMLInputElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ left: number; bottom: number; width: number } | null>(null);
 
   // ── Fetch repos ────────────────────────────────────────────────────
 
@@ -94,15 +97,28 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node;
+      const inDropdown = containerRef.current?.contains(target);
+      const inTrigger = triggerRef.current?.contains(target);
+      if (!inDropdown && !inTrigger) {
         setShowDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // ── Recalculate dropdown position on scroll/resize ─────────────────
+
+  const openDropdown = useCallback((ref: HTMLElement | null) => {
+    if (!ref) return;
+    const rect = ref.getBoundingClientRect();
+    setDropdownPos({
+      left: rect.left,
+      bottom: window.innerHeight - rect.top + 6,
+      width: Math.max(rect.width, 420),
+    });
+    setShowDropdown(true);
   }, []);
 
   // ── Auto-detect GitHub URL in search → switch to clone tab ─────────
@@ -237,14 +253,20 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       {/* ── Selected state: show repo pill ── */}
       {value ? (
         <SelectedRepoPill
           value={value}
           repos={repos}
+          triggerRef={triggerRef}
           onClickName={() => {
-            setShowDropdown((v) => !v);
+            if (showDropdown) {
+              setShowDropdown(false);
+            } else {
+              openDropdown(triggerRef.current);
+              setTimeout(() => inputRef.current?.focus(), 50);
+            }
           }}
           onClear={handleClear}
           onBranchChange={(branch) => {
@@ -255,9 +277,10 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
       ) : (
         /* ── No repo: show trigger ── */
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => {
-            setShowDropdown(true);
+            openDropdown(triggerRef.current);
             setTimeout(() => inputRef.current?.focus(), 50);
           }}
           className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
@@ -267,9 +290,19 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
         </button>
       )}
 
-      {/* ── Dropdown panel ── */}
-      {showDropdown && (
-        <div className="absolute bottom-full left-0 mb-2 w-[420px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-50 overflow-hidden">
+      {/* ── Dropdown panel (portal to escape overflow-hidden) ── */}
+      {showDropdown && dropdownPos && createPortal(
+        <div
+          ref={containerRef}
+          style={{
+            position: "fixed",
+            left: dropdownPos.left,
+            bottom: dropdownPos.bottom,
+            width: 420,
+            zIndex: 9999,
+          }}
+          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl overflow-hidden"
+        >
           {/* ── Tabs ── */}
           <div className="flex border-b border-gray-100 dark:border-gray-800">
             <TabButton
@@ -449,7 +482,8 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -460,12 +494,14 @@ export function RepoPicker({ value, onChange }: RepoPickerProps) {
 function SelectedRepoPill({
   value,
   repos,
+  triggerRef,
   onClickName,
   onClear,
   onBranchChange,
 }: {
   value: RepoSelection;
   repos: ClonedRepo[];
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
   onClickName: () => void;
   onClear: () => void;
   onBranchChange: (branch: string) => void;
@@ -478,6 +514,7 @@ function SelectedRepoPill({
 
       {/* Repo name */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={onClickName}
         className="text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate max-w-[200px]"

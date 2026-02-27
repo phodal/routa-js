@@ -63,7 +63,7 @@ interface OpencodeClient {
     get: (opts: { sessionID: string }) => Promise<{ data: OpencodeSession }>;
   };
   event: {
-    subscribe: (opts?: { directory?: string }) => { stream: AsyncIterable<OpencodeEvent> };
+    subscribe: (opts?: { directory?: string }) => Promise<{ stream: AsyncIterable<OpencodeEvent> }>;
   };
   global: {
     health: () => Promise<{ data: unknown }>;
@@ -274,6 +274,8 @@ export class OpencodeSdkAdapter {
     let inputTokens = 0;
     let outputTokens = 0;
     let stopReason = "end_turn";
+    // Track partID → part type (e.g. "text", "reasoning") for delta events
+    const partTypeMap = new Map<string, string>();
 
     // Helper to format SSE event
     const formatSseEvent = (notification: JsonRpcMessage): string => {
@@ -283,7 +285,7 @@ export class OpencodeSdkAdapter {
     try {
       // 1. Subscribe to SSE events BEFORE sending the prompt
       //    This ensures we don't miss any events
-      const eventStream = this.client.event.subscribe();
+      const eventStream = await this.client.event.subscribe();
 
       // 2. Send prompt asynchronously (returns immediately with 204)
       const promptBody: Record<string, unknown> = {
@@ -318,7 +320,7 @@ export class OpencodeSdkAdapter {
         }
 
         // Convert OpenCode event to ACP notification and yield
-        const notification = this.createNotificationFromEvent(event, sessionId);
+        const notification = this.createNotificationFromEvent(event, sessionId, partTypeMap);
         if (notification) {
           this.onNotification(notification);
           yield formatSseEvent(notification);
@@ -491,7 +493,7 @@ export class OpencodeSdkAdapter {
    *   message.updated (assistant) → token usage tracking
    *   session.idle              → (triggers turn_complete externally)
    */
-  private createNotificationFromEvent(event: OpencodeEvent, sessionId: string): JsonRpcMessage | null {
+  private createNotificationFromEvent(event: OpencodeEvent, sessionId: string, partTypeMap?: Map<string, string>): JsonRpcMessage | null {
     const props = event.properties;
 
     switch (event.type) {
@@ -500,19 +502,18 @@ export class OpencodeSdkAdapter {
         const delta = props.delta as string | undefined;
         const content = props.content as string | undefined;
         const field = props.field as string | undefined;
+        const partID = props.partID as string | undefined;
         const text = delta ?? content;
 
-        if (text && field !== "reasoning") {
-          return createNotification("session/update", {
-            sessionId,
-            update: {
-              sessionUpdate: "agent_message_chunk",
-              content: { type: "text", text },
-            },
-          });
-        }
-        // Reasoning/thinking delta
-        if (text && field === "reasoning") {
+        if (!text) return null;
+
+        // Determine if this delta belongs to a reasoning part.
+        // The `field` property always says "text" (it's the Part's field name),
+        // so we use the partTypeMap to check the actual part type.
+        const partType = partID ? partTypeMap?.get(partID) : undefined;
+        const isReasoning = partType === "reasoning" || field === "reasoning";
+
+        if (isReasoning) {
           return createNotification("session/update", {
             sessionId,
             update: {
@@ -521,13 +522,29 @@ export class OpencodeSdkAdapter {
             },
           });
         }
-        return null;
+
+        return createNotification("session/update", {
+          sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text },
+          },
+        });
       }
 
-      // ── Part created/updated (text, tool, reasoning) ────────────────
+      // ── Part created/updated (tool state changes only) ──────────────
+      // Text and reasoning are already handled by message.part.delta events
+      // above, so we only process tool parts here to avoid duplicates.
+      // We also register part IDs to track their type for delta events.
       case "message.part.updated": {
         const part = props.part as OpencodePart | undefined;
         if (!part) return null;
+        // Register part type for future delta events
+        if (part.id && partTypeMap) {
+          partTypeMap.set(part.id, part.type);
+        }
+        // Skip text and reasoning — already streamed via deltas
+        if (part.type === "text" || part.type === "reasoning") return null;
         return this.createNotificationFromPart(part, sessionId);
       }
 
