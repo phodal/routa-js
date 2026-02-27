@@ -1035,9 +1035,10 @@ export function SessionPageClient() {
     if (n.metadata.type === "task") {
       return noteSessionId === sessionId;
     }
-    // Spec notes belong to the workspace, not a specific session
+    // Spec notes: if they have a sessionId, filter by it; otherwise show workspace-wide
     if (n.metadata.type === "spec") {
-      return true;
+      if (!noteSessionId) return true; // Workspace-wide spec
+      return noteSessionId === sessionId; // Session-specific spec
     }
     // General notes: show if no sessionId OR matching sessionId
     if (!noteSessionId) return true;
