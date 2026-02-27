@@ -41,9 +41,7 @@ import {
   withConversation,
   recordTrace,
 } from "@/core/trace";
-import { getDatabaseDriver, getPostgresDatabase } from "@/core/db/index";
-import { PgAcpSessionStore } from "@/core/db/pg-acp-session-store";
-import { SqliteAcpSessionStore } from "@/core/db/sqlite-stores";
+import { persistSessionToDb } from "@/core/acp/session-db-persister";
 import { resolveSkillContent } from "@/core/skills/skill-resolver";
 
 export const dynamic = "force-dynamic";
@@ -68,59 +66,6 @@ function cleanupIdempotencyCache() {
     if (now - entry.createdAt > IDEMPOTENCY_TTL_MS) {
       idempotencyCache.delete(key);
     }
-  }
-}
-
-// ─── Helper: persist session to database (SQLite or Postgres) ──────────
-
-interface SessionPersistData {
-  id: string;
-  name?: string;
-  cwd: string;
-  workspaceId: string;
-  routaAgentId: string;
-  provider: string;
-  role: string;
-  modeId?: string;
-  model?: string;
-  parentSessionId?: string;
-}
-
-async function persistSessionToDb(data: SessionPersistData): Promise<void> {
-  const driver = getDatabaseDriver();
-  const now = new Date();
-  const sessionRecord = {
-    id: data.id,
-    name: data.name,
-    cwd: data.cwd,
-    workspaceId: data.workspaceId,
-    routaAgentId: data.routaAgentId,
-    provider: data.provider,
-    role: data.role,
-    modeId: data.modeId,
-    firstPromptSent: false,
-    messageHistory: [] as never[],
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    if (driver === "postgres") {
-      const db = getPostgresDatabase();
-      const pgStore = new PgAcpSessionStore(db);
-      await pgStore.save(sessionRecord);
-    } else if (driver === "sqlite") {
-      // Dynamic import to avoid bundling SQLite in serverless
-      const { getSqliteDatabase } = await import("@/core/db/sqlite");
-      const db = getSqliteDatabase();
-      const sqliteStore = new SqliteAcpSessionStore(db);
-      await sqliteStore.save(sessionRecord);
-    } else {
-      return; // memory driver — nothing to persist
-    }
-    console.log(`[ACP Route] Session persisted to ${driver}: ${data.id}`);
-  } catch (err) {
-    console.error(`[ACP Route] Failed to persist session to ${driver}:`, err);
   }
 }
 

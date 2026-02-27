@@ -14,6 +14,7 @@
 
 import { getProviderAdapter } from "./provider-adapter";
 import { TraceRecorder } from "./provider-adapter/trace-recorder";
+import { hydrateSessionsFromDb } from "./session-db-persister";
 
 export interface RoutaSessionRecord {
   sessionId: string;
@@ -335,58 +336,24 @@ class HttpSessionStore {
     if (this.hydrated) return;
     this.hydrated = true;
 
-    try {
-      const { getDatabaseDriver } = await import("@/core/db/index");
-      const driver = getDatabaseDriver();
-
-      if (driver === "sqlite") {
-        const { getSqliteDatabase } = await import("@/core/db/sqlite");
-        const { SqliteAcpSessionStore } = await import("@/core/db/sqlite-stores");
-        const db = getSqliteDatabase();
-        const sqliteStore = new SqliteAcpSessionStore(db);
-        const dbSessions = await sqliteStore.list();
-        for (const s of dbSessions) {
-          // Don't overwrite sessions that are already in memory (active)
-          if (!this.sessions.has(s.id)) {
-            this.upsertSession({
-              sessionId: s.id,
-              name: s.name,
-              cwd: s.cwd,
-              workspaceId: s.workspaceId,
-              routaAgentId: s.routaAgentId,
-              provider: s.provider,
-              role: s.role,
-              modeId: s.modeId,
-              createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
-            });
-          }
-        }
-        console.log(`[HttpSessionStore] Hydrated ${dbSessions.length} sessions from SQLite`);
-      } else if (driver === "postgres") {
-        const { getPostgresDatabase } = await import("@/core/db/index");
-        const { PgAcpSessionStore } = await import("@/core/db/pg-acp-session-store");
-        const db = getPostgresDatabase();
-        const pgStore = new PgAcpSessionStore(db);
-        const dbSessions = await pgStore.list();
-        for (const s of dbSessions) {
-          if (!this.sessions.has(s.id)) {
-            this.upsertSession({
-              sessionId: s.id,
-              name: s.name,
-              cwd: s.cwd,
-              workspaceId: s.workspaceId,
-              routaAgentId: s.routaAgentId,
-              provider: s.provider,
-              role: s.role,
-              modeId: s.modeId,
-              createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
-            });
-          }
-        }
-        console.log(`[HttpSessionStore] Hydrated ${dbSessions.length} sessions from Postgres`);
+    const dbSessions = await hydrateSessionsFromDb();
+    for (const s of dbSessions) {
+      if (!this.sessions.has(s.id)) {
+        this.upsertSession({
+          sessionId: s.id,
+          name: s.name,
+          cwd: s.cwd,
+          workspaceId: s.workspaceId,
+          routaAgentId: s.routaAgentId,
+          provider: s.provider,
+          role: s.role,
+          modeId: s.modeId,
+          createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
+        });
       }
-    } catch (err) {
-      console.error("[HttpSessionStore] Failed to hydrate from database:", err);
+    }
+    if (dbSessions.length > 0) {
+      console.log(`[HttpSessionStore] Hydrated ${dbSessions.length} sessions from database`);
     }
   }
 }
