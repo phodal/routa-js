@@ -615,12 +615,12 @@ export async function POST(request: NextRequest) {
               }
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
+              await saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
+              await saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               const errorNotification = {
                 jsonrpc: "2.0",
                 method: "session/update",
@@ -685,12 +685,12 @@ export async function POST(request: NextRequest) {
               }
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
+              await saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               controller.close();
             } catch (err) {
               store.flushAgentBuffer(sessionId);
               store.exitStreamingMode(sessionId);
-              void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
+              await saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
               // Send error event before closing
               const errorNotification = {
                 jsonrpc: "2.0",
