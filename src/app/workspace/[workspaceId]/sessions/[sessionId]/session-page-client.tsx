@@ -10,7 +10,7 @@
  * - Center: Chat panel with messages and input
  * - Right sidebar (resizable): Task panel / CRAFTERs view
  *
- * Route: /[workspaceId]/[sessionId]
+ * Route: /workspace/[workspaceId]/sessions/[sessionId]
  */
 
 import {useCallback, useEffect, useRef, useState} from "react";
@@ -68,12 +68,12 @@ export function SessionPageClient() {
 
   const handleWorkspaceSelect = useCallback((wsId: string) => {
     setActiveWorkspaceId(wsId);
-    router.push(`/${wsId}`);
+    router.push(`/workspace/${wsId}`);
   }, [router]);
 
   const handleWorkspaceCreate = useCallback(async (title: string) => {
     const ws = await workspacesHook.createWorkspace(title);
-    if (ws) router.push(`/${ws.id}`);
+    if (ws) router.push(`/workspace/${ws.id}`);
   }, [workspacesHook, router]);
 
   const acp = useAcp();
@@ -543,7 +543,7 @@ export function SessionPageClient() {
       console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, role=${role}`);
       const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId);
       if (result?.sessionId) {
-        router.push(`/${workspaceId}/${result.sessionId}`);
+        router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       }
     },
     [acp, ensureConnected, repoSelection, selectedAgent, sessionId, deleteEmptySession, workspaceId, router, resolveProvider]
@@ -557,7 +557,7 @@ export function SessionPageClient() {
       await deleteEmptySession(sessionId);
 
       acp.selectSession(newSessionId);
-      router.push(`/${workspaceId}/${newSessionId}`);
+      router.push(`/workspace/${workspaceId}/sessions/${newSessionId}`);
     },
     [acp, ensureConnected, sessionId, deleteEmptySession, workspaceId, router]
   );
@@ -573,7 +573,7 @@ export function SessionPageClient() {
     console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${model}`);
     const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, model);
     if (result?.sessionId) {
-      router.push(`/${workspaceId}/${result.sessionId}`);
+      router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       return result.sessionId;
     }
     return null;
@@ -1098,7 +1098,7 @@ export function SessionPageClient() {
         </button>
 
         {/* Logo - links back to workspace */}
-        <a href={`/${workspaceId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <a href={`/workspace/${workspaceId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <img
             src="/logo.svg"
             alt="Routa"
@@ -1297,7 +1297,7 @@ export function SessionPageClient() {
               workspaceId={workspaceId}
               onSessionDeleted={(deletedId) => {
                 if (sessionId === deletedId) {
-                  router.push(`/${workspaceId}`);
+                  router.push(`/workspace/${workspaceId}`);
                 }
               }}
             />

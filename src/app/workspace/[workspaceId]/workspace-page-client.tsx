@@ -13,7 +13,7 @@
  *   - Quick actions: new session, create task, add note
  *   - Trace activity feed
  *
- * Route: /[workspaceId]
+ * Route: /workspace/[workspaceId]
  */
 
 import { useCallback, useState, useEffect } from "react";
@@ -131,12 +131,12 @@ export function WorkspacePageClient() {
   }, [workspace, workspacesHook.loading, router, isDefaultWorkspace]);
 
   const handleWorkspaceSelect = useCallback((wsId: string) => {
-    router.push(`/${wsId}`);
+    router.push(`/workspace/${wsId}`);
   }, [router]);
 
   const handleWorkspaceCreate = useCallback(async (title: string) => {
     const ws = await workspacesHook.createWorkspace(title);
-    if (ws) router.push(`/${ws.id}`);
+    if (ws) router.push(`/workspace/${ws.id}`);
   }, [workspacesHook, router]);
 
   if (workspacesHook.loading && !isDefaultWorkspace) {
@@ -327,7 +327,7 @@ export function WorkspacePageClient() {
                   {sessions.slice(0, 8).map((s) => (
                     <button
                       key={s.sessionId}
-                      onClick={() => router.push(`/${workspaceId}/${s.sessionId}`)}
+                      onClick={() => router.push(`/workspace/${workspaceId}/sessions/${s.sessionId}`)}
                       className="group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-[#151720] transition-colors text-left"
                     >
                       <div className="w-7 h-7 rounded-md bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0">

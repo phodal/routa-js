@@ -156,7 +156,7 @@ export function HomeInput({
         );
 
         if (result?.sessionId) {
-          const url = wsId ? `/${wsId}/${result.sessionId}` : `/${result.sessionId}`;
+          const url = wsId ? `/workspace/${wsId}/sessions/${result.sessionId}` : `/workspace/${result.sessionId}`;
           const promptText = context.skill ? `/${context.skill} ${text}` : text;
           storePendingPrompt(result.sessionId, promptText);
           onSessionCreated?.(result.sessionId);

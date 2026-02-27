@@ -27,7 +27,10 @@
       "Bash(vercel whoami:*)",
       "Bash(vercel project ls:*)",
       "Bash(ls:*)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)",
+      "Bash(npm run test:*)"
     ]
   }
 }

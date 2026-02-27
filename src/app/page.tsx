@@ -55,9 +55,9 @@ export default function HomePage() {
 
   const handleSessionClick = useCallback((sessionId: string) => {
     if (activeWorkspaceId) {
-      router.push(`/${activeWorkspaceId}/${sessionId}`);
+      router.push(`/workspace/${activeWorkspaceId}/sessions/${sessionId}`);
     } else {
-      router.push(`/${sessionId}`);
+      router.push(`/workspace/${sessionId}`);
     }
   }, [activeWorkspaceId, router]);
 
