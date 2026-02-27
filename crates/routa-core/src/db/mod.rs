@@ -177,8 +177,6 @@ impl Database {
                     created_at              INTEGER NOT NULL,
                     updated_at              INTEGER NOT NULL
                 );
-                CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
-
                 CREATE TABLE IF NOT EXISTS notes (
                     id                  TEXT NOT NULL,
                     workspace_id        TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -233,6 +231,19 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_notes_workspace ON notes(workspace_id);
                 CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(agent_id);
                 "
+            )
+        })?;
+        self.run_migrations()
+    }
+
+    /// Apply incremental migrations for schema changes on existing databases.
+    fn run_migrations(&self) -> Result<(), ServerError> {
+        self.with_conn(|conn| {
+            // Add session_id to tasks if it doesn't exist yet (ignore error if already present)
+            let _ = conn.execute("ALTER TABLE tasks ADD COLUMN session_id TEXT", []);
+            // Now it's safe to create the index
+            conn.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);"
             )
         })
     }

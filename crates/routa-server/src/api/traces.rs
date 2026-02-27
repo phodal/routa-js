@@ -13,7 +13,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(query_traces).post(export_traces))
         .route("/stats", get(get_trace_stats))
-        .route("/:id", get(get_trace_by_id))
+        .route("/{id}", get(get_trace_by_id))
 }
 
 /// GET /api/traces — Query traces with optional filters.
