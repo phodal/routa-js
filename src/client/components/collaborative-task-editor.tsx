@@ -65,8 +65,48 @@ export function CollaborativeTaskEditor({
 }: CollaborativeTaskEditorProps) {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const [specExpanded, setSpecExpanded] = useState(false);
+  const [specExpanded, setSpecExpanded] = useState(true);
   const [viewMode, setViewMode] = useState<CollabPanelView>("tasks");
+
+  // Vertical split state for SPEC vs Tasks
+  const [specHeight, setSpecHeight] = useState(350); // default height in px
+  const [isVerticalResizing, setIsVerticalResizing] = useState(false);
+  const verticalResizeStartYRef = useRef(0);
+  const verticalResizeStartHeightRef = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Vertical resize handlers
+  const handleVerticalResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsVerticalResizing(true);
+    verticalResizeStartYRef.current = e.clientY;
+    verticalResizeStartHeightRef.current = specHeight;
+  }, [specHeight]);
+
+  useEffect(() => {
+    if (!isVerticalResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - verticalResizeStartYRef.current;
+      const containerHeight = containerRef.current?.clientHeight ?? 600;
+      const newHeight = Math.min(
+        Math.max(verticalResizeStartHeightRef.current + deltaY, 80), // min 80px
+        containerHeight - 150 // leave at least 150px for tasks
+      );
+      setSpecHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsVerticalResizing(false);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isVerticalResizing]);
 
   // Auto-switch to crafters view when agents appear
   useEffect(() => {
@@ -95,7 +135,7 @@ export function CollaborativeTaskEditor({
   const hasRunning = taskNotes.some((n) => n.metadata.taskStatus === "IN_PROGRESS");
 
   return (
-    <div className="flex flex-col h-full">
+    <div ref={containerRef} className="flex flex-col h-full">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-2">
@@ -205,11 +245,15 @@ export function CollaborativeTaskEditor({
         </div>
       </div>
 
-      {/* Spec Note (if exists) - collapsible */}
+      {/* Spec Note (if exists) - resizable vertical split */}
       {specNote && specNote.content && (
-        <div className="border-b border-gray-100 dark:border-gray-800 bg-blue-50/50 dark:bg-blue-900/10">
+        <div
+          className="shrink-0 flex flex-col bg-blue-50/50 dark:bg-blue-900/10 relative"
+          style={{ height: specExpanded ? `${specHeight}px` : "auto" }}
+        >
+          {/* Spec Header */}
           <div
-            className="flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-blue-100/50 dark:hover:bg-blue-900/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-blue-100/50 dark:hover:bg-blue-900/20 transition-colors shrink-0"
             onClick={() => setSpecExpanded((prev) => !prev)}
           >
             <svg
@@ -252,8 +296,9 @@ export function CollaborativeTaskEditor({
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
+          {/* Spec Content */}
           {specExpanded ? (
-            <div className="px-3 pb-3 max-h-[50vh] overflow-y-auto">
+            <div className="flex-1 overflow-y-auto px-3 pb-2">
               <MarkdownViewer
                 content={specNote.content}
                 className="text-[11px] text-gray-600 dark:text-gray-400"
@@ -269,7 +314,20 @@ export function CollaborativeTaskEditor({
               </div>
             </div>
           )}
+          {/* Vertical resize handle - only show when expanded */}
+          {specExpanded && (
+            <div
+              className="absolute left-0 right-0 bottom-0 h-1 cursor-row-resize z-20 hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors group"
+              onMouseDown={handleVerticalResizeStart}
+            >
+              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-indigo-400 group-active:bg-indigo-500 transition-colors" />
+            </div>
+          )}
         </div>
+      )}
+      {/* Divider between SPEC and Tasks when SPEC exists and is expanded */}
+      {specNote && specNote.content && specExpanded && (
+        <div className="h-px bg-gray-200 dark:bg-gray-700 shrink-0" />
       )}
 
       {/* Content */}

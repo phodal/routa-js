@@ -1672,8 +1672,8 @@ export function ChatPanel({
                   }
                   return true;
                 })
-                .map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} />
+                .map((msg, index) => (
+                  <MessageBubble key={`${msg.id}-${index}`} message={msg} />
                 ))}
               <div ref={messagesEndRef} />
             </div>
