@@ -84,29 +84,92 @@ export async function GET(request: NextRequest) {
 
   const store = getHttpSessionStore();
 
+  // ─── Improved SSE cleanup with multiple safeguards ──────────────────────
+  // In Vercel serverless, connections may drop silently. We implement
+  // multiple cleanup mechanisms to ensure resources are released:
+  // 1. Request abort event (client disconnect)
+  // 2. Controller close event (stream closed)
+  // 3. Heartbeat timeout (detect stale connections)
+  // 4. Connection close event (transport-level close)
+
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let isCleanedUp = false;
+
+  const cleanup = (reason: string) => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
+
+    console.log(`[ACP Route] SSE cleanup for session ${sessionId}: ${reason}`);
+
+    // Clear heartbeat timer
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+
+    // Detach SSE from store
+    store.detachSse(sessionId);
+
+    // Flush any buffered agent content
+    try {
+      store.flushAgentBuffer(sessionId);
+    } catch {
+      // Ignore errors during cleanup
+    }
+  };
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       store.attachSse(sessionId, controller);
       store.pushConnected(sessionId);
 
-      request.signal.addEventListener("abort", () => {
-        store.detachSse(sessionId);
+      // ─── Heartbeat mechanism ─────────────────────────────────────────────
+      // Send a comment every 30 seconds to keep the connection alive
+      // and detect dead connections. If the write fails, cleanup is triggered.
+      heartbeatTimer = setInterval(() => {
+        try {
+          const encoder = new TextEncoder();
+          const heartbeat = ": heartbeat\n\n";
+          controller.enqueue(encoder.encode(heartbeat));
+        } catch (err) {
+          // Write failed - connection is dead
+          cleanup("heartbeat write failed");
+        }
+      }, 30000); // 30 second heartbeat
+
+      // ─── Cleanup on request abort (client disconnect) ───────────────────
+      const abortHandler = () => {
+        cleanup("client aborted");
         try {
           controller.close();
         } catch {
-          // ignore
+          // already closed
         }
-      });
+      };
+      request.signal.addEventListener("abort", abortHandler);
+
+      // ─── Cleanup on controller close (stream ended) ─────────────────────
+      // Note: ReadableStream doesn't expose a direct 'closed' promise on the controller
+      // We rely on the abort handler and heartbeat for cleanup
+    },
+
+    cancel(reason) {
+      // Called when the stream is canceled by the reader
+      cleanup(`stream canceled: ${reason}`);
     },
   });
 
-  return new Response(stream, {
+  // ─── Return response with proper headers ─────────────────────────────────────
+  const response = new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-store, must-revalidate",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no", // Disable nginx buffering
     },
   });
+
+  return response;
 }
 
 // ─── POST: JSON-RPC request handler ────────────────────────────────────

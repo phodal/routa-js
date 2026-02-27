@@ -101,6 +101,11 @@ export function consolidateMessageHistory(
 /**
  * HttpSessionStore uses Provider Adapters to handle different provider behaviors.
  * Trace recording is delegated to TraceRecorder which handles deferred input patterns.
+ *
+ * Memory-aware cleanup for Vercel serverless:
+ * - Limits message history size per session (max 500 messages)
+ * - Removes stale sessions (inactive for > 1 hour)
+ * - Provides cleanup methods for memory pressure situations
  */
 class HttpSessionStore {
   private sessions = new Map<string, RoutaSessionRecord>();
@@ -119,12 +124,26 @@ class HttpSessionStore {
    */
   private streamingSessionIds = new Set<string>();
 
+  // ─── Memory-aware limits ─────────────────────────────────────────────────
+  private static readonly MAX_HISTORY_PER_SESSION = 500; // Max messages per session
+  private static readonly MAX_PENDING_NOTIFICATIONS = 100; // Max buffered notifications
+  private static readonly STALE_SESSION_MS = 60 * 60 * 1000; // 1 hour
+  private static readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  private lastCleanupTime = 0;
+  private lastAccessTime = new Map<string, number>();
+
   enterStreamingMode(sessionId: string): void {
     this.streamingSessionIds.add(sessionId);
+    this.updateAccessTime(sessionId);
   }
 
   exitStreamingMode(sessionId: string): void {
     this.streamingSessionIds.delete(sessionId);
+    this.updateAccessTime(sessionId);
+  }
+
+  private updateAccessTime(sessionId: string): void {
+    this.lastAccessTime.set(sessionId, Date.now());
   }
 
   upsertSession(record: RoutaSessionRecord) {
@@ -134,9 +153,14 @@ class HttpSessionStore {
         ...record,
         name: existing.name,
       });
+      this.updateAccessTime(record.sessionId);
       return;
     }
     this.sessions.set(record.sessionId, record);
+    this.updateAccessTime(record.sessionId);
+
+    // Periodic cleanup check (runs every 5 minutes)
+    this.maybeCleanup();
   }
 
   listSessions(): RoutaSessionRecord[] {
@@ -213,6 +237,7 @@ class HttpSessionStore {
     const history = this.messageHistory.get(sessionId) ?? [];
     history.push(notification);
     this.messageHistory.set(sessionId, history);
+    this.limitHistorySize(sessionId);
   }
 
   /**
@@ -230,6 +255,7 @@ class HttpSessionStore {
     const history = this.messageHistory.get(sessionId) ?? [];
     history.push(notification);
     this.messageHistory.set(sessionId, history);
+    this.limitHistorySize(sessionId);
 
     // ── Trace: user_message using Provider Adapter ──
     const sessionRecord = this.sessions.get(sessionId);
@@ -260,6 +286,7 @@ class HttpSessionStore {
     const history = this.messageHistory.get(sessionId) ?? [];
     history.push(notification);
     this.messageHistory.set(sessionId, history);
+    this.limitHistorySize(sessionId); // Apply memory limit
 
     // ── Trace recording using Provider Adapter pattern ──
     const sessionRecord = this.sessions.get(sessionId);
@@ -300,6 +327,7 @@ class HttpSessionStore {
     const pending = this.pendingNotifications.get(sessionId) ?? [];
     pending.push(notification);
     this.pendingNotifications.set(sessionId, pending);
+    this.limitPendingSize(sessionId); // Apply memory limit
   }
 
   /**
@@ -365,6 +393,139 @@ class HttpSessionStore {
     }
   }
 
+  // ─── Memory-aware cleanup methods ─────────────────────────────────────────
+
+  /**
+   * Limit message history size for a session.
+   * Removes oldest entries if limit is exceeded.
+   */
+  private limitHistorySize(sessionId: string): void {
+    const history = this.messageHistory.get(sessionId);
+    if (history && history.length > HttpSessionStore.MAX_HISTORY_PER_SESSION) {
+      const removed = history.length - HttpSessionStore.MAX_HISTORY_PER_SESSION;
+      this.messageHistory.set(sessionId, history.slice(removed));
+      if (removed > 10) {
+        console.log(`[HttpSessionStore] Trimmed ${removed} messages from session ${sessionId}`);
+      }
+    }
+  }
+
+  /**
+   * Limit pending notifications buffer size.
+   * Removes oldest entries if limit is exceeded.
+   */
+  private limitPendingSize(sessionId: string): void {
+    const pending = this.pendingNotifications.get(sessionId);
+    if (pending && pending.length > HttpSessionStore.MAX_PENDING_NOTIFICATIONS) {
+      const removed = pending.length - HttpSessionStore.MAX_PENDING_NOTIFICATIONS;
+      this.pendingNotifications.set(sessionId, pending.slice(removed));
+      if (removed > 10) {
+        console.log(`[HttpSessionStore] Trimmed ${removed} pending notifications for session ${sessionId}`);
+      }
+    }
+  }
+
+  /**
+   * Periodic cleanup check. Runs automatically every 5 minutes.
+   * - Removes stale sessions (inactive for > 1 hour)
+   * - Limits history and pending notification sizes
+   */
+  private maybeCleanup(): void {
+    const now = Date.now();
+    if (now - this.lastCleanupTime < HttpSessionStore.CLEANUP_INTERVAL_MS) {
+      return;
+    }
+    this.lastCleanupTime = now;
+
+    const removed = this.forceCleanup();
+    if (removed > 0) {
+      console.log(`[HttpSessionStore] Periodic cleanup: removed ${removed} stale sessions`);
+    }
+  }
+
+  /**
+   * Force cleanup of stale sessions and oversized buffers.
+   * Returns the number of sessions removed.
+   *
+   * Called automatically by maybeCleanup() but can also be triggered
+   * manually when memory pressure is detected.
+   */
+  forceCleanup(options?: { aggressive?: boolean }): number {
+    const now = Date.now();
+    const staleThreshold = options?.aggressive
+      ? HttpSessionStore.STALE_SESSION_MS / 2 // 30 minutes if aggressive
+      : HttpSessionStore.STALE_SESSION_MS; // 1 hour normally
+
+    let removedCount = 0;
+
+    // Remove stale sessions
+    for (const [sessionId, lastAccess] of this.lastAccessTime.entries()) {
+      const isStale = now - lastAccess > staleThreshold;
+      const hasActiveSse = this.sseControllers.has(sessionId);
+      const isStreaming = this.streamingSessionIds.has(sessionId);
+
+      // Only remove if stale AND not actively used
+      if (isStale && !hasActiveSse && !isStreaming) {
+        this.deleteSession(sessionId);
+        this.lastAccessTime.delete(sessionId);
+        removedCount++;
+      }
+    }
+
+    // Limit buffer sizes for remaining sessions
+    for (const sessionId of this.sessions.keys()) {
+      this.limitHistorySize(sessionId);
+      this.limitPendingSize(sessionId);
+    }
+
+    return removedCount;
+  }
+
+  /**
+   * Get memory usage statistics for monitoring.
+   * Returns counts of stored items and buffer sizes.
+   */
+  getMemoryUsage(): {
+    sessionCount: number;
+    activeSseCount: number;
+    streamingCount: number;
+    totalHistoryMessages: number;
+    totalPendingNotifications: number;
+    historyBySession: Record<string, number>;
+    staleSessionCount: number;
+  } {
+    const historyBySession: Record<string, number> = {};
+    let totalHistoryMessages = 0;
+    let totalPendingNotifications = 0;
+    const now = Date.now();
+    let staleSessionCount = 0;
+
+    for (const [sessionId, history] of this.messageHistory.entries()) {
+      historyBySession[sessionId] = history.length;
+      totalHistoryMessages += history.length;
+    }
+
+    for (const pending of this.pendingNotifications.values()) {
+      totalPendingNotifications += pending.length;
+    }
+
+    for (const [sessionId, lastAccess] of this.lastAccessTime.entries()) {
+      if (now - lastAccess > HttpSessionStore.STALE_SESSION_MS) {
+        staleSessionCount++;
+      }
+    }
+
+    return {
+      sessionCount: this.sessions.size,
+      activeSseCount: this.sseControllers.size,
+      streamingCount: this.streamingSessionIds.size,
+      totalHistoryMessages,
+      totalPendingNotifications,
+      historyBySession,
+      staleSessionCount,
+    };
+  }
+
   /** Whether DB hydration has been performed */
   private hydrated = false;
 
@@ -407,4 +568,20 @@ export function getHttpSessionStore(): HttpSessionStore {
     g[GLOBAL_KEY] = new HttpSessionStore();
   }
   return g[GLOBAL_KEY] as HttpSessionStore;
+}
+
+/**
+ * Get memory usage statistics from the session store for monitoring.
+ * This can be called by the memory monitoring API to include session store stats.
+ */
+export function getSessionStoreMemoryUsage(): ReturnType<HttpSessionStore["getMemoryUsage"]> {
+  return getHttpSessionStore().getMemoryUsage();
+}
+
+/**
+ * Force cleanup of the session store.
+ * Can be called when memory pressure is detected.
+ */
+export function cleanupSessionStore(options?: { aggressive?: boolean }): number {
+  return getHttpSessionStore().forceCleanup(options);
 }
