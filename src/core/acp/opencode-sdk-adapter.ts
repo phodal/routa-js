@@ -33,6 +33,8 @@ import type { NotificationHandler, JsonRpcMessage } from "@/core/acp/processer";
 import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { getMcpToolDefinitions, executeMcpTool } from "@/core/mcp/mcp-tool-executor";
 import { createRoutaMcpServer } from "@/core/mcp/routa-mcp-server";
+import { getHttpSessionStore } from "@/core/acp/http-session-store";
+import { renameSessionInDb } from "@/core/acp/session-db-persister";
 
 /**
  * Helper to create a JSON-RPC notification message
@@ -1107,13 +1109,24 @@ export class OpencodeSdkDirectAdapter {
               toolResult = { content: [{ type: "text", text: JSON.stringify({ error: e instanceof Error ? e.message : String(e) }) }], isError: true };
             }
 
-            // Extract text content from result for rawOutput
+            // Extract text content from result
             const resultAny = toolResult as { content?: Array<{ type: string; text?: string }>; isError?: boolean } | null;
-            const resultText = Array.isArray(resultAny?.content)
-              ? resultAny!.content.map((c) => c.text ?? "").join("\n")
-              : JSON.stringify(toolResult);
+            const resultContent: Array<{ type: string; text?: string }> = Array.isArray(resultAny?.content)
+              ? resultAny!.content
+              : [{ type: "text", text: JSON.stringify(toolResult) }];
 
-            // Notify client with tool result
+            // Special handling: set_agent_name actually renames the ACP session
+            if (tc.name === "set_agent_name" && !resultAny?.isError && args.name) {
+              try {
+                const store = getHttpSessionStore();
+                store.renameSession(sessionId, args.name as string);
+                await renameSessionInDb(sessionId, args.name as string);
+              } catch {
+                // non-fatal — rename is best-effort
+              }
+            }
+
+            // Notify client with tool result (send content only — not rawOutput — to avoid duplicate display)
             const tcResult = createNotification("session/update", {
               sessionId,
               update: {
@@ -1122,8 +1135,7 @@ export class OpencodeSdkDirectAdapter {
                 toolCallId: tc.id,
                 status: resultAny?.isError ? "failed" : "completed",
                 rawInput: args,
-                rawOutput: resultText,
-                content: resultAny?.content ?? [{ type: "text", text: resultText }],
+                content: resultContent,
               },
             });
             this.onNotification(tcResult);
