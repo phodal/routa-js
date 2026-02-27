@@ -285,7 +285,21 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     if (!client) return;
     sessionIdRef.current = sessionId;
     client.attachSession(sessionId);
+    // Reset updates first, then restore history from server
     setState((s) => ({ ...s, sessionId, updates: [] }));
+
+    // Restore message history so the chat panel shows previous messages
+    fetch(`/api/sessions/${sessionId}/history?consolidated=true`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const history: AcpSessionNotification[] = data?.history ?? [];
+        if (history.length > 0) {
+          setState((s) => ({ ...s, updates: history }));
+        }
+      })
+      .catch((err) => {
+        logRuntime("warn", "useAcp.selectSession", "Failed to restore session history", err);
+      });
   }, []);
 
   /** Send a prompt to current session (content streams over SSE). */
