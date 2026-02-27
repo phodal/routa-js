@@ -503,7 +503,7 @@ export function TiptapInput({
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
   const providerBtnRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ left: number; bottom?: number; top?: number } | null>(null);
   const [claudeMode, setClaudeMode] = useState<"acceptEdits" | "plan">("acceptEdits");
   const [opencodeMode, setOpencodeMode] = useState<"build" | "plan">("build");
 
@@ -862,7 +862,16 @@ export function TiptapInput({
               onClick={() => {
                 if (!providerDropdownOpen && providerBtnRef.current) {
                   const rect = providerBtnRef.current.getBoundingClientRect();
-                  setDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
+                  const dropdownHeight = 320; // max-h-80 = 320px
+                  const spaceAbove = rect.top;
+                  const spaceBelow = window.innerHeight - rect.bottom;
+                  if (spaceAbove >= dropdownHeight || spaceAbove >= spaceBelow) {
+                    // 向上展开
+                    setDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
+                  } else {
+                    // 向下展开
+                    setDropdownPos({ left: rect.left, top: rect.bottom + 4 });
+                  }
                 }
                 setProviderDropdownOpen((v) => !v);
               }}

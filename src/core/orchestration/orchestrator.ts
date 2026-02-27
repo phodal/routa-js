@@ -276,7 +276,8 @@ export class RoutaOrchestrator {
         provider,
         cwd,
         delegationPrompt,
-        callerSessionId
+        callerSessionId,
+        workspaceId,
       );
     } catch (err) {
       // Clean up on spawn failure
@@ -379,7 +380,8 @@ export class RoutaOrchestrator {
     provider: string,
     cwd: string,
     initialPrompt: string,
-    parentSessionId: string
+    parentSessionId: string,
+    workspaceId?: string,
   ): Promise<void> {
     const isClaudeCode = provider === "claude";
 
@@ -405,7 +407,10 @@ export class RoutaOrchestrator {
     // Detect the actual server port dynamically
     const port = this.detectServerPort();
     const host = process.env.HOST ?? "localhost";
-    const mcpUrl = `http://${host}:${port}/api/mcp`;
+    const baseMcpUrl = `http://${host}:${port}/api/mcp`;
+    const mcpUrl = workspaceId && workspaceId !== "default"
+      ? `${baseMcpUrl}?wsId=${encodeURIComponent(workspaceId)}`
+      : baseMcpUrl;
 
     let acpSessionId: string;
 
@@ -453,7 +458,11 @@ export class RoutaOrchestrator {
         sessionId,
         cwd,
         notificationHandler,
-        provider
+        provider,
+        undefined, // initialModeId
+        undefined, // extraArgs
+        undefined, // extraEnv
+        workspaceId,
       );
 
       // Send the initial prompt and handle completion

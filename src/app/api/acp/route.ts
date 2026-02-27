@@ -257,6 +257,8 @@ export async function POST(request: NextRequest) {
           provider,
           modeId,
           extraArgs.length > 0 ? extraArgs : undefined,
+          undefined, // extraEnv
+          workspaceId,
         );
       }
 
@@ -520,6 +522,8 @@ export async function POST(request: NextRequest) {
               provider,
               undefined, // modeId
               undefined, // extraArgs
+              undefined, // extraEnv
+              workspaceId,
             );
           }
 

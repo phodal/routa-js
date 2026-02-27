@@ -2,6 +2,7 @@ import {AcpProcess} from "@/core/acp/acp-process";
 import {buildConfigFromPreset, ManagedProcess, NotificationHandler} from "@/core/acp/processer";
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
 import {ensureMcpForProvider, providerSupportsMcp} from "@/core/acp/mcp-setup";
+import {getDefaultRoutaMcpConfig} from "@/core/acp/mcp-config-generator";
 import {OpencodeSdkAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl} from "@/core/acp/opencode-sdk-adapter";
 import {ClaudeCodeSdkAdapter, shouldUseClaudeCodeSdkAdapter} from "@/core/acp/claude-code-sdk-adapter";
 import {isServerlessEnvironment} from "@/core/acp/api-based-providers";
@@ -70,7 +71,8 @@ export class AcpProcessManager {
         presetId: string = "opencode",
         initialModeId?: string,
         extraArgs?: string[],
-        extraEnv?: Record<string, string>
+        extraEnv?: Record<string, string>,
+        workspaceId?: string,
     ): Promise<string> {
         // Check if we should use OpenCode SDK adapter (serverless + configured)
         if (presetId === "opencode" && shouldUseOpencodeAdapter()) {
@@ -78,9 +80,10 @@ export class AcpProcessManager {
         }
 
         // Setup MCP: writes config files and/or returns CLI args
+        // Pass workspaceId so the MCP endpoint URL has the correct ?wsId= param
         let mcpConfigs: string[] | undefined;
         if (providerSupportsMcp(presetId)) {
-            const mcpResult = ensureMcpForProvider(presetId);
+            const mcpResult = ensureMcpForProvider(presetId, getDefaultRoutaMcpConfig(workspaceId));
             mcpConfigs = mcpResult.mcpConfigs.length > 0 ? mcpResult.mcpConfigs : undefined;
             console.log(`[AcpProcessManager] MCP setup for ${presetId}: ${mcpResult.summary}`);
         }
