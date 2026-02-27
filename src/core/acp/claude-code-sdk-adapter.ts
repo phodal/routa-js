@@ -281,6 +281,17 @@ export class ClaudeCodeSdkAdapter {
           yield formatSseEvent(notification);
         }
 
+        // Detect Bash-based set_agent_name fallback and emit synthetic rename notification.
+        // The Claude Code agent falls back to `echo "Agent name: ..."` when set_agent_name
+        // tool isn't available in its built-in tool set.
+        if (msg.type === "assistant") {
+          const renameNotification = this.detectAgentRenameFromMessage(msg, sessionId);
+          if (renameNotification) {
+            this.onNotification(renameNotification);
+            yield formatSseEvent(renameNotification);
+          }
+        }
+
         // Accumulate content
         if (msg.type === "assistant") {
           for (const block of msg.message.content) {
@@ -449,6 +460,14 @@ export class ClaudeCodeSdkAdapter {
         }
 
         this.dispatchMessage(msg, sessionId);
+
+        // Detect Bash-based set_agent_name fallback (same as promptStream)
+        if (msg.type === "assistant") {
+          const renameNotification = this.detectAgentRenameFromMessage(msg, sessionId);
+          if (renameNotification) {
+            this.onNotification(renameNotification);
+          }
+        }
 
         // Accumulate final text from completed assistant messages
         if (msg.type === "assistant") {
@@ -669,6 +688,71 @@ export class ClaudeCodeSdkAdapter {
       default:
         return null;
     }
+  }
+
+  /**
+   * Detect Bash-based set_agent_name fallback or direct set_agent_name tool_use
+   * in an assistant message. Returns a synthetic notification that
+   * extractSetAgentNameTitle (in route.ts) can pick up to trigger a rename.
+   *
+   * The Claude Code agent falls back to Bash echo when set_agent_name isn't
+   * available in its built-in tool set. Patterns detected:
+   *   - Bash: echo "Agent name: My Agent"
+   *   - Bash: echo "set_agent_name: My Agent"
+   *   - Direct: set_agent_name({ name: "..." }) (if the SDK processes it)
+   */
+  private detectAgentRenameFromMessage(msg: SDKMessage, sessionId: string): JsonRpcMessage | null {
+    if (msg.type !== "assistant") return null;
+
+    for (const block of msg.message.content) {
+      if (block.type !== "tool_use") continue;
+      const toolBlock = block as Record<string, unknown>;
+      const input = (toolBlock.input ?? {}) as Record<string, unknown>;
+
+      // Case 1: Direct set_agent_name tool call (may appear even if the SDK
+      // doesn't officially support it — the model can still generate the block)
+      if (block.name === "set_agent_name" && typeof input.name === "string") {
+        return createNotification("session/update", {
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: block.id,
+            title: "set_agent_name",
+            status: "completed",
+            rawInput: { name: input.name },
+          },
+        });
+      }
+
+      // Case 2: Bash echo fallback
+      if (block.name === "Bash" || block.name === "bash") {
+        const command = input.command as string ?? "";
+        const patterns = [
+          /echo\s+["']?Agent\s*name:\s*(.+?)["']?\s*$/i,
+          /echo\s+["']?set_agent_name:\s*(.+?)["']?\s*$/i,
+          /echo\s+["']?Agent:\s*(.+?)["']?\s*$/i,
+        ];
+        for (const pattern of patterns) {
+          const match = command.match(pattern);
+          if (match?.[1]) {
+            const name = match[1].replace(/["'\\]/g, "").trim();
+            if (name) {
+              return createNotification("session/update", {
+                sessionId,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: block.id,
+                  title: "set_agent_name",
+                  status: "completed",
+                  rawInput: { name },
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+    return null;
   }
 
   /**

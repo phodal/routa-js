@@ -35,6 +35,19 @@ export async function executeMcpTool(
   workspaceTools?: WorkspaceTools
 ) {
   // ── Tools that don't require workspaceId ─────────────────────────────
+  // ── Tools that don't require workspaceId ─────────────────────────────
+  // set_agent_name is a lightweight identity setter — no workspace context needed
+  if (name === "set_agent_name") {
+    const agentName = args.name as string;
+    if (!agentName) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "name is required" }) }], isError: true };
+    }
+    return formatResult({
+      success: true,
+      data: { ok: true, name: agentName },
+    });
+  }
+
   if (name === "fetch_webpage") {
     const url = args.url as string;
     if (!url) {
@@ -179,14 +192,8 @@ export async function executeMcpTool(
           modelTier: args.modelTier as string | undefined,
         })
       );
-    case "set_agent_name":
-      return formatResult({
-        success: true,
-        data: {
-          ok: true,
-          name: args.name as string,
-        },
-      });
+    // set_agent_name is handled before the workspaceId check above
+    // (kept as a comment for reference – the case is unreachable)
     case "delegate_task":
       return formatResult(await tools.delegate(args as never));
     case "send_message_to_agent":

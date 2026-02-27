@@ -1055,19 +1055,78 @@ function extractSetAgentNameTitle(notification: SessionUpdateNotification): stri
     .filter((v): v is string => typeof v === "string")
     .map((v) => v.toLowerCase());
 
+  // Case 1: Direct set_agent_name tool call
   const isSetAgentNameCall = candidates.some((c) =>
     c.includes("set_agent_name") || c.includes("set agent name")
   );
-  if (!isSetAgentNameCall) return undefined;
+  if (isSetAgentNameCall) {
+    const rawInput =
+      typeof update.rawInput === "object" && update.rawInput !== null
+        ? (update.rawInput as Record<string, unknown>)
+        : undefined;
+    const rawName = rawInput?.name;
+    if (typeof rawName !== "string") return undefined;
+    return normalizeAgentSessionTitle(rawName);
+  }
 
-  const rawInput =
-    typeof update.rawInput === "object" && update.rawInput !== null
-      ? (update.rawInput as Record<string, unknown>)
-      : undefined;
-  const rawName = rawInput?.name;
+  // Case 2: Bash fallback — Claude Code SDK agent uses Bash echo when
+  // set_agent_name tool isn't available in its built-in tool set.
+  // Detect patterns like: echo "Agent name: My Cool Agent"
+  const isBashCall = candidates.some((c) => c === "bash");
+  if (isBashCall) {
+    const rawInput =
+      typeof update.rawInput === "object" && update.rawInput !== null
+        ? (update.rawInput as Record<string, unknown>)
+        : undefined;
+    if (rawInput) {
+      const command = rawInput.command as string | undefined;
+      if (typeof command === "string") {
+        const bashName = extractAgentNameFromBashCommand(command);
+        if (bashName) return normalizeAgentSessionTitle(bashName);
+      }
+      // Also check description for naming intent (e.g. "Set agent name identity")
+      const description = rawInput.description as string | undefined;
+      if (typeof description === "string" && typeof command === "string") {
+        const descLower = description.toLowerCase();
+        if (descLower.includes("agent name") || descLower.includes("set_agent_name") || descLower.includes("name identity")) {
+          const echoMatch = command.match(/echo\s+["']?(.+?)["']?\s*$/i);
+          if (echoMatch) {
+            const cleaned = echoMatch[1]
+              .replace(/["'\\]/g, "")
+              .replace(/^Agent\s*name:\s*/i, "")
+              .replace(/^set_agent_name:\s*/i, "")
+              .trim();
+            if (cleaned) return normalizeAgentSessionTitle(cleaned);
+          }
+        }
+      }
+    }
+  }
 
-  if (typeof rawName !== "string") return undefined;
-  return normalizeAgentSessionTitle(rawName);
+  return undefined;
+}
+
+/**
+ * Extract agent name from a Bash echo command.
+ * Handles patterns like:
+ *   echo "Agent name: My Cool Agent"
+ *   echo 'Agent name: My Cool Agent'
+ *   echo "set_agent_name: My Cool Agent"
+ */
+function extractAgentNameFromBashCommand(command: string): string | null {
+  const patterns = [
+    /echo\s+["']?Agent\s*name:\s*(.+?)["']?\s*$/i,
+    /echo\s+["']?set_agent_name:\s*(.+?)["']?\s*$/i,
+    /echo\s+["']?Agent:\s*(.+?)["']?\s*$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (match?.[1]) {
+      const name = match[1].replace(/["'\\]/g, "").trim();
+      if (name) return name;
+    }
+  }
+  return null;
 }
 
 function normalizeAgentSessionTitle(rawName: string): string | undefined {
