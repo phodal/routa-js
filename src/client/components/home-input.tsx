@@ -31,6 +31,10 @@ interface HomeInputProps {
   externalPendingSkill?: string | null;
   /** Called after the external skill has been consumed */
   onExternalSkillConsumed?: () => void;
+  /** Skills to display as subtle suggestion pills below the input */
+  displaySkills?: Array<{ name: string; description: string }>;
+  /** Called when a skill pill is clicked */
+  onSkillPillClick?: (name: string) => void;
 }
 
 export function HomeInput({
@@ -39,6 +43,8 @@ export function HomeInput({
   onSessionCreated,
   externalPendingSkill,
   onExternalSkillConsumed,
+  displaySkills,
+  onSkillPillClick,
 }: HomeInputProps) {
   const router = useRouter();
   const acp = useAcp();
@@ -55,9 +61,7 @@ export function HomeInput({
   const [pendingSkill, setPendingSkill] = useState<string | null>(null);
 
   // Dropdown states
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
-  const agentDropdownRef = useRef<HTMLDivElement>(null);
   const wsDropdownRef = useRef<HTMLDivElement>(null);
 
   // Sync with external workspaceId prop
@@ -120,12 +124,9 @@ export function HomeInput({
     }
   }, [externalPendingSkill, onExternalSkillConsumed]);
 
-  // Click outside to close dropdowns
+  // Click outside to close workspace dropdown
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
-        setShowAgentDropdown(false);
-      }
       if (wsDropdownRef.current && !wsDropdownRef.current.contains(e.target as Node)) {
         setShowWorkspaceDropdown(false);
       }
@@ -173,7 +174,7 @@ export function HomeInput({
   return (
     <div className="w-full max-w-2xl mx-auto">
       {/* Input container with ambient glow on focus */}
-      <div className="group relative">
+      <div className="group relative" id="home-input-container">
         {/* Glow effect */}
         <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-amber-500/20 opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500 pointer-events-none" />
 
@@ -199,102 +200,45 @@ export function HomeInput({
 
           {/* ─── Bottom Control Bar ─────────────────────────────────── */}
           <div className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 dark:border-[#1c1f2e]">
-            {/* Agent Role Selector — lightweight dropdown */}
-            <div className="relative" ref={agentDropdownRef}>
+            {/* Agent Role — segmented control */}
+            <div
+              className="flex items-center rounded-lg bg-gray-100 dark:bg-[#1a1d2a] p-0.5 gap-0.5"
+              role="group"
+              aria-label="Agent mode"
+            >
               <button
                 type="button"
-                onClick={() => setShowAgentDropdown((v) => !v)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                onClick={() => setSelectedRole("ROUTA")}
+                title="Multi-agent orchestration — spawns specialized agents for complex multi-step tasks (Routa)"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                   selectedRole === "ROUTA"
-                    ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40"
-                    : "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-800/40"
+                    ? "bg-white dark:bg-[#1f2233] shadow-sm text-gray-900 dark:text-gray-100"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                 }`}
               >
-                <span
-                  className={`w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold ${
-                    selectedRole === "ROUTA"
-                      ? "bg-amber-500 text-white"
-                      : "bg-violet-500 text-white"
-                  }`}
-                >
-                  {selectedRole === "ROUTA" ? "R" : "D"}
-                </span>
-                {selectedRole === "ROUTA" ? "Routa" : "Developer"}
-                <svg
-                  className="w-3 h-3 opacity-50"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                {/* nodes/network icon */}
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "ROUTA" ? 2.5 : 2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1M4.22 4.22l.707.707m13.857 13.857l.707.707M1 12h1m20 0h1M4.22 19.78l.707-.707m13.857-13.857l.707-.707"/>
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" />
                 </svg>
+                Multi-Agent
               </button>
-
-              {showAgentDropdown && (
-                <div className="absolute bottom-full left-0 mb-1 w-56 rounded-xl border border-gray-200 dark:border-[#1c1f2e] bg-white dark:bg-[#181b26] shadow-xl z-50 overflow-hidden">
-                  <div className="p-1">
-                    <button
-                      onClick={() => {
-                        setSelectedRole("ROUTA");
-                        setShowAgentDropdown(false);
-                      }}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-3 transition-colors ${
-                        selectedRole === "ROUTA"
-                          ? "bg-amber-50 dark:bg-amber-900/15"
-                          : "hover:bg-gray-50 dark:hover:bg-[#1f2233]"
-                      }`}
-                    >
-                      <span
-                        className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold ${
-                          selectedRole === "ROUTA"
-                            ? "bg-amber-500 text-white"
-                            : "bg-gray-100 dark:bg-gray-800 text-gray-500"
-                        }`}
-                      >
-                        R
-                      </span>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Routa
-                        </div>
-                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                          Orchestrate & plan tasks
-                        </div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedRole("DEVELOPER");
-                        setShowAgentDropdown(false);
-                      }}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-3 transition-colors ${
-                        selectedRole === "DEVELOPER"
-                          ? "bg-violet-50 dark:bg-violet-900/15"
-                          : "hover:bg-gray-50 dark:hover:bg-[#1f2233]"
-                      }`}
-                    >
-                      <span
-                        className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold ${
-                          selectedRole === "DEVELOPER"
-                            ? "bg-violet-500 text-white"
-                            : "bg-gray-100 dark:bg-gray-800 text-gray-500"
-                        }`}
-                      >
-                        D
-                      </span>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Developer
-                        </div>
-                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                          Direct implementation & coding
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setSelectedRole("DEVELOPER")}
+                title="Single-agent direct coding — best for focused, simple tasks (Developer)"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  selectedRole === "DEVELOPER"
+                    ? "bg-white dark:bg-[#1f2233] shadow-sm text-gray-900 dark:text-gray-100"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+              >
+                {/* lightning bolt for direct/fast */}
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "DEVELOPER" ? 2.5 : 2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                </svg>
+                Direct
+              </button>
             </div>
 
             <div className="w-px h-4 bg-gray-200 dark:bg-[#1c1f2e]" />
@@ -429,6 +373,66 @@ export function HomeInput({
           </div>
         </div>
       </div>
+
+      {/* ─── Mode Tips ──────────────────────────────────────────────── */}
+      <div className="mt-2 px-1 min-h-[44px]">
+        {selectedRole === "ROUTA" ? (
+          <div className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500 animate-fade-in-up">
+            <span className="mt-0.5 shrink-0 w-3.5 h-3.5 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <svg className="w-2 h-2 text-amber-500" fill="currentColor" viewBox="0 0 8 8">
+                <circle cx="4" cy="4" r="3" />
+              </svg>
+            </span>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 leading-relaxed">
+              <span className="text-gray-500 dark:text-gray-400">适合复杂任务</span>
+              <span className="text-gray-300 dark:text-gray-700">·</span>
+              <span>自动拆解需求并分配给多个专属 Agent</span>
+              <span className="text-gray-300 dark:text-gray-700">·</span>
+              <span className="italic opacity-70">e.g. "实现一个完整的登录模块"</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500 animate-fade-in-up">
+            <span className="mt-0.5 shrink-0 w-3.5 h-3.5 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+              <svg className="w-2 h-2 text-violet-500" fill="currentColor" viewBox="0 0 8 8">
+                <circle cx="4" cy="4" r="3" />
+              </svg>
+            </span>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 leading-relaxed">
+              <span className="text-gray-500 dark:text-gray-400">适合简单快速任务</span>
+              <span className="text-gray-300 dark:text-gray-700">·</span>
+              <span>单 Agent 直接执行，无编排开销</span>
+              <span className="text-gray-300 dark:text-gray-700">·</span>
+              <span className="italic opacity-70">e.g. "修复这个 bug" / "解释这段代码"</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Skills — compact cards with name + description ── */}
+      {displaySkills && displaySkills.length > 0 && (
+        <div className="mt-2.5 px-0.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {displaySkills.slice(0, 9).map((skill) => (
+              <button
+                key={skill.name}
+                type="button"
+                onClick={() => setPendingSkill(skill.name)}
+                className="group flex flex-col gap-0.5 px-2.5 py-2 rounded-lg text-left bg-gray-50 dark:bg-[#12141c] border border-gray-100 dark:border-[#1c1f2e] hover:border-amber-300/60 dark:hover:border-amber-700/40 hover:bg-white dark:hover:bg-[#151720] transition-all"
+              >
+                <span className="text-[11px] font-mono font-medium text-gray-500 dark:text-gray-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                  /{skill.name}
+                </span>
+                {skill.description && (
+                  <span className="text-[10px] text-gray-400 dark:text-gray-600 leading-snug line-clamp-1">
+                    {skill.description}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

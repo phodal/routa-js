@@ -28,7 +28,6 @@ export default function HomePage() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAgentInstall, setShowAgentInstall] = useState(false);
-  const [gridPendingSkill, setGridPendingSkill] = useState<string | null>(null);
 
   // Auto-select first workspace on load
   useEffect(() => {
@@ -129,19 +128,10 @@ export default function HomePage() {
                 onSessionCreated={() => {
                   setRefreshKey((k) => k + 1);
                 }}
-                externalPendingSkill={gridPendingSkill}
-                onExternalSkillConsumed={() => setGridPendingSkill(null)}
+                displaySkills={skillsHook.allSkills}
               />
             )}
           </div>
-
-          {/* Skills Grid */}
-          {skillsHook.allSkills.length > 0 && (
-            <SkillsGrid
-              skills={skillsHook.allSkills}
-              onSkillClick={(name) => setGridPendingSkill(name)}
-            />
-          )}
 
           {/* Recent Sessions */}
           {workspacesHook.workspaces.length > 0 && (
@@ -198,66 +188,6 @@ function OnboardingCard({ onCreateWorkspace }: { onCreateWorkspace: (title: stri
       >
         Get Started
       </button>
-    </div>
-  );
-}
-
-// ─── Skills Grid ──────────────────────────────────────────────────────
-
-function SkillsGrid({
-  skills,
-  onSkillClick,
-}: {
-  skills: Array<{ name: string; description: string }>;
-  onSkillClick: (name: string) => void;
-}) {
-  const getSkillIcon = (name: string) => {
-    const n = name.toLowerCase();
-    if (n.includes("design") || n.includes("ui") || n.includes("frontend")) return "🎨";
-    if (n.includes("test")) return "🧪";
-    if (n.includes("debug")) return "🔍";
-    if (n.includes("doc")) return "📝";
-    if (n.includes("deploy")) return "🚀";
-    if (n.includes("refactor")) return "♻️";
-    if (n.includes("security")) return "🔒";
-    if (n.includes("api")) return "⚡";
-    if (n.includes("data")) return "📊";
-    if (n.includes("develop") || n.includes("code") || n.includes("crafter")) return "🔧";
-    if (n.includes("find")) return "🔎";
-    return "⚙️";
-  };
-
-  return (
-    <div className="px-6 pb-6">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-            Skills
-          </h3>
-          <div className="flex-1 h-px bg-gray-100 dark:bg-[#171a24]" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-          {skills.map((skill) => (
-            <button
-              key={skill.name}
-              onClick={() => onSkillClick(skill.name)}
-              className="group p-3 rounded-xl bg-white dark:bg-[#12141c] border border-gray-100 dark:border-[#1c1f2e] hover:border-amber-300 dark:hover:border-amber-700/50 transition-all text-left hover:shadow-sm"
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-base">{getSkillIcon(skill.name)}</span>
-                <span className="text-[13px] font-medium text-gray-800 dark:text-gray-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors truncate">
-                  /{skill.name}
-                </span>
-              </div>
-              {skill.description && (
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed pl-7">
-                  {skill.description}
-                </p>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
