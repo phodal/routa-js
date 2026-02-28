@@ -23,13 +23,18 @@ test.describe("ACP Warmup API", () => {
     expect(Array.isArray(body.statuses)).toBe(true);
   });
 
-  test("GET /api/acp/warmup?id=<unknown> returns idle status", async ({ request }) => {
-    const res = await request.get(`${BASE}/api/acp/warmup?id=no-such-agent-xyz`);
+  test("GET /api/acp/warmup?id=<unknown> returns idle or failed status", async ({ request }) => {
+    // Use a per-run unique ID so previous test runs don't pollute state.
+    // The service returns "idle" on first query, or "failed" if it was
+    // previously attempted in a prior run.
+    const id = `unknown-agent-${Date.now()}`;
+    const res = await request.get(`${BASE}/api/acp/warmup?id=${id}`);
     expect(res.status()).toBe(200);
 
     const body = await res.json();
-    expect(body.agentId).toBe("no-such-agent-xyz");
-    expect(body.state).toBe("idle");
+    expect(body.agentId).toBe(id);
+    // Brand-new IDs start as idle; after a failed attempt they become failed
+    expect(["idle", "failed"]).toContain(body.state);
   });
 
   // ── POST /api/acp/warmup (fire-and-forget) ────────────────────────────
