@@ -18,6 +18,7 @@ import { useSkills } from "../hooks/use-skills";
 import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
 import type { RepoSelection } from "./repo-picker";
 import { storePendingPrompt } from "../utils/pending-prompt";
+import { loadProviderConnectionConfig } from "./settings-panel";
 
 type AgentRole = "ROUTA" | "DEVELOPER";
 
@@ -145,14 +146,19 @@ export function HomeInput({
       try {
         const idempotencyKey = `home-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const wsId = selectedWorkspaceId ?? undefined;
+        const effectiveProvider = context.provider ?? acp.selectedProvider;
+        const conn = loadProviderConnectionConfig(effectiveProvider);
         const result = await acp.createSession(
           context.cwd ?? repoSelection?.path,
           context.provider,
           context.mode,
           selectedRole,
           wsId,
-          context.model,
+          context.model ?? conn.model,
           idempotencyKey,
+          undefined, // specialistId
+          conn.baseUrl,
+          conn.apiKey,
         );
 
         if (result?.sessionId) {

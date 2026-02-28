@@ -111,16 +111,22 @@ export class ClaudeCodeSdkAdapter {
   private _modelOverride: string | undefined;
   /** Per-instance maxTurns override. */
   private _maxTurnsOverride: number | undefined;
+  /** Per-instance base URL override — takes precedence over ANTHROPIC_BASE_URL. */
+  private _baseUrlOverride: string | undefined;
+  /** Per-instance API key override — takes precedence over ANTHROPIC_AUTH_TOKEN. */
+  private _apiKeyOverride: string | undefined;
 
   constructor(
     cwd: string,
     onNotification: NotificationHandler,
-    options?: { model?: string; maxTurns?: number }
+    options?: { model?: string; maxTurns?: number; baseUrl?: string; apiKey?: string }
   ) {
     this.cwd = cwd;
     this.onNotification = onNotification;
     this._modelOverride = options?.model;
     this._maxTurnsOverride = options?.maxTurns;
+    this._baseUrlOverride = options?.baseUrl;
+    this._apiKeyOverride = options?.apiKey;
   }
 
   get alive(): boolean {
@@ -137,17 +143,19 @@ export class ClaudeCodeSdkAdapter {
   async connect(): Promise<void> {
     const config = getClaudeCodeSdkConfig();
     const effectiveModel = this._modelOverride ?? config.model;
+    const effectiveApiKey = this._apiKeyOverride ?? config.apiKey;
+    const effectiveBaseUrl = this._baseUrlOverride ?? config.baseUrl;
 
-    if (!config.apiKey) {
+    if (!effectiveApiKey) {
       throw new Error(
         "Claude Code SDK requires ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY environment variable"
       );
     }
 
     // Ensure env vars are visible to the cli.js child process
-    process.env.ANTHROPIC_API_KEY = config.apiKey;
-    if (config.baseUrl) {
-      process.env.ANTHROPIC_BASE_URL = config.baseUrl;
+    process.env.ANTHROPIC_API_KEY = effectiveApiKey;
+    if (effectiveBaseUrl) {
+      process.env.ANTHROPIC_BASE_URL = effectiveBaseUrl;
     }
 
     // Ensure CLAUDE_CONFIG_DIR points to /tmp/.claude in the current process
@@ -161,8 +169,8 @@ export class ClaudeCodeSdkAdapter {
     this.sessionId = `claude-sdk-${Date.now()}`;
     this._alive = true;
     console.log(`[ClaudeCodeSdkAdapter] Initialized with model: ${effectiveModel}${this._modelOverride ? ' (per-instance override)' : ''}`);
-    if (config.baseUrl) {
-      console.log(`[ClaudeCodeSdkAdapter] Using custom API endpoint: ${config.baseUrl}`);
+    if (effectiveBaseUrl) {
+      console.log(`[ClaudeCodeSdkAdapter] Using custom API endpoint: ${effectiveBaseUrl}`);
     }
   }
 

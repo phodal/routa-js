@@ -43,6 +43,10 @@ export interface AgentInstanceConfig {
   specialistId?: string;
   /** Agent role (ROUTA / CRAFTER / GATE / DEVELOPER or custom) */
   role?: string;
+  /** Custom API base URL override (e.g. https://open.bigmodel.cn/api/anthropic) */
+  baseUrl?: string;
+  /** API key / auth token override */
+  apiKey?: string;
 }
 
 /**
@@ -169,6 +173,8 @@ export class AgentInstanceFactory {
     const adapter = new ClaudeCodeSdkAdapter(cwd, onNotification, {
       model: resolved.resolvedModel,
       maxTurns: resolved.maxTurns,
+      baseUrl: resolved.baseUrl,
+      apiKey: resolved.apiKey,
     });
 
     console.log(

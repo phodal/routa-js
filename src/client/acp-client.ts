@@ -127,6 +127,10 @@ export class BrowserAcpClient {
     model?: string;
     idempotencyKey?: string;
     specialistId?: string;
+    /** Custom API base URL (overrides ANTHROPIC_BASE_URL env var) */
+    baseUrl?: string;
+    /** API key override (overrides ANTHROPIC_AUTH_TOKEN env var) */
+    apiKey?: string;
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", {
       cwd: params.cwd,
@@ -140,6 +144,8 @@ export class BrowserAcpClient {
       model: params.model,
       idempotencyKey: params.idempotencyKey,
       specialistId: params.specialistId,
+      baseUrl: params.baseUrl,
+      apiKey: params.apiKey,
     });
     this._sessionId = result.sessionId;
 

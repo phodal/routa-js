@@ -18,6 +18,12 @@ const ROLE_DESCRIPTIONS: Record<AgentRoleKey, string> = {
 };
 
 const STORAGE_KEY = "routa.defaultProviders";
+const CONNECTIONS_STORAGE_KEY = "routa.providerConnections";
+
+/** The set of known provider IDs that support connection config. */
+const CONFIGURABLE_PROVIDERS = [
+  { id: "claude-code-sdk", name: "Claude Code SDK", placeholder: { baseUrl: "https://api.anthropic.com/", apiKey: "sk-ant-...", model: "claude-sonnet-4-20250514" } },
+] as const;
 
 /**
  * Memory statistics interface from /api/memory
@@ -96,6 +102,41 @@ export function saveDefaultProviders(settings: DefaultProviderSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
 
+/** Provider connection configuration (baseUrl, apiKey, model) stored per provider ID. */
+export interface ProviderConnectionConfig {
+  /** Custom API base URL (e.g. https://open.bigmodel.cn/api/anthropic). */
+  baseUrl?: string;
+  /** API key / auth token for this provider. */
+  apiKey?: string;
+  /** Default model name for this provider (overrides PROVIDER_MODEL_TIERS defaults). */
+  model?: string;
+}
+
+/** Map of providerId → ProviderConnectionConfig, stored in localStorage. */
+export type ProviderConnectionsStorage = Record<string, ProviderConnectionConfig>;
+
+/** Load all provider connection configs from localStorage. */
+export function loadProviderConnections(): ProviderConnectionsStorage {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(CONNECTIONS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as ProviderConnectionsStorage) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Load connection config for a single provider ID. */
+export function loadProviderConnectionConfig(providerId: string): ProviderConnectionConfig {
+  return loadProviderConnections()[providerId] ?? {};
+}
+
+/** Save all provider connection configs to localStorage. */
+export function saveProviderConnections(storage: ProviderConnectionsStorage): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(CONNECTIONS_STORAGE_KEY, JSON.stringify(storage));
+}
+
 interface ProviderOption {
   id: string;
   name: string;
@@ -108,10 +149,11 @@ interface SettingsPanelProps {
   providers: ProviderOption[];
 }
 
-type SettingsTab = "providers" | "specialists" | "memory";
+type SettingsTab = "providers" | "specialists" | "models" | "memory";
 
 export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) {
   const [settings, setSettings] = useState<DefaultProviderSettings>({});
+  const [connections, setConnections] = useState<ProviderConnectionsStorage>({});
   const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [memoryStats, setMemoryStats] = useState<MemoryResponse | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
@@ -120,6 +162,7 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
   useEffect(() => {
     if (open) {
       setSettings(loadDefaultProviders());
+      setConnections(loadProviderConnections());
       if (activeTab === "memory") {
         fetchMemoryData();
       }
@@ -184,6 +227,18 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
     [settings],
   );
 
+  const handleConnectionChange = useCallback(
+    (providerId: string, field: keyof ProviderConnectionConfig, value: string) => {
+      const current: ProviderConnectionConfig = connections[providerId] ?? {};
+      const updated: ProviderConnectionConfig = { ...current, [field]: value || undefined };
+      const isEmpty = !updated.baseUrl && !updated.apiKey && !updated.model;
+      const next: ProviderConnectionsStorage = { ...connections, [providerId]: isEmpty ? {} : updated };
+      setConnections(next);
+      saveProviderConnections(next);
+    },
+    [connections],
+  );
+
   if (!open) return null;
 
   const availableProviders = providers.filter((p) => p.status === "available");
@@ -235,6 +290,16 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
             }`}
           >
             Specialists
+          </button>
+          <button
+            onClick={() => setActiveTab("models")}
+            className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+              activeTab === "models"
+                ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+            }`}
+          >
+            Models
           </button>
           <button
             onClick={() => setActiveTab("memory")}
@@ -328,8 +393,63 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
               Manage Specialists
             </button>
           </div>
+        ) : activeTab === "models" ? (
+          <div className="px-5 py-4 space-y-5 overflow-y-auto" style={{maxHeight: 'calc(90vh - 140px)'}}>
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                Provider Connection Settings
+              </h3>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-4">
+                Configure base URL, API key, and default model per provider. These override the corresponding environment variables (<code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">ANTHROPIC_BASE_URL</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">ANTHROPIC_AUTH_TOKEN</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">ANTHROPIC_MODEL</code>).
+              </p>
+              <div className="space-y-5">
+                {CONFIGURABLE_PROVIDERS.map(({ id: providerId, name: providerName, placeholder }) => {
+                  const conn = connections[providerId] ?? {};
+                  return (
+                    <div key={providerId} className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                      <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">{providerName}</div>
+                      {/* Base URL */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Base URL</label>
+                        <input
+                          type="url"
+                          value={conn.baseUrl ?? ""}
+                          onChange={(e) => handleConnectionChange(providerId, "baseUrl", e.target.value)}
+                          placeholder={placeholder.baseUrl}
+                          className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono"
+                        />
+                      </div>
+                      {/* API Key */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">API Key</label>
+                        <input
+                          type="password"
+                          value={conn.apiKey ?? ""}
+                          onChange={(e) => handleConnectionChange(providerId, "apiKey", e.target.value)}
+                          placeholder={placeholder.apiKey}
+                          autoComplete="off"
+                          className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono"
+                        />
+                      </div>
+                      {/* Default Model */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Default Model</label>
+                        <input
+                          type="text"
+                          value={conn.model ?? ""}
+                          onChange={(e) => handleConnectionChange(providerId, "model", e.target.value)}
+                          placeholder={placeholder.model}
+                          className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono"
+                        />
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">Used when no per-role model override is set. Example: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">GLM-4.7</code></p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         ) : (
-          // Memory tab
           <div className="px-5 py-4 space-y-4 max-h-96 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">

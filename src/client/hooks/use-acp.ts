@@ -60,6 +60,10 @@ export interface UseAcpActions {
     idempotencyKey?: string,
     /** Specialist ID for per-specialist model configuration */
     specialistId?: string,
+    /** Custom API base URL override */
+    baseUrl?: string,
+    /** API key override */
+    apiKey?: string,
   ) => Promise<AcpNewSessionResult | null>;
   selectSession: (sessionId: string) => void;
   setProvider: (provider: string) => void;
@@ -206,6 +210,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       model?: string,
       idempotencyKey?: string,
       specialistId?: string,
+      baseUrl?: string,
+      apiKey?: string,
     ): Promise<AcpNewSessionResult | null> => {
       const client = clientRef.current;
       if (!client) return null;
@@ -222,6 +228,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           model,
           idempotencyKey,
           specialistId,
+          baseUrl,
+          apiKey,
         });
         sessionIdRef.current = result.sessionId;
         setState((s) => ({

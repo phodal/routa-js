@@ -218,6 +218,8 @@ export async function POST(request: NextRequest) {
       const role = (p.role as string | undefined)?.toUpperCase();
       const model = (p.model as string | undefined);
       const specialistId = (p.specialistId as string | undefined);
+      const baseUrl = (p.baseUrl as string | undefined);
+      const apiKey = (p.apiKey as string | undefined);
       const workspaceId = (p.workspaceId as string) || "default";
       const idempotencyKey = p.idempotencyKey as string | undefined;
 
@@ -289,6 +291,8 @@ export async function POST(request: NextRequest) {
           provider: "claude-code-sdk",
           specialistId,
           role,
+          baseUrl,
+          apiKey,
         };
         acpSessionId = await manager.createClaudeCodeSdkSession(
           sessionId,
