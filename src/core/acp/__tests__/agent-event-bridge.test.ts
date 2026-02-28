@@ -38,7 +38,9 @@ describe("AgentEventBridge", () => {
       const event = makeStartedEvent("sess-1", "claude");
       expect(event.type).toBe("agent_started");
       expect(event.sessionId).toBe("sess-1");
-      expect(event.provider).toBe("claude");
+      if (event.type === "agent_started") {
+        expect(event.provider).toBe("claude");
+      }
     });
   });
 

@@ -86,6 +86,35 @@ export {
   uninstallBinaryAgent,
 } from "./acp-installer";
 export { AcpProcess } from "@/core/acp/acp-process";
+
+// AgentEventBridge exports
+export {
+  AgentEventBridge,
+  makePlanUpdatedEvent,
+  makeStartedEvent,
+  classifyToolKind,
+  extractFilePaths,
+  extractFileChanges,
+  type WorkspaceAgentEvent,
+  type AgentStartedEvent,
+  type AgentCompletedEvent,
+  type AgentFailedEvent,
+  type PlanUpdatedEvent,
+  type PlanItem,
+  type PlanItemStatus,
+  type ToolCallBlockEvent,
+  type ReadBlockEvent,
+  type FileChangesBlockEvent,
+  type TerminalBlockEvent,
+  type McpBlockEvent,
+  type MessageBlockEvent,
+  type ThoughtBlockEvent,
+  type UsageReportedEvent,
+  type FileChange,
+  type BlockStatus,
+  type ToolKind,
+  type AgentUsage,
+} from "./agent-event-bridge";
 export {
   ClaudeCodeProcess,
   buildClaudeCodeConfig,
