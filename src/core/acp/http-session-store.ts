@@ -37,6 +37,8 @@ export interface RoutaSessionRecord {
   parentSessionId?: string;
   /** The custom specialist ID used for this session (if any) */
   specialistId?: string;
+  /** Pre-built system prompt header for the specialist (systemPrompt + roleReminder) */
+  specialistSystemPrompt?: string;
 }
 
 type Controller = ReadableStreamDefaultController<Uint8Array>;

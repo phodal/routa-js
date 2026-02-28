@@ -34,7 +34,7 @@ import type { AgentInstanceConfig } from "@/core/acp/agent-instance-factory";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { getRoutaSystem } from "@/core/routa-system";
 import { AgentRole } from "@/core/models/agent";
-import { buildCoordinatorPrompt, buildSpecialistFirstPrompt, getSpecialistByRole, getSpecialistById } from "@/core/orchestration/specialist-prompts";
+import { buildCoordinatorPrompt, getSpecialistByRole, setSpecialistDatabaseEnabled, loadSpecialists, reloadSpecialists } from "@/core/orchestration/specialist-prompts";
 import { AcpError } from "@/core/acp/acp-process";
 import {
   createTraceRecord,
@@ -390,6 +390,29 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Load specialist system prompt from DB if specialistId was provided
+      let specialistSystemPrompt: string | undefined;
+      if (specialistId) {
+        setSpecialistDatabaseEnabled(true);
+        // Try cached list first; if specialist not found, force reload from DB
+        let allSpecialists = await loadSpecialists();
+        let specialist = allSpecialists.find(s => s.id === specialistId.toLowerCase());
+        if (!specialist) {
+          allSpecialists = await reloadSpecialists();
+          specialist = allSpecialists.find(s => s.id === specialistId.toLowerCase());
+        }
+        if (specialist?.systemPrompt) {
+          let prompt = specialist.systemPrompt;
+          if (specialist.roleReminder) {
+            prompt += `\n\n---\n**Reminder:** ${specialist.roleReminder}`;
+          }
+          specialistSystemPrompt = prompt;
+          console.log(`[ACP Route] Loaded specialist systemPrompt for ${specialistId} (length: ${prompt.length})`);
+        } else {
+          console.warn(`[ACP Route] Specialist not found or has no systemPrompt: ${specialistId}`);
+        }
+      }
+
       // Persist session for UI listing
       const now = new Date();
       store.upsertSession({
@@ -402,6 +425,7 @@ export async function POST(request: NextRequest) {
         modeId,
         model,
         specialistId: specialistId ?? undefined,
+        specialistSystemPrompt,
         createdAt: now.toISOString(),
       });
 
@@ -664,18 +688,12 @@ export async function POST(request: NextRequest) {
       // Check if this session uses a custom specialist - inject systemPrompt on first prompt
       {
         const sessionRecord = store.getSession(sessionId);
-        if (sessionRecord?.specialistId && !sessionRecord.firstPromptSent) {
-          const specialist = getSpecialistById(sessionRecord.specialistId);
-          if (specialist?.systemPrompt) {
-            promptText = buildSpecialistFirstPrompt({
-              specialist,
-              userRequest: promptText,
-            });
-            store.markFirstPromptSent(sessionId);
-            console.log(
-              `[ACP Route] Injected specialist systemPrompt for ${sessionRecord.specialistId} into session ${sessionId}`
-            );
-          }
+        if (sessionRecord?.specialistSystemPrompt && !sessionRecord.firstPromptSent) {
+          promptText = `${sessionRecord.specialistSystemPrompt}\n\n---\n\n${promptText}`;
+          store.markFirstPromptSent(sessionId);
+          console.log(
+            `[ACP Route] Injected specialist systemPrompt for ${sessionRecord.specialistId} into session ${sessionId}`
+          );
         }
       }
 
