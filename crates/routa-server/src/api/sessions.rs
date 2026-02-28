@@ -12,6 +12,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_sessions))
         .route("/{session_id}", get(get_session).patch(rename_session).delete(delete_session))
+        .route("/{session_id}/history", get(get_session_history))
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,4 +107,27 @@ async fn delete_session(
         .ok_or_else(|| ServerError::NotFound("Session not found".to_string()))?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryQuery {
+    consolidated: Option<bool>,
+}
+
+/// GET /api/sessions/{session_id}/history — Get session message history.
+async fn get_session_history(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Query(query): Query<HistoryQuery>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let history = state
+        .acp_manager
+        .get_session_history(&session_id)
+        .await
+        .ok_or_else(|| ServerError::NotFound("Session not found".to_string()))?;
+
+    // TODO: Implement consolidation if query.consolidated == Some(true)
+    // For now, return raw history
+    Ok(Json(serde_json::json!({ "history": history })))
 }

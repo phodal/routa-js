@@ -51,5 +51,8 @@ urlencoding = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# System information
+sysinfo = "0.32"
+
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

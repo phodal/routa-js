@@ -110,6 +110,8 @@ pub struct AcpManager {
     processes: Arc<RwLock<HashMap<String, ManagedProcess>>>,
     /// Our sessionId → broadcast sender for SSE notifications
     notification_channels: Arc<RwLock<HashMap<String, broadcast::Sender<serde_json::Value>>>>,
+    /// Our sessionId → message history (session/update notifications)
+    history: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
 }
 
 impl AcpManager {
@@ -118,6 +120,7 @@ impl AcpManager {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             processes: Arc::new(RwLock::new(HashMap::new())),
             notification_channels: Arc::new(RwLock::new(HashMap::new())),
+            history: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -148,6 +151,7 @@ impl AcpManager {
         let mut sessions = self.sessions.write().await;
         let mut processes = self.processes.write().await;
         let mut channels = self.notification_channels.write().await;
+        let mut history = self.history.write().await;
 
         // Remove session record
         sessions.remove(session_id)?;
@@ -160,7 +164,25 @@ impl AcpManager {
         // Remove notification channel
         channels.remove(session_id);
 
+        // Remove history
+        history.remove(session_id);
+
         Some(())
+    }
+
+    /// Get session message history.
+    /// Returns `Some(history)` if the session exists, `None` if not found.
+    pub async fn get_session_history(&self, session_id: &str) -> Option<Vec<serde_json::Value>> {
+        let history = self.history.read().await;
+        history.get(session_id).cloned()
+    }
+
+    /// Add a notification to session history.
+    pub async fn push_to_history(&self, session_id: &str, notification: serde_json::Value) {
+        let mut history = self.history.write().await;
+        history.entry(session_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(notification);
     }
 
     /// Create a new ACP session: spawn agent process, initialize, create session.

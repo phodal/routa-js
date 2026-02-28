@@ -20,6 +20,9 @@ pub enum ServerError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +40,7 @@ impl axum::response::IntoResponse for ServerError {
             ServerError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             ServerError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             ServerError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            ServerError::NotImplemented(msg) => (StatusCode::NOT_IMPLEMENTED, msg.clone()),
         };
 
         let body = serde_json::json!({ "error": message });

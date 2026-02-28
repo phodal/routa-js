@@ -48,6 +48,7 @@ impl From<ServerError> for RpcError {
             ServerError::Conflict(msg) => RpcError::BadRequest(msg),
             ServerError::Database(msg) => RpcError::Internal(msg),
             ServerError::Internal(msg) => RpcError::Internal(msg),
+            ServerError::NotImplemented(msg) => RpcError::Internal(msg),
         }
     }
 }

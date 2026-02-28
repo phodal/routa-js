@@ -8,6 +8,7 @@ pub mod clone_progress;
 pub mod codebases;
 pub mod debug;
 pub mod files;
+pub mod memory;
 pub mod mcp_routes;
 pub mod mcp_server_mgmt;
 pub mod mcp_tools;
@@ -20,6 +21,7 @@ pub mod skills;
 pub mod skills_catalog;
 pub mod skills_clone;
 pub mod skills_upload;
+pub mod specialists;
 pub mod tasks;
 pub mod test_mcp;
 pub mod traces;
@@ -57,5 +59,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/rpc", rpc::router())
         .nest("/api/a2a", a2a::router())
         .nest("/api/traces", traces::router())
+        .nest("/api/specialists", specialists::router())
+        .nest("/api/memory", memory::router())
         .nest("/api/debug", debug::router())
 }
