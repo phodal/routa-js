@@ -202,57 +202,6 @@ flowchart TB
     class tools,orchestrator,system,skill_reg coreStyle
 ```
 
-## 👥 Agent Roles & Workflow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant ROUTA as 🔵 ROUTA<br/>(Coordinator)
-    participant CRAFTER as 🟠 CRAFTER<br/>(Implementor)
-    participant GATE as 🟢 GATE<br/>(Verifier)
-
-    User->>ROUTA: Complex task request
-    activate ROUTA
-
-    Note over ROUTA: Analyzes requirements<br/>Creates task breakdown
-    ROUTA->>ROUTA: create_task("Implement feature X")
-    ROUTA->>ROUTA: create_task("Add tests")
-
-    ROUTA->>CRAFTER: delegate_task(task_id, specialist="CRAFTER")
-    activate CRAFTER
-    Note over CRAFTER: Spawns ACP process<br/>Receives task context
-
-    CRAFTER->>CRAFTER: Implements changes
-    CRAFTER->>CRAFTER: Writes code
-    CRAFTER->>ROUTA: report_to_parent(success, summary)
-    deactivate CRAFTER
-
-    ROUTA->>GATE: delegate_task(task_id, specialist="GATE")
-    activate GATE
-    Note over GATE: Reviews implementation<br/>Runs verification commands
-
-    GATE->>GATE: Checks acceptance criteria
-    GATE->>GATE: Validates quality
-    GATE->>ROUTA: report_to_parent(verdict, report)
-    deactivate GATE
-
-    alt Verification Approved
-        ROUTA->>User: Task completed ✓
-    else Needs Fix
-        ROUTA->>CRAFTER: delegate_task(fix_task_id)
-        Note over CRAFTER,GATE: Iteration continues...
-    end
-
-    deactivate ROUTA
-```
-
-| Role | Purpose | Behavior |
-|------|---------|----------|
-| 🔵 **ROUTA** | Coordinator | Plans work, breaks down tasks, delegates to specialists, orchestrates workflow |
-| 🟠 **CRAFTER** | Implementor | Executes implementation tasks, writes code, makes minimal focused changes |
-| 🟢 **GATE** | Verifier | Reviews work, validates against acceptance criteria, approves or requests fixes |
-| 🎯 **DEVELOPER** | Solo Agent | Plans and implements independently without delegation (single-agent mode) |
-
 ## 📄 License
 
 - Built with [Model Context Protocol](https://modelcontextprotocol.io/) by Anthropic
