@@ -41,25 +41,11 @@ export async function GET(request: NextRequest) {
     ? await system.noteStore.listByType(workspaceId, type)
     : await system.noteStore.listByWorkspace(workspaceId);
 
-  // Filter by sessionId if provided
-  // - Task notes require exact sessionId match
-  // - Spec/general notes: include if no sessionId (workspace-wide) or matching sessionId
+  // Filter by sessionId if provided — require exact match for all note types.
+  // Workspace-wide notes (no sessionId) are excluded when a session filter is given;
+  // they are only visible when listing notes without a sessionId filter.
   if (sessionIdFilter) {
-    notes = notes.filter((note) => {
-      const noteType = note.metadata?.type;
-      const noteSessionId = note.sessionId;
-
-      // Task notes require exact session match
-      if (noteType === "task") {
-        return noteSessionId === sessionIdFilter;
-      }
-      // Spec notes: include if workspace-wide or matching session
-      if (noteType === "spec") {
-        return !noteSessionId || noteSessionId === sessionIdFilter;
-      }
-      // General notes: include if workspace-wide or matching session
-      return !noteSessionId || noteSessionId === sessionIdFilter;
-    });
+    notes = notes.filter((note) => note.sessionId === sessionIdFilter);
   }
 
   // Group by session if requested
