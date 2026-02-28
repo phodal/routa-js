@@ -25,6 +25,7 @@ export class RoutaMcpToolManager {
   private noteTools?: NoteTools;
   private workspaceTools?: WorkspaceTools;
   private toolMode: ToolMode = "essential";
+  private sessionId?: string;
 
   constructor(
     private tools: AgentTools,
@@ -66,6 +67,13 @@ export class RoutaMcpToolManager {
    */
   setWorkspaceTools(workspaceTools: WorkspaceTools): void {
     this.workspaceTools = workspaceTools;
+  }
+
+  /**
+   * Set the session ID for scoping notes to a specific session.
+   */
+  setSessionId(sessionId: string): void {
+    this.sessionId = sessionId;
   }
 
   /**
@@ -526,6 +534,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         noteId: z.string().optional().describe("Custom note ID (auto-generated if omitted)"),
         type: z.enum(["spec", "task", "general"]).optional().describe("Note type (default: general)"),
         workspaceId: z.string().optional().describe("Workspace ID (uses default if omitted)"),
+        sessionId: z.string().optional().describe("Session ID to scope this note to a specific session"),
       },
       async (params) => {
         if (!this.noteTools) {
@@ -534,6 +543,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         const result = await this.noteTools.createNote({
           ...params,
           workspaceId: params.workspaceId ?? this.workspaceId,
+          sessionId: params.sessionId ?? this.sessionId,
         });
         return this.toMcpResult(result);
       }
@@ -591,6 +601,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         content: z.string().describe("New content for the note (replaces existing content)"),
         title: z.string().optional().describe("Update the note title"),
         workspaceId: z.string().optional().describe("Workspace ID (uses default if omitted)"),
+        sessionId: z.string().optional().describe("Session ID for scoping auto-created task notes"),
       },
       async (params) => {
         if (!this.noteTools) {
@@ -601,6 +612,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
           content: params.content,
           title: params.title,
           workspaceId: params.workspaceId ?? this.workspaceId,
+          sessionId: params.sessionId ?? this.sessionId,
         });
         return this.toMcpResult(result);
       }

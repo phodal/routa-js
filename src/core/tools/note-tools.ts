@@ -35,6 +35,8 @@ export class NoteTools {
     workspaceId: string;
     noteId?: string;
     type?: "spec" | "task" | "general";
+    /** Session ID to scope this note to a specific session */
+    sessionId?: string;
   }): Promise<ToolResult> {
     const noteId = params.noteId ?? uuidv4();
 
@@ -48,6 +50,7 @@ export class NoteTools {
       title: params.title,
       content: params.content ?? "",
       workspaceId: params.workspaceId,
+      sessionId: params.sessionId,
       metadata: { type: params.type ?? "general" },
     });
 
@@ -119,6 +122,8 @@ export class NoteTools {
     title?: string;
     /** If true, auto-convert @@@task blocks to Task records. Default: true for spec note */
     autoConvertTasks?: boolean;
+    /** Session ID for scoping auto-created task notes */
+    sessionId?: string;
   }): Promise<ToolResult> {
     let note = await this.noteStore.get(params.noteId, params.workspaceId);
 
@@ -131,6 +136,11 @@ export class NoteTools {
           `Note not found: ${params.noteId}. Use create_note first.`
         );
       }
+    }
+
+    // Update sessionId if provided and note doesn't have one yet
+    if (params.sessionId && !note.sessionId) {
+      note.sessionId = params.sessionId;
     }
 
     note.content = params.content;
@@ -148,6 +158,7 @@ export class NoteTools {
       const conversionResult = await this.convertTaskBlocks({
         noteId: params.noteId,
         workspaceId: params.workspaceId,
+        sessionId: params.sessionId ?? note.sessionId,
       });
 
       if (conversionResult.success && conversionResult.data) {
@@ -247,6 +258,8 @@ export class NoteTools {
   async convertTaskBlocks(params: {
     noteId: string;
     workspaceId: string;
+    /** Session ID to scope created task notes */
+    sessionId?: string;
   }): Promise<ToolResult> {
     const note = await this.noteStore.get(params.noteId, params.workspaceId);
     if (!note) {
@@ -260,6 +273,9 @@ export class NoteTools {
         blocksFound: 0,
       });
     }
+
+    // Use provided sessionId, or inherit from parent note
+    const effectiveSessionId = params.sessionId ?? note.sessionId;
 
     const createdTasks: Array<{ taskId: string; noteId: string; title: string }> = [];
 
@@ -281,13 +297,14 @@ export class NoteTools {
       });
       await this.taskStore.save(task);
 
-      // Create Task Note
+      // Create Task Note with sessionId
       const taskNoteId = `task-${taskId.slice(0, 8)}`;
       const taskNote = createNote({
         id: taskNoteId,
         title: parsedTask.title,
         content: parsedTask.content,
         workspaceId: params.workspaceId,
+        sessionId: effectiveSessionId,
         metadata: {
           type: "task",
           taskStatus: TaskStatus.PENDING,

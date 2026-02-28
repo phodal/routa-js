@@ -245,6 +245,7 @@ export async function executeMcpTool(
           workspaceId: (args.workspaceId as string) ?? workspace,
           noteId: args.noteId as string | undefined,
           type: args.type as "spec" | "task" | "general" | undefined,
+          sessionId: args.sessionId as string | undefined,
         })
       );
     case "read_note":
@@ -271,6 +272,7 @@ export async function executeMcpTool(
           content: args.content as string,
           title: args.title as string | undefined,
           workspaceId: (args.workspaceId as string) ?? workspace,
+          sessionId: args.sessionId as string | undefined,
         })
       );
     case "append_to_note":

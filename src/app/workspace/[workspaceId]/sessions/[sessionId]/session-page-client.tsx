@@ -79,7 +79,7 @@ export function SessionPageClient() {
 
   const acp = useAcp();
   const skillsHook = useSkills();
-  const notesHook = useNotes(workspaceId);
+  const notesHook = useNotes(workspaceId, sessionId);
 
   // ── Collaborative editing panel view ──────────────────────────────────
   const [taskPanelMode, setTaskPanelMode] = useState<"tasks" | "collab">("tasks");
@@ -1027,23 +1027,10 @@ export function SessionPageClient() {
     }
   }, [notesHook, handleExecuteNoteTask]);
 
-  // Filter notes for the active session
-  // Task notes MUST have matching sessionId; spec/general notes can be workspace-wide
-  const sessionNotes = notesHook.notes.filter((n) => {
-    const noteSessionId = n.sessionId;
-    // Task notes require exact session match
-    if (n.metadata.type === "task") {
-      return noteSessionId === sessionId;
-    }
-    // Spec notes: if they have a sessionId, filter by it; otherwise show workspace-wide
-    if (n.metadata.type === "spec") {
-      if (!noteSessionId) return true; // Workspace-wide spec
-      return noteSessionId === sessionId; // Session-specific spec
-    }
-    // General notes: show if no sessionId OR matching sessionId
-    if (!noteSessionId) return true;
-    return noteSessionId === sessionId;
-  });
+  // Notes are now pre-filtered by useNotes(workspaceId, sessionId)
+  // - Task notes: only those with matching sessionId
+  // - Spec/general notes: workspace-wide (no sessionId) or matching sessionId
+  const sessionNotes = notesHook.notes;
   const hasCollabNotes = sessionNotes.some((n) => n.metadata.type === "task" || n.metadata.type === "spec");
   const showTaskPanel = true;
 

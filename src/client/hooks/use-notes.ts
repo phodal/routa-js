@@ -84,7 +84,7 @@ function normalizeNote(raw: Record<string, unknown>): NoteData {
   };
 }
 
-export function useNotes(workspaceId: string): UseNotesReturn {
+export function useNotes(workspaceId: string, sessionId?: string): UseNotesReturn {
   const [notes, setNotes] = useState<NoteData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +98,11 @@ export function useNotes(workspaceId: string): UseNotesReturn {
     setLoading(true);
     setError(null);
     try {
-      const res = await desktopAwareFetch(`/api/notes?workspaceId=${encodeURIComponent(workspaceId)}`);
+      let url = `/api/notes?workspaceId=${encodeURIComponent(workspaceId)}`;
+      if (sessionId) {
+        url += `&sessionId=${encodeURIComponent(sessionId)}`;
+      }
+      const res = await desktopAwareFetch(url);
       if (!res.ok) throw new Error(`Failed to fetch notes: ${res.status}`);
       const data = await res.json();
       setNotes(data.notes ?? []);
@@ -108,7 +112,7 @@ export function useNotes(workspaceId: string): UseNotesReturn {
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, sessionId]);
 
   const fetchNote = useCallback(
     async (noteId: string): Promise<NoteData | null> => {
@@ -196,12 +200,37 @@ export function useNotes(workspaceId: string): UseNotesReturn {
 
   // ─── SSE Subscription ────────────────────────────────────────────
 
+  /**
+   * Check if a note should be included based on sessionId filter.
+   * - If no sessionId filter, include all notes
+   * - Task notes require exact sessionId match
+   * - Spec/general notes: include if no sessionId or matching sessionId
+   */
+  const shouldIncludeNote = useCallback((note: NoteData): boolean => {
+    if (!sessionId) return true; // No filter, include all
+
+    const noteSessionId = note.sessionId;
+    const noteType = note.metadata?.type;
+
+    // Task notes require exact session match
+    if (noteType === "task") {
+      return noteSessionId === sessionId;
+    }
+    // Spec notes: include if workspace-wide (no sessionId) or matching session
+    if (noteType === "spec") {
+      return !noteSessionId || noteSessionId === sessionId;
+    }
+    // General notes: include if workspace-wide or matching session
+    return !noteSessionId || noteSessionId === sessionId;
+  }, [sessionId]);
+
   const connectSSE = useCallback(() => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
     const base = getDesktopApiBaseUrl();
+    // SSE subscribes at workspace level; filtering happens client-side
     const es = new EventSource(
       `${base}/api/notes/events?workspaceId=${encodeURIComponent(workspaceId)}`
     );
@@ -225,6 +254,8 @@ export function useNotes(workspaceId: string): UseNotesReturn {
 
         if (data.type === "note:created" && data.note) {
           const note = normalizeNote(data.note);
+          // Filter by sessionId if provided
+          if (!shouldIncludeNote(note)) return;
           setNotes((prev) => {
             // Avoid duplicates
             if (prev.some((n) => n.id === note.id)) {
@@ -236,6 +267,12 @@ export function useNotes(workspaceId: string): UseNotesReturn {
 
         if (data.type === "note:updated" && data.note) {
           const note = normalizeNote(data.note);
+          // Filter by sessionId if provided
+          if (!shouldIncludeNote(note)) {
+            // If note no longer matches filter, remove it
+            setNotes((prev) => prev.filter((n) => n.id !== note.id));
+            return;
+          }
           setNotes((prev) => {
             // If note doesn't exist yet (missed create event), add it
             if (!prev.some((n) => n.id === note.id)) {
@@ -263,13 +300,13 @@ export function useNotes(workspaceId: string): UseNotesReturn {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = setTimeout(() => connectSSE(), 3000);
     };
-  }, [workspaceId]);
+  }, [workspaceId, shouldIncludeNote, fetchNotes]);
 
-  // Clear notes when workspaceId changes to avoid showing stale data
+  // Clear notes when workspaceId or sessionId changes to avoid showing stale data
   useEffect(() => {
     setNotes([]);
     setConnected(false);
-  }, [workspaceId]);
+  }, [workspaceId, sessionId]);
 
   // Connect SSE and fetch initial notes
   useEffect(() => {

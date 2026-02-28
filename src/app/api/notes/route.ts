@@ -2,6 +2,7 @@
  * /api/notes - REST API for collaborative note editing.
  *
  * GET    /api/notes?workspaceId=...&type=...  → List notes
+ * GET    /api/notes?workspaceId=...&sessionId=...  → List notes filtered by session
  * GET    /api/notes?workspaceId=...&groupBy=session  → List notes grouped by session
  * POST   /api/notes                           → Create/update a note
  * DELETE /api/notes?noteId=...&workspaceId=... → Delete a note
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
   const workspaceId = searchParams.get("workspaceId");
   const type = searchParams.get("type") as "spec" | "task" | "general" | null;
   const noteId = searchParams.get("noteId");
+  const sessionIdFilter = searchParams.get("sessionId");
   const groupBy = searchParams.get("groupBy");
 
   if (!workspaceId) {
@@ -35,9 +37,30 @@ export async function GET(request: NextRequest) {
   }
 
   // List notes
-  const notes = type
+  let notes = type
     ? await system.noteStore.listByType(workspaceId, type)
     : await system.noteStore.listByWorkspace(workspaceId);
+
+  // Filter by sessionId if provided
+  // - Task notes require exact sessionId match
+  // - Spec/general notes: include if no sessionId (workspace-wide) or matching sessionId
+  if (sessionIdFilter) {
+    notes = notes.filter((note) => {
+      const noteType = note.metadata?.type;
+      const noteSessionId = note.sessionId;
+
+      // Task notes require exact session match
+      if (noteType === "task") {
+        return noteSessionId === sessionIdFilter;
+      }
+      // Spec notes: include if workspace-wide or matching session
+      if (noteType === "spec") {
+        return !noteSessionId || noteSessionId === sessionIdFilter;
+      }
+      // General notes: include if workspace-wide or matching session
+      return !noteSessionId || noteSessionId === sessionIdFilter;
+    });
+  }
 
   // Group by session if requested
   if (groupBy === "session") {
