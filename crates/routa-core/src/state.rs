@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::acp::{AcpBinaryManager, AcpInstallationState, AcpManager, AcpPaths};
+use crate::acp::{AcpBinaryManager, AcpInstallationState, AcpManager, AcpPaths, AcpRuntimeManager};
 use crate::db::Database;
 use crate::events::EventBus;
 use crate::skills::SkillRegistry;
@@ -27,6 +27,7 @@ pub struct AppStateInner {
     pub acp_paths: AcpPaths,
     pub acp_binary_manager: AcpBinaryManager,
     pub acp_installation_state: AcpInstallationState,
+    pub acp_runtime_manager: AcpRuntimeManager,
 }
 
 pub type AppState = Arc<AppStateInner>;
@@ -36,6 +37,7 @@ impl AppStateInner {
         let acp_paths = AcpPaths::new();
         let acp_binary_manager = AcpBinaryManager::new(acp_paths.clone());
         let acp_installation_state = AcpInstallationState::new(acp_paths.clone());
+        let acp_runtime_manager = AcpRuntimeManager::new(acp_paths.clone());
         Self {
             workspace_store: WorkspaceStore::new(db.clone()),
             codebase_store: CodebaseStore::new(db.clone()),
@@ -51,6 +53,7 @@ impl AppStateInner {
             acp_paths,
             acp_binary_manager,
             acp_installation_state,
+            acp_runtime_manager,
         }
     }
 }

@@ -48,14 +48,10 @@ enum Commands {
     },
 
     /// Run Routa as an ACP (Agent Client Protocol) server over stdio.
-    /// Other agents can connect to Routa as an ACP provider.
+    /// Use subcommands to manage ACP agents and runtimes.
     Acp {
-        /// Workspace ID
-        #[arg(long, default_value = "default")]
-        workspace_id: String,
-        /// Default ACP provider for child agents (e.g. "opencode", "claude")
-        #[arg(long, default_value = "opencode")]
-        provider: String,
+        #[command(subcommand)]
+        action: AcpAction,
     },
 
     /// Manage agents
@@ -132,6 +128,42 @@ enum Commands {
         #[arg(long, default_value = "DEVELOPER")]
         role: String,
     },
+}
+
+#[derive(Subcommand)]
+enum AcpAction {
+    /// Run Routa as an ACP server over stdio (other agents can connect to it).
+    Serve {
+        /// Workspace ID
+        #[arg(long, default_value = "default")]
+        workspace_id: String,
+        /// Default ACP provider for child agents (e.g. "opencode", "claude")
+        #[arg(long, default_value = "opencode")]
+        provider: String,
+    },
+    /// Install an ACP agent (downloads runtime if needed).
+    Install {
+        /// Agent ID from the ACP registry (e.g. "opencode")
+        agent_id: String,
+        /// Distribution type override: npx | uvx | binary
+        #[arg(long)]
+        dist: Option<String>,
+    },
+    /// Uninstall a previously-installed ACP agent.
+    Uninstall {
+        /// Agent ID to remove
+        agent_id: String,
+    },
+    /// List agents from the ACP registry with their install status.
+    List,
+    /// List locally-installed ACP agents.
+    Installed,
+    /// Show Node.js / uv runtime status.
+    RuntimeStatus,
+    /// Download and cache Node.js (managed runtime) if not already present.
+    EnsureNode,
+    /// Download and cache uv (managed runtime) if not already present.
+    EnsureUv,
 }
 
 #[derive(Subcommand)]
@@ -266,16 +298,44 @@ async fn main() {
             static_dir,
         } => commands::server::run(host, port, cli.db, static_dir).await,
 
-        Commands::Acp {
-            workspace_id,
-            provider,
-        } => {
-            // Resolve full shell PATH so child processes can be found
-            let full_path = routa_core::shell_env::full_path();
-            std::env::set_var("PATH", full_path);
-
-            let state = commands::init_state(&cli.db).await;
-            commands::acp_serve::run(&state, &workspace_id, &provider).await
+        Commands::Acp { action } => {
+            match action {
+                AcpAction::Serve { workspace_id, provider } => {
+                    // Resolve full shell PATH so child processes can be found
+                    let full_path = routa_core::shell_env::full_path();
+                    std::env::set_var("PATH", full_path);
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp_serve::run(&state, &workspace_id, &provider).await
+                }
+                AcpAction::Install { agent_id, dist } => {
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp::install(&state, &agent_id, dist.as_deref()).await
+                }
+                AcpAction::Uninstall { agent_id } => {
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp::uninstall(&state, &agent_id).await
+                }
+                AcpAction::List => {
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp::list(&state).await
+                }
+                AcpAction::Installed => {
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp::list_installed(&state).await
+                }
+                AcpAction::RuntimeStatus => {
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp::runtime_status(&state).await
+                }
+                AcpAction::EnsureNode => {
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp::ensure_node(&state).await
+                }
+                AcpAction::EnsureUv => {
+                    let state = commands::init_state(&cli.db).await;
+                    commands::acp::ensure_uv(&state).await
+                }
+            }
         }
 
         Commands::Agent { action } => {

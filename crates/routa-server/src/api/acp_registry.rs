@@ -14,7 +14,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::acp::{AcpPaths, DistributionType};
+use crate::acp::{AcpPaths, DistributionType, RuntimeType};
 use crate::error::ServerError;
 use crate::shell_env;
 use crate::state::AppState;
@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/registry", get(get_registry).post(refresh_registry))
         .route("/install", post(install_agent).delete(uninstall_agent))
+        .route("/runtime", get(get_runtime_status).post(ensure_runtime))
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -196,6 +197,17 @@ async fn install_agent(
 
     match dist_type.as_str() {
         "npx" => {
+            // Ensure we have a Node.js / npx runtime (managed download if system npx absent)
+            let npx_system = shell_env::which("npx").is_some();
+            if !npx_system {
+                tracing::info!("[ACP Install] npx not found on PATH — downloading managed Node.js");
+                state
+                    .acp_runtime_manager
+                    .ensure_runtime(&RuntimeType::Npx)
+                    .await
+                    .map_err(|e| ServerError::Internal(format!("Failed to ensure npx runtime: {}", e)))?;
+            }
+
             // For npx, mark installed (runs on demand via npx)
             let package = agent.distribution.get("npx")
                 .and_then(|v| v.get("package"))
@@ -215,6 +227,17 @@ async fn install_agent(
             })))
         }
         "uvx" => {
+            // Ensure we have a uv / uvx runtime (managed download if system uv absent)
+            let uvx_system = shell_env::which("uv").is_some();
+            if !uvx_system {
+                tracing::info!("[ACP Install] uv not found on PATH — downloading managed uv");
+                state
+                    .acp_runtime_manager
+                    .ensure_runtime(&RuntimeType::Uvx)
+                    .await
+                    .map_err(|e| ServerError::Internal(format!("Failed to ensure uvx runtime: {}", e)))?;
+            }
+
             // For uvx, mark installed (runs on demand via uvx)
             let package = agent.distribution.get("uvx")
                 .and_then(|v| v.get("package"))
@@ -389,5 +412,89 @@ async fn refresh_registry(
         "version": registry.version,
         "agentCount": registry.agents.len(),
         "message": "Registry cache refreshed"
+    })))
+}
+
+// ─── Runtime handlers ──────────────────────────────────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+struct EnsureRuntimeRequest {
+    /// Which runtime to ensure: "node", "npx", "uv", or "uvx"
+    runtime: String,
+}
+
+/// GET /api/acp/runtime — Show current Node.js / uv runtime status.
+async fn get_runtime_status(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    use crate::acp::runtime_manager::current_platform;
+
+    let rm = &state.acp_runtime_manager;
+    let platform = current_platform();
+
+    let check = |rt: RuntimeType| {
+        let rm = rm;
+        async move {
+            let managed = rm.get_managed_runtime(&rt).await;
+            let system = rm.get_system_runtime(&rt);
+            serde_json::json!({
+                "available": managed.is_some() || system.is_some(),
+                "managed": managed.as_ref().map(|i| i.path.to_string_lossy().to_string()),
+                "system":  system.as_ref().map(|i| i.path.to_string_lossy().to_string()),
+            })
+        }
+    };
+
+    let (node, npx, uv, uvx) = tokio::join!(
+        check(RuntimeType::Node),
+        check(RuntimeType::Npx),
+        check(RuntimeType::Uv),
+        check(RuntimeType::Uvx),
+    );
+
+    Ok(Json(serde_json::json!({
+        "platform": platform,
+        "runtimes": {
+            "node": node,
+            "npx":  npx,
+            "uv":   uv,
+            "uvx":  uvx,
+        }
+    })))
+}
+
+/// POST /api/acp/runtime — Ensure (and possibly download) a managed runtime.
+///
+/// Body: `{ "runtime": "node" | "npx" | "uv" | "uvx" }`
+async fn ensure_runtime(
+    State(state): State<AppState>,
+    Json(req): Json<EnsureRuntimeRequest>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let rt = match req.runtime.as_str() {
+        "node" => RuntimeType::Node,
+        "npx"  => RuntimeType::Npx,
+        "uv"   => RuntimeType::Uv,
+        "uvx"  => RuntimeType::Uvx,
+        other  => {
+            return Err(ServerError::BadRequest(format!(
+                "Unknown runtime '{}'. Use node, npx, uv, or uvx.",
+                other
+            )));
+        }
+    };
+
+    tracing::info!("[ACP Runtime] Ensuring runtime: {:?}", rt);
+    let info = state
+        .acp_runtime_manager
+        .ensure_runtime(&rt)
+        .await
+        .map_err(|e| ServerError::Internal(format!("Failed to ensure runtime: {}", e)))?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "runtime": req.runtime,
+        "path": info.path.to_string_lossy(),
+        "version": info.version,
+        "managed": info.is_managed,
     })))
 }
