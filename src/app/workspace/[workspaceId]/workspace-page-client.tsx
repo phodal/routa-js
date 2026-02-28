@@ -49,6 +49,17 @@ interface TaskInfo {
   createdAt: string;
 }
 
+interface BackgroundTaskInfo {
+  id: string;
+  title: string;
+  prompt: string;
+  agentId: string;
+  status: string;
+  triggerSource?: string;
+  resultSessionId?: string;
+  createdAt: string;
+}
+
 interface TraceInfo {
   id: string;
   agentName?: string;
@@ -78,7 +89,12 @@ export function WorkspacePageClient() {
   const [traces, setTraces] = useState<TraceInfo[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "notes">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "notes" | "bg_tasks">("overview");
+  const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [dispatchPrompt, setDispatchPrompt] = useState("");
+  const [dispatchAgentId, setDispatchAgentId] = useState("");
+  const [dispatchLoading, setDispatchLoading] = useState(false);
 
   // Auto-connect ACP
   useEffect(() => {
@@ -105,6 +121,17 @@ export function WorkspacePageClient() {
         const res = await fetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" });
         const data = await res.json();
         setTasks(Array.isArray(data?.tasks) ? data.tasks : []);
+      } catch { /* ignore */ }
+    })();
+  }, [workspaceId, refreshKey]);
+
+  // Fetch background tasks
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/background-tasks?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" });
+        const data = await res.json();
+        setBgTasks(Array.isArray(data?.tasks) ? data.tasks : []);
       } catch { /* ignore */ }
     })();
   }, [workspaceId, refreshKey]);
@@ -168,6 +195,24 @@ export function WorkspacePageClient() {
   const activeAgents = agentsHook.agents.filter((a) => a.status === "ACTIVE");
   const pendingTasks = tasks.filter((t) => t.status === "PENDING" || t.status === "IN_PROGRESS");
   const specNotes = notesHook.notes.filter((n) => n.metadata?.type === "spec");
+  const runningBgTasks = bgTasks.filter((t) => t.status === "RUNNING").length;
+
+  const handleDispatchTask = async () => {
+    if (!dispatchPrompt.trim() || !dispatchAgentId.trim()) return;
+    setDispatchLoading(true);
+    try {
+      await fetch("/api/background-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: dispatchPrompt, agentId: dispatchAgentId, workspaceId }),
+      });
+      setShowDispatchModal(false);
+      setDispatchPrompt("");
+      setRefreshKey((k) => k + 1);
+    } finally {
+      setDispatchLoading(false);
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-[#fafafa] dark:bg-[#0a0c12]">
@@ -288,12 +333,12 @@ export function WorkspacePageClient() {
               color="emerald"
             />
             <StatCard
-              label="Notes"
-              value={notesHook.notes.length}
-              sub={specNotes.length > 0 ? `${specNotes.length} specs` : undefined}
+              label="BG Tasks"
+              value={bgTasks.length}
+              sub={runningBgTasks > 0 ? `${runningBgTasks} running` : undefined}
               icon={
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               }
               color="amber"
@@ -308,6 +353,14 @@ export function WorkspacePageClient() {
               {notesHook.notes.length > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 dark:bg-[#191c28] text-gray-500 dark:text-gray-400 font-mono">
                   {notesHook.notes.length}
+                </span>
+              )}
+            </TabButton>
+            <TabButton active={activeTab === "bg_tasks"} onClick={() => setActiveTab("bg_tasks")}>
+              Background Tasks
+              {bgTasks.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 dark:bg-[#191c28] text-gray-500 dark:text-gray-400 font-mono">
+                  {bgTasks.length}
                 </span>
               )}
             </TabButton>
@@ -491,6 +544,106 @@ export function WorkspacePageClient() {
                   </DashboardCard>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === "bg_tasks" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[14px] font-semibold text-gray-700 dark:text-gray-300">Background Task Queue</h2>
+                <button
+                  data-testid="dispatch-task-btn"
+                  onClick={() => setShowDispatchModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Dispatch Task
+                </button>
+              </div>
+
+              {bgTasks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-gray-600">
+                  <svg className="w-10 h-10 mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-[13px]">No background tasks yet.</p>
+                  <p className="text-[11px] mt-1">Click &ldquo;Dispatch Task&rdquo; to enqueue one.</p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-gray-200/60 dark:border-[#191c28] bg-white dark:bg-[#0e1019] overflow-hidden divide-y divide-gray-100 dark:divide-[#191c28]">
+                  {bgTasks.map((task) => (
+                    <div key={task.id} data-testid="bg-task-item" className="flex items-center gap-3 px-4 py-3">
+                      <BgTaskStatusIcon status={task.status} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium text-gray-700 dark:text-gray-300 truncate">{task.title}</div>
+                        <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                          <span className="font-mono">{task.agentId}</span>
+                          {task.triggerSource && <><span>·</span><span className="capitalize">{task.triggerSource}</span></>}
+                          {task.resultSessionId && (
+                            <><span>·</span>
+                            <button
+                              onClick={() => router.push(`/workspace/${workspaceId}/sessions/${task.resultSessionId}`)}
+                              className="text-blue-500 dark:text-blue-400 hover:underline"
+                            >
+                              view session
+                            </button></>
+                          )}
+                        </div>
+                      </div>
+                      <span data-testid="bg-task-status" className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${bgTaskStatusClass(task.status)}`}>{task.status}</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-600 font-mono shrink-0">{formatRelativeTime(task.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Dispatch modal */}
+              {showDispatchModal && (
+                <OverlayModal onClose={() => setShowDispatchModal(false)} title="Dispatch Background Task">
+                  <div className="space-y-4 p-4">
+                    <div>
+                      <label className="block text-[12px] font-medium text-gray-600 dark:text-gray-400 mb-1.5">Prompt</label>
+                      <textarea
+                        data-testid="dispatch-prompt-input"
+                        rows={4}
+                        placeholder="Enter the task prompt…"
+                        value={dispatchPrompt}
+                        onChange={(e) => setDispatchPrompt(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#151720] text-[13px] text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-medium text-gray-600 dark:text-gray-400 mb-1.5">Agent / Provider</label>
+                      <input
+                        data-testid="dispatch-agent-input"
+                        type="text"
+                        placeholder="e.g. opencode, claude"
+                        value={dispatchAgentId}
+                        onChange={(e) => setDispatchAgentId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#151720] text-[13px] text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setShowDispatchModal(false)}
+                        className="px-3 py-1.5 rounded-md text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#191c28] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        data-testid="dispatch-submit-btn"
+                        onClick={handleDispatchTask}
+                        disabled={dispatchLoading || !dispatchPrompt.trim() || !dispatchAgentId.trim()}
+                        className="px-3 py-1.5 rounded-md text-[12px] font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white transition-colors"
+                      >
+                        {dispatchLoading ? "Dispatching…" : "Dispatch"}
+                      </button>
+                    </div>
+                  </div>
+                </OverlayModal>
+              )}
             </div>
           )}
 
@@ -932,6 +1085,49 @@ function OverlayModal({
         <div className="h-[calc(80vh-44px)]">{children}</div>
       </div>
     </div>
+  );
+}
+
+// ─── BG Task Helpers ───────────────────────────────────────────────
+
+function bgTaskStatusClass(status: string): string {
+  switch (status) {
+    case "PENDING":   return "bg-gray-100 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400";
+    case "RUNNING":   return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+    case "COMPLETED": return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
+    case "FAILED":    return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+    case "CANCELLED": return "bg-gray-100 dark:bg-gray-700/40 text-gray-400 dark:text-gray-500";
+    default:          return "bg-gray-100 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400";
+  }
+}
+
+function BgTaskStatusIcon({ status }: { status: string }) {
+  const colorMap: Record<string, string> = {
+    PENDING: "text-gray-400",
+    RUNNING: "text-blue-500 animate-spin",
+    COMPLETED: "text-emerald-500",
+    FAILED: "text-red-500",
+    CANCELLED: "text-gray-400",
+  };
+  const cls = colorMap[status] ?? "text-gray-400";
+  if (status === "COMPLETED") {
+    return (
+      <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+  }
+  if (status === "FAILED" || status === "CANCELLED") {
+    return (
+      <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+  }
+  return (
+    <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
   );
 }
 

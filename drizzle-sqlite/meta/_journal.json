@@ -36,6 +36,20 @@
       "when": 1772195849125,
       "tag": "0004_new_madame_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1772210000000,
+      "tag": "0005_add_custom_mcp_servers",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1772224800000,
+      "tag": "0006_add_background_tasks",
+      "breakpoints": true
     }
   ]
 }

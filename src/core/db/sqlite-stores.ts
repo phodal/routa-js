@@ -5,7 +5,7 @@
  * All stores implement the same interfaces as their Pg counterparts.
  */
 
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, asc, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as sqliteSchema from "./sqlite-schema";
 import type { Workspace, WorkspaceStatus } from "../models/workspace";
@@ -954,3 +954,148 @@ export class SqliteSkillStore {
   }
 }
 
+// ─── SQLite Background Task Store ─────────────────────────────────────────
+
+import type { BackgroundTask, BackgroundTaskStatus } from "../models/background-task";
+import type { BackgroundTaskStore } from "../store/background-task-store";
+
+export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
+  constructor(private db: SqliteDb) {}
+
+  async save(task: BackgroundTask): Promise<void> {
+    await this.db
+      .insert(sqliteSchema.backgroundTasks)
+      .values({
+        id: task.id,
+        title: task.title,
+        prompt: task.prompt,
+        agentId: task.agentId,
+        workspaceId: task.workspaceId,
+        status: task.status,
+        triggeredBy: task.triggeredBy,
+        triggerSource: task.triggerSource,
+        resultSessionId: task.resultSessionId,
+        errorMessage: task.errorMessage,
+        attempts: task.attempts,
+        maxAttempts: task.maxAttempts,
+        startedAt: task.startedAt,
+        completedAt: task.completedAt,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: sqliteSchema.backgroundTasks.id,
+        set: {
+          title: task.title,
+          prompt: task.prompt,
+          agentId: task.agentId,
+          status: task.status,
+          triggeredBy: task.triggeredBy,
+          triggerSource: task.triggerSource,
+          resultSessionId: task.resultSessionId,
+          errorMessage: task.errorMessage,
+          attempts: task.attempts,
+          maxAttempts: task.maxAttempts,
+          startedAt: task.startedAt,
+          completedAt: task.completedAt,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async get(taskId: string): Promise<BackgroundTask | undefined> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.backgroundTasks)
+      .where(eq(sqliteSchema.backgroundTasks.id, taskId))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<BackgroundTask[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.backgroundTasks)
+      .where(eq(sqliteSchema.backgroundTasks.workspaceId, workspaceId))
+      .orderBy(desc(sqliteSchema.backgroundTasks.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async listPending(): Promise<BackgroundTask[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.backgroundTasks)
+      .where(eq(sqliteSchema.backgroundTasks.status, "PENDING"))
+      .orderBy(asc(sqliteSchema.backgroundTasks.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async listByStatus(
+    workspaceId: string,
+    status: BackgroundTaskStatus
+  ): Promise<BackgroundTask[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.backgroundTasks)
+      .where(
+        and(
+          eq(sqliteSchema.backgroundTasks.workspaceId, workspaceId),
+          eq(sqliteSchema.backgroundTasks.status, status)
+        )
+      )
+      .orderBy(desc(sqliteSchema.backgroundTasks.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async updateStatus(
+    taskId: string,
+    status: BackgroundTaskStatus,
+    opts?: {
+      resultSessionId?: string;
+      errorMessage?: string;
+      startedAt?: Date;
+      completedAt?: Date;
+    }
+  ): Promise<void> {
+    await this.db
+      .update(sqliteSchema.backgroundTasks)
+      .set({
+        status,
+        resultSessionId: opts?.resultSessionId,
+        errorMessage: opts?.errorMessage,
+        startedAt: opts?.startedAt,
+        completedAt: opts?.completedAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(sqliteSchema.backgroundTasks.id, taskId));
+  }
+
+  async delete(taskId: string): Promise<void> {
+    await this.db
+      .delete(sqliteSchema.backgroundTasks)
+      .where(eq(sqliteSchema.backgroundTasks.id, taskId));
+  }
+
+  private toModel(
+    row: typeof sqliteSchema.backgroundTasks.$inferSelect
+  ): BackgroundTask {
+    return {
+      id: row.id,
+      title: row.title,
+      prompt: row.prompt,
+      agentId: row.agentId,
+      workspaceId: row.workspaceId,
+      status: row.status as BackgroundTaskStatus,
+      triggeredBy: row.triggeredBy,
+      triggerSource: row.triggerSource as BackgroundTask["triggerSource"],
+      resultSessionId: row.resultSessionId ?? undefined,
+      errorMessage: row.errorMessage ?? undefined,
+      attempts: row.attempts,
+      maxAttempts: row.maxAttempts,
+      startedAt: row.startedAt ?? undefined,
+      completedAt: row.completedAt ?? undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+}

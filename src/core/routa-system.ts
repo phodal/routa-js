@@ -17,6 +17,7 @@ import { InMemoryTaskStore, TaskStore } from "./store/task-store";
 import { NoteStore } from "./store/note-store";
 import { WorkspaceStore, InMemoryWorkspaceStore } from "./db/pg-workspace-store";
 import { CodebaseStore, InMemoryCodebaseStore } from "./db/pg-codebase-store";
+import { BackgroundTaskStore, InMemoryBackgroundTaskStore } from "./store/background-task-store";
 import { EventBus } from "./events/event-bus";
 import { AgentTools } from "./tools/agent-tools";
 import { NoteTools } from "./tools/note-tools";
@@ -32,6 +33,7 @@ export interface RoutaSystem {
   noteStore: NoteStore;
   workspaceStore: WorkspaceStore;
   codebaseStore: CodebaseStore;
+  backgroundTaskStore: BackgroundTaskStore;
   eventBus: EventBus;
   tools: AgentTools;
   noteTools: NoteTools;
@@ -53,6 +55,7 @@ export function createInMemorySystem(): RoutaSystem {
   const taskStore = new InMemoryTaskStore();
   const workspaceStore = new InMemoryWorkspaceStore();
   const codebaseStore = new InMemoryCodebaseStore();
+  const backgroundTaskStore = new InMemoryBackgroundTaskStore();
 
   // CRDT-backed note store with event broadcasting
   const noteBroadcaster = getNoteEventBroadcaster();
@@ -75,6 +78,7 @@ export function createInMemorySystem(): RoutaSystem {
     noteStore,
     workspaceStore,
     codebaseStore,
+    backgroundTaskStore,
     eventBus,
     tools,
     noteTools,
@@ -97,6 +101,7 @@ export function createPgSystem(): RoutaSystem {
   const { PgNoteStore } = require("./db/pg-note-store") as typeof import("./db/pg-note-store");
   const { PgWorkspaceStore } = require("./db/pg-workspace-store") as typeof import("./db/pg-workspace-store");
   const { PgCodebaseStore } = require("./db/pg-codebase-store") as typeof import("./db/pg-codebase-store");
+  const { PgBackgroundTaskStore } = require("./db/pg-background-task-store") as typeof import("./db/pg-background-task-store");
 
   const db = getPostgresDatabase();
   const agentStore = new PgAgentStore(db);
@@ -105,6 +110,7 @@ export function createPgSystem(): RoutaSystem {
   const noteStore = new PgNoteStore(db);
   const workspaceStore = new PgWorkspaceStore(db);
   const codebaseStore = new PgCodebaseStore(db);
+  const backgroundTaskStore = new PgBackgroundTaskStore(db);
 
   // CRDT manager and broadcaster still used for real-time collab
   const noteBroadcaster = getNoteEventBroadcaster();
@@ -128,6 +134,7 @@ export function createPgSystem(): RoutaSystem {
     noteStore,
     workspaceStore,
     codebaseStore,
+    backgroundTaskStore,
     eventBus,
     tools,
     noteTools,
@@ -156,6 +163,7 @@ export function createSqliteSystem(): RoutaSystem {
   let noteStore: NoteStore;
   let workspaceStore: WorkspaceStore;
   let codebaseStore: CodebaseStore;
+  let backgroundTaskStore: BackgroundTaskStore;
   // True when noteStore doesn't broadcast on save (SqliteNoteStore); NoteTools will broadcast.
   // False when CRDTNoteStore is used as fallback (it already broadcasts internally).
   let noteToolsBroadcast = false;
@@ -173,6 +181,7 @@ export function createSqliteSystem(): RoutaSystem {
       SqliteNoteStore,
       SqliteWorkspaceStore,
       SqliteCodebaseStore,
+      SqliteBackgroundTaskStore,
     } = dynamicRequire("./db/sqlite-stores");
 
     const db = getSqliteDatabase();
@@ -182,6 +191,7 @@ export function createSqliteSystem(): RoutaSystem {
     noteStore = new SqliteNoteStore(db);
     workspaceStore = new SqliteWorkspaceStore(db);
     codebaseStore = new SqliteCodebaseStore(db);
+    backgroundTaskStore = new SqliteBackgroundTaskStore(db);
     noteToolsBroadcast = true; // SqliteNoteStore doesn't broadcast — NoteTools must
   } catch (err) {
     // Standalone desktop bundles may not include sqlite dynamic modules.
@@ -196,6 +206,7 @@ export function createSqliteSystem(): RoutaSystem {
     noteStore = new CRDTNoteStore(noteBroadcaster, crdtManager);
     workspaceStore = new InMemoryWorkspaceStore();
     codebaseStore = new InMemoryCodebaseStore();
+    backgroundTaskStore = new InMemoryBackgroundTaskStore();
   }
 
   const eventBus = new EventBus();
@@ -214,6 +225,7 @@ export function createSqliteSystem(): RoutaSystem {
     noteStore,
     workspaceStore,
     codebaseStore,
+    backgroundTaskStore,
     eventBus,
     tools,
     noteTools,

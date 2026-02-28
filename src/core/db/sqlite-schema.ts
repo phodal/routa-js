@@ -239,6 +239,35 @@ export const customMcpServers = sqliteTable("custom_mcp_servers", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
+// ─── Background Tasks (async agent job queue) ─────────────────────────────
+
+export const backgroundTasks = sqliteTable("background_tasks", {
+  id: text("id").primaryKey(),
+  /** Short human-readable title */
+  title: text("title").notNull(),
+  /** Full prompt to dispatch to the agent */
+  prompt: text("prompt").notNull(),
+  /** ACP agent/provider ID */
+  agentId: text("agent_id").notNull(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  /** PENDING | RUNNING | COMPLETED | FAILED | CANCELLED */
+  status: text("status").notNull().default("PENDING"),
+  /** Who triggered it (user ID or system) */
+  triggeredBy: text("triggered_by").notNull().default("user"),
+  /** manual | schedule | webhook | fleet */
+  triggerSource: text("trigger_source").notNull().default("manual"),
+  /** ACP session created when the task starts */
+  resultSessionId: text("result_session_id"),
+  /** Error message when status = FAILED */
+  errorMessage: text("error_message"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(1),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
 // ─── Specialists (user-defined agent specialist configurations) ───────────
 
 export const specialists = sqliteTable("specialists", {

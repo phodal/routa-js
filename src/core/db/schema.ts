@@ -263,6 +263,35 @@ export const customMcpServers = pgTable("custom_mcp_servers", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Background Tasks (async agent job queue) ─────────────────────────────
+
+export const backgroundTasks = pgTable("background_tasks", {
+  id: text("id").primaryKey(),
+  /** Short human-readable title */
+  title: text("title").notNull(),
+  /** Full prompt to dispatch to the agent */
+  prompt: text("prompt").notNull(),
+  /** ACP agent/provider ID */
+  agentId: text("agent_id").notNull(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  /** PENDING | RUNNING | COMPLETED | FAILED | CANCELLED */
+  status: text("status").notNull().default("PENDING"),
+  /** Who triggered it (user ID or system) */
+  triggeredBy: text("triggered_by").notNull().default("user"),
+  /** manual | schedule | webhook | fleet */
+  triggerSource: text("trigger_source").notNull().default("manual"),
+  /** ACP session created when the task starts */
+  resultSessionId: text("result_session_id"),
+  /** Error message when status = FAILED */
+  errorMessage: text("error_message"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(1),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Specialists (user-defined agent specialist configurations) ───────────
 
 export const specialists = pgTable("specialists", {
