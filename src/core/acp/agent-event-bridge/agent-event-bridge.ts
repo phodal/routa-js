@@ -57,6 +57,9 @@ export class AgentEventBridge {
       case "tool_call_update":
         return this.handleToolCallUpdate(update, now);
 
+      case "plan_update":
+        return this.handlePlanUpdate(update, now);
+
       case "agent_message":
         return this.handleMessage(update, now);
 
@@ -134,6 +137,23 @@ export class AgentEventBridge {
     }
 
     return [event];
+  }
+
+  private handlePlanUpdate(update: NormalizedSessionUpdate, now: Date): WorkspaceAgentEvent[] {
+    const { planItems } = update;
+    if (!planItems) return [];
+
+    return [
+      {
+        type: "plan_updated",
+        sessionId: this.sessionId,
+        items: planItems.map((item) => ({
+          description: item.description,
+          status: mapPlanStatus(item.status),
+        })),
+        timestamp: now,
+      },
+    ];
   }
 
   private handleMessage(update: NormalizedSessionUpdate, now: Date): WorkspaceAgentEvent[] {

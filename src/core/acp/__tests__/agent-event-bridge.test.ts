@@ -364,6 +364,37 @@ describe("AgentEventBridge", () => {
     });
   });
 
+  // ── Plan (via NormalizedSessionUpdate) ────────────────────────────────
+
+  describe("plan_update via NormalizedSessionUpdate", () => {
+    it("emits plan_updated from normalized plan_update event", () => {
+      const events = bridge.process(
+        makeUpdate({
+          eventType: "plan_update",
+          planItems: [
+            { description: "Write tests", status: "done" },
+            { description: "Implement feature", status: "in_progress" },
+            { description: "Review PR", status: "pending" },
+          ],
+        })
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe("plan_updated");
+      if (events[0].type === "plan_updated") {
+        expect(events[0].items[0].status).toBe("done");
+        expect(events[0].items[1].status).toBe("in_progress");
+        expect(events[0].items[2].status).toBe("pending");
+      }
+    });
+
+    it("returns empty array when planItems is missing", () => {
+      const events = bridge.process(
+        makeUpdate({ eventType: "plan_update" })
+      );
+      expect(events).toHaveLength(0);
+    });
+  });
+
   // ── Plan ───────────────────────────────────────────────────────────────────
 
   describe("makePlanUpdatedEvent", () => {

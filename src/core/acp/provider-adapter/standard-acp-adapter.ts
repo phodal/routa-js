@@ -144,6 +144,18 @@ export class StandardAcpAdapter extends BaseProviderAdapter {
         return update;
       }
 
+      case "plan_update": {
+        const items = payload.items as Array<{ description?: string; status?: string }> | undefined;
+        if (!items) return null;
+
+        const update = this.createUpdate(sessionId, "plan_update", rawNotification);
+        update.planItems = items.map((item) => ({
+          description: item.description ?? "",
+          status: item.status ?? "pending",
+        }));
+        return update;
+      }
+
       default:
         return null;
     }

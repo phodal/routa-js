@@ -31,6 +31,7 @@ export type NormalizedEventType =
   | "agent_message"       // Agent text message (chunk or complete)
   | "agent_thought"       // Agent thinking/reasoning
   | "user_message"        // User input
+  | "plan_update"         // Agent execution plan updated
   | "turn_complete"       // Turn ended
   | "error";              // Error occurred
 
@@ -84,6 +85,8 @@ export interface NormalizedSessionUpdate {
     stopReason: string;
     usage?: { inputTokens?: number; outputTokens?: number };
   };
+  /** Plan update items (for plan_update) */
+  planItems?: Array<{ description: string; status: string }>;
   /** Error info */
   error?: {
     code: string;
