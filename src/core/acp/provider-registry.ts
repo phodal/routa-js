@@ -32,8 +32,8 @@ export const PROVIDER_MODEL_TIERS: Record<string, Record<string, string>> = {
   },
   claudeCodeSdk: {
     fast: "claude-3-5-haiku-20241022",
-    balanced: "claude-3-5-sonnet-20241022",
-    smart: "claude-3-5-sonnet-20241022", // Sonnet is the max for SDK
+    balanced: "claude-sonnet-4-20250514",
+    smart: "claude-opus-4-5",  // Use claude-opus-4-5 for high-capability tasks
   },
   opencode: {
     // Models are dynamic - fetched from the CLI at runtime

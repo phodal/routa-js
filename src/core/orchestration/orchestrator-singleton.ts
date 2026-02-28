@@ -42,6 +42,9 @@ export function initRoutaOrchestrator(
   const fullConfig: OrchestratorConfig = {
     defaultCrafterProvider: config?.defaultCrafterProvider ?? defaultProvider,
     defaultGateProvider: config?.defaultGateProvider ?? defaultProvider,
+    crafterModel: config?.crafterModel ?? process.env.CRAFTER_MODEL,
+    gateModel: config?.gateModel ?? process.env.GATE_MODEL,
+    routaModel: config?.routaModel ?? process.env.ROUTA_MODEL,
     defaultCwd: config?.defaultCwd ?? process.cwd(),
     serverPort: config?.serverPort ?? process.env.PORT,
   };
@@ -50,7 +53,7 @@ export function initRoutaOrchestrator(
   (globalThis as Record<string, unknown>)[GLOBAL_KEY] = orchestrator;
 
   console.log(
-    `[Orchestrator] Initialized with defaultCrafterProvider=${fullConfig.defaultCrafterProvider}, defaultGateProvider=${fullConfig.defaultGateProvider}`
+    `[Orchestrator] Initialized with defaultCrafterProvider=${fullConfig.defaultCrafterProvider}, defaultGateProvider=${fullConfig.defaultGateProvider}, crafterModel=${fullConfig.crafterModel ?? "(default)"}, gateModel=${fullConfig.gateModel ?? "(default)"}`
   );
 
   return orchestrator;

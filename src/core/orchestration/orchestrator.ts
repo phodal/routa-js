@@ -66,6 +66,12 @@ export interface OrchestratorConfig {
   defaultCrafterProvider: string;
   /** Default ACP provider for GATE agents */
   defaultGateProvider: string;
+  /** Optional model override for CRAFTER agents (e.g. cheap model for coding tasks) */
+  crafterModel?: string;
+  /** Optional model override for GATE agents (e.g. balanced model for verification) */
+  gateModel?: string;
+  /** Optional model override for ROUTA/coordinator agents */
+  routaModel?: string;
   /** Default working directory */
   defaultCwd: string;
   /** Server port for MCP URL */

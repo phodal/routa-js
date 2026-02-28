@@ -20,15 +20,6 @@ const ROLE_DESCRIPTIONS: Record<AgentRoleKey, string> = {
 const STORAGE_KEY = "routa.defaultProviders";
 
 /**
- * Per-role model configuration. Stored in localStorage.
- */
-export interface AgentModelConfig {
-  provider?: string;  // e.g. "claude-code-sdk"
-  model?: string;     // e.g. "claude-3-5-haiku-20241022"
-  maxTurns?: number;
-}
-
-/**
  * Memory statistics interface from /api/memory
  */
 interface MemoryStats {
@@ -60,6 +51,13 @@ interface MemoryResponse {
   recommendations: string[];
 }
 
+/** Per-agent provider + model configuration (stored in localStorage). */
+export interface AgentModelConfig {
+  provider?: string;
+  model?: string;
+  maxTurns?: number;
+}
+
 export interface DefaultProviderSettings {
   ROUTA?: AgentModelConfig;
   CRAFTER?: AgentModelConfig;
@@ -69,23 +67,20 @@ export interface DefaultProviderSettings {
 
 /**
  * Load default-provider settings from localStorage.
- * Normalizes old plain-string format (provider only) to AgentModelConfig.
+ * Normalises the legacy string format (just provider ID) → AgentModelConfig.
  */
 export function loadDefaultProviders(): DefaultProviderSettings {
   if (typeof window === "undefined") return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed: Record<string, unknown> = JSON.parse(raw);
     const normalized: DefaultProviderSettings = {};
     for (const role of AGENT_ROLES) {
-      const val = parsed[role];
-      if (typeof val === "string") {
-        // Backward compat: old format stored bare provider string
-        normalized[role] = val ? { provider: val } : undefined;
-      } else if (val && typeof val === "object") {
-        normalized[role] = val as AgentModelConfig;
-      }
+      const v = parsed[role];
+      if (!v) continue;
+      // Legacy: stored as bare provider-id string
+      normalized[role] = typeof v === "string" ? { provider: v } : (v as AgentModelConfig);
     }
     return normalized;
   } catch {
@@ -178,10 +173,10 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
 
   const handleChange = useCallback(
     (role: AgentRoleKey, field: "provider" | "model", value: string) => {
-      const current = settings[role] ?? {};
+      const current: AgentModelConfig = settings[role] ?? {};
       const updated: AgentModelConfig = { ...current, [field]: value || undefined };
-      // Drop key entirely if both fields are empty
-      const isEmpty = !updated.provider && !updated.model && !updated.maxTurns;
+      // Remove key entirely if both fields are empty
+      const isEmpty = !updated.provider && !updated.model;
       const next: DefaultProviderSettings = { ...settings, [role]: isEmpty ? undefined : updated };
       setSettings(next);
       saveDefaultProviders(next);
@@ -199,7 +194,7 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Dialog */}
-      <div className="relative bg-white dark:bg-[#1a1d2e] rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+      <div className="relative bg-white dark:bg-[#1a1d2e] rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-gray-200 dark:border-gray-700" style={{maxHeight: '90vh'}}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
@@ -255,31 +250,26 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
 
         {/* Body */}
         {activeTab === "providers" ? (
-          <div className="px-5 py-4 space-y-5 overflow-y-auto">
+          <div className="px-5 py-4 space-y-4 overflow-y-auto" style={{maxHeight: 'calc(90vh - 140px)'}}>
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                Default Provider &amp; Model per Agent Role
-              </h3>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-4">
-                Set both a provider and an optional model override per role. Leave model blank to use the provider default.
-              </p>
               {/* Column headers */}
-              <div className="grid grid-cols-[100px_1fr_1fr] gap-x-3 mb-1.5 px-0.5">
-                <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase">Role</div>
-                <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase">Provider</div>
-                <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase">Model</div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-[90px]" />
+                <div className="w-[160px] text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Provider</div>
+                <div className="flex-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Model override</div>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {AGENT_ROLES.map((role) => (
-                  <div key={role} className="grid grid-cols-[100px_1fr_1fr] gap-x-3 items-center">
-                    <div>
+                  <div key={role} className="flex items-center gap-3">
+                    <div className="w-[90px] shrink-0">
                       <div className="text-xs font-medium text-gray-700 dark:text-gray-300">{role}</div>
                       <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{ROLE_DESCRIPTIONS[role]}</div>
                     </div>
+                    {/* Provider select */}
                     <select
                       value={settings[role]?.provider ?? ""}
                       onChange={(e) => handleChange(role, "provider", e.target.value)}
-                      className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                      className="w-[160px] shrink-0 text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     >
                       <option value="">Auto</option>
                       {availableProviders.map((p) => (
@@ -288,12 +278,13 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
                         </option>
                       ))}
                     </select>
+                    {/* Model text input */}
                     <input
                       type="text"
-                      placeholder="e.g. claude-3-5-haiku-20241022"
                       value={settings[role]?.model ?? ""}
                       onChange={(e) => handleChange(role, "model", e.target.value)}
-                      className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                      placeholder="e.g. claude-3-5-haiku-20241022"
+                      className="flex-1 text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
                 ))}
@@ -305,9 +296,13 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
                 No providers available. Connect to load providers.
               </p>
             )}
+
+            <p className="text-[10px] text-gray-400 dark:text-gray-500">
+              Leave model blank to use the provider&apos;s default. Example: set CRAFTER to <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">claude-3-5-haiku-20241022</code> for low-cost tasks.
+            </p>
           </div>
         ) : activeTab === "specialists" ? (
-          <div className="px-5 py-4 overflow-y-auto flex-1">
+          <div className="px-5 py-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Agent Specialists
@@ -335,7 +330,7 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
           </div>
         ) : (
           // Memory tab
-          <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
+          <div className="px-5 py-4 space-y-4 max-h-96 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Memory Monitor

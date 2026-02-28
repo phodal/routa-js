@@ -3,6 +3,7 @@ import {
   loadDefaultProviders,
   saveDefaultProviders,
   type DefaultProviderSettings,
+  type AgentModelConfig,
 } from "../settings-panel";
 
 // Mock localStorage for jsdom environment
@@ -45,33 +46,23 @@ describe("settings-panel default provider helpers", () => {
     expect(loadDefaultProviders()).toEqual(settings);
   });
 
-  it("normalizes old plain-string format to AgentModelConfig", () => {
-    // Old format: { ROUTA: "claude-code-sdk" }
-    localStorage.setItem("routa.defaultProviders", JSON.stringify({
-      ROUTA: "claude-code-sdk",
-      CRAFTER: "opencode-sdk",
-    }));
-    const loaded = loadDefaultProviders();
-    expect(loaded.ROUTA).toEqual({ provider: "claude-code-sdk" });
-    expect(loaded.CRAFTER).toEqual({ provider: "opencode-sdk" });
-  });
-
   it("handles invalid JSON gracefully", () => {
     localStorage.setItem("routa.defaultProviders", "not-json");
     expect(loadDefaultProviders()).toEqual({});
   });
 
-  it("preserves partial settings", () => {
-    saveDefaultProviders({ GATE: { provider: "gemini" } });
+  it("normalises legacy string-only provider values on load", () => {
+    // Simulate old format stored in localStorage (bare provider-id string)
+    localStorage.setItem("routa.defaultProviders", JSON.stringify({ GATE: "gemini" }));
     const loaded = loadDefaultProviders();
     expect(loaded.GATE).toEqual({ provider: "gemini" });
     expect(loaded.ROUTA).toBeUndefined();
   });
 
-  it("stores model alongside provider", () => {
-    saveDefaultProviders({ CRAFTER: { provider: "claude-code-sdk", model: "claude-3-5-haiku-20241022" } });
+  it("preserves partial AgentModelConfig settings", () => {
+    saveDefaultProviders({ GATE: { provider: "gemini", model: "gemini-pro" } });
     const loaded = loadDefaultProviders();
-    expect(loaded.CRAFTER?.provider).toBe("claude-code-sdk");
-    expect(loaded.CRAFTER?.model).toBe("claude-3-5-haiku-20241022");
+    expect(loaded.GATE).toEqual({ provider: "gemini", model: "gemini-pro" });
+    expect(loaded.ROUTA).toBeUndefined();
   });
 });

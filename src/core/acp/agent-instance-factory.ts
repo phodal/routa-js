@@ -141,7 +141,16 @@ export class AgentInstanceFactory {
       }
     }
 
-    // 4. No resolution — adapter will fall back to env var / SDK default
+    // 4. Role-based env var overrides (ROUTA_MODEL, CRAFTER_MODEL, GATE_MODEL, DEVELOPER_MODEL)
+    if (config.role) {
+      const roleEnvVar = `${config.role.toUpperCase()}_MODEL`;
+      const roleEnvModel = process.env[roleEnvVar];
+      if (roleEnvModel) {
+        return { ...config, resolvedModel: roleEnvModel, specialist };
+      }
+    }
+
+    // 5. No resolution — adapter will fall back to ANTHROPIC_MODEL env var / SDK default
     return { ...config, resolvedModel: undefined, specialist };
   }
 

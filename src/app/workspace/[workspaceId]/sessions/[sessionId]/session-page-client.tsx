@@ -32,7 +32,7 @@ import type {RepoSelection} from "@/client/components/repo-picker";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
 import {ProtocolBadge} from "@/app/protocol-badge";
 import {consumePendingPrompt} from "@/client/utils/pending-prompt";
-import {SettingsPanel, loadDefaultProviders, type AgentModelConfig} from "@/client/components/settings-panel";
+import {SettingsPanel, loadDefaultProviders} from "@/client/components/settings-panel";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -576,18 +576,15 @@ export function SessionPageClient() {
     }
   }, [isSessionEmpty]);
 
-  /** Resolve effective { provider, model }: explicit > per-role settings > global selection */
-  const resolveAgentConfig = useCallback((explicitProvider?: string, explicitModel?: string): { provider: string; model?: string } => {
+  /** Resolve effective provider + model: explicit > per-role default > global selection */
+  const resolveAgentConfig = useCallback((explicitProvider?: string) => {
     const defaults = loadDefaultProviders();
-    const roleConfig: AgentModelConfig = defaults[selectedAgent] ?? {};
+    const roleConfig = defaults[selectedAgent];
     return {
-      provider: explicitProvider || roleConfig.provider || acp.selectedProvider,
-      model: explicitModel || roleConfig.model,
+      provider: explicitProvider || roleConfig?.provider || acp.selectedProvider,
+      model: roleConfig?.model,
     };
   }, [selectedAgent, acp.selectedProvider]);
-
-  /** @deprecated use resolveAgentConfig */
-  const resolveProvider = useCallback((explicit?: string) => resolveAgentConfig(explicit).provider, [resolveAgentConfig]);
 
   const handleCreateSession = useCallback(
     async (provider: string) => {
@@ -629,9 +626,11 @@ export function SessionPageClient() {
 
     // Fallback: create a new session
     const role = selectedAgent;
-    const { provider: effectiveProvider, model: resolvedModel } = resolveAgentConfig(provider, model);
-    console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, model=${resolvedModel}, role=${role}, specialistId=${selectedSpecialistId}`);
-    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, resolvedModel, undefined, selectedSpecialistId ?? undefined);
+    const { provider: effectiveProvider, model: resolvedModel } = resolveAgentConfig(provider);
+    // Explicit model (from chat input) takes priority over per-role model config
+    const effectiveModel = model ?? resolvedModel;
+    console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${effectiveModel}, specialistId=${selectedSpecialistId}`);
+    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, effectiveModel, undefined, selectedSpecialistId ?? undefined);
     if (result?.sessionId) {
       router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       return result.sessionId;
