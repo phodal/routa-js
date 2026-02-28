@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useId } from "react";
+import { useState, useEffect, useCallback, useId, useRef } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
 import type { SpecialistConfig, AgentRole, ModelTier } from "./specialist-manager";
 
@@ -196,19 +196,29 @@ const labelCls = "text-[10px] font-medium text-gray-500 dark:text-gray-400 upper
 const sectionHeadCls = "text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider";
 
 // ─── Models Tab ────────────────────────────────────────────────────────────
+const BASE_URL_SUGGESTIONS = [
+  "https://open.bigmodel.cn/api/anthropic",
+  "https://api.minimaxi.com/anthropic",
+  "https://api.deepseek.com/anthropic",
+  "https://api.moonshot.ai/anthropic",
+  "https://api.openai.com/v1",
+  "https://api.anthropic.com/v1",
+  "https://generativelanguage.googleapis.com/v1beta/openai",
+];
+
+const EMPTY_MODEL_FORM: ModelDefinition = { alias: "", modelName: "", baseUrl: "", apiKey: "" };
+
 function ModelsTab() {
   const [defs, setDefs] = useState<ModelDefinition[]>([]);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-  const [newRow, setNewRow] = useState<ModelDefinition | null>(null);
+  const [form, setForm] = useState<ModelDefinition>(EMPTY_MODEL_FORM);
+  const [aliasError, setAliasError] = useState("");
+  const baseUrlListId = useId();
+  const aliasInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setDefs(loadModelDefinitions());
-  }, []);
+  useEffect(() => { setDefs(loadModelDefinitions()); }, []);
 
-  const persist = (next: ModelDefinition[]) => {
-    setDefs(next);
-    saveModelDefinitions(next);
-  };
+  const persist = (next: ModelDefinition[]) => { setDefs(next); saveModelDefinitions(next); };
 
   const handleUpdate = (idx: number, field: keyof ModelDefinition, value: string) => {
     persist(defs.map((d, i) => (i === idx ? { ...d, [field]: value } : d)));
@@ -220,29 +230,102 @@ function ModelsTab() {
     if (expandedIdx === idx) setExpandedIdx(null);
   };
 
-  const commitNew = () => {
-    if (!newRow?.alias.trim() || !newRow?.modelName.trim()) return;
-    if (defs.some((d) => d.alias === newRow.alias.trim())) {
-      alert(`Alias "${newRow.alias}" already exists.`);
+  const handleAddModel = () => {
+    const alias = form.alias.trim();
+    const modelName = form.modelName.trim();
+    if (!alias || !modelName) return;
+    if (defs.some((d) => d.alias === alias)) {
+      setAliasError(`"${alias}" already exists`);
       return;
     }
-    persist([...defs, { ...newRow, alias: newRow.alias.trim(), modelName: newRow.modelName.trim() }]);
-    setNewRow(null);
+    persist([...defs, { ...form, alias, modelName }]);
+    setForm(EMPTY_MODEL_FORM);
+    setAliasError("");
+    aliasInputRef.current?.focus();
   };
 
+  const handleFormKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleAddModel();
+  };
+
+  const canAdd = form.alias.trim().length > 0 && form.modelName.trim().length > 0;
+
   return (
-    <div className="px-4 py-4 space-y-3 overflow-y-auto" style={{ maxHeight: "calc(90vh - 148px)" }}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className={sectionHeadCls}>Model Definitions</p>
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
-            Define model aliases with connection details. Select them by alias in the Providers tab.
-          </p>
+    <div className="px-4 py-4 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 148px)" }}>
+      <datalist id={baseUrlListId}>
+        {BASE_URL_SUGGESTIONS.map((url) => <option key={url} value={url} />)}
+      </datalist>
+
+      {/* ── Inline add form (always visible) ── */}
+      <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-b from-blue-50/60 to-transparent dark:from-blue-900/10 dark:to-transparent p-3.5 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Add a model</span>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto hidden sm:block">Press Enter to add</span>
         </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <label className={labelCls}>Alias <span className="text-blue-400">*</span></label>
+            <input
+              ref={aliasInputRef}
+              autoFocus
+              type="text"
+              value={form.alias}
+              onChange={(e) => { setForm({ ...form, alias: e.target.value }); setAliasError(""); }}
+              onKeyDown={handleFormKey}
+              placeholder="deepseek-v4"
+              className={`${inputCls} ${aliasError ? "border-red-400 dark:border-red-500 focus:ring-red-400" : ""}`}
+            />
+            {aliasError && <p className="text-[10px] text-red-500">{aliasError}</p>}
+          </div>
+          <div className="space-y-1">
+            <label className={labelCls}>Model Name <span className="text-blue-400">*</span></label>
+            <input
+              type="text"
+              value={form.modelName}
+              onChange={(e) => setForm({ ...form, modelName: e.target.value })}
+              onKeyDown={handleFormKey}
+              placeholder="deepseek-chat"
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className={labelCls}>Base URL</label>
+          <input
+            type="url"
+            list={baseUrlListId}
+            value={form.baseUrl ?? ""}
+            onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+            onKeyDown={handleFormKey}
+            placeholder="https://api.deepseek.com/anthropic"
+            className={`${inputCls} font-mono`}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className={labelCls}>API Key</label>
+          <input
+            type="password"
+            value={form.apiKey ?? ""}
+            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            onKeyDown={handleFormKey}
+            placeholder="sk-…"
+            autoComplete="off"
+            className={`${inputCls} font-mono`}
+          />
+        </div>
+
         <button
-          onClick={() => setNewRow({ alias: "", modelName: "", baseUrl: "", apiKey: "" })}
-          disabled={newRow !== null}
-          className="shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+          onClick={handleAddModel}
+          disabled={!canAdd}
+          className="w-full py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -251,117 +334,76 @@ function ModelsTab() {
         </button>
       </div>
 
-      {newRow && (
-        <div className="rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 p-3 space-y-2.5">
-          <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">New Model Definition</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className={labelCls}>Alias *</label>
-              <input autoFocus type="text" value={newRow.alias}
-                onChange={(e) => setNewRow({ ...newRow, alias: e.target.value })}
-                placeholder="deepseek-v4" className={inputCls} />
-            </div>
-            <div className="space-y-1">
-              <label className={labelCls}>Model Name *</label>
-              <input type="text" value={newRow.modelName}
-                onChange={(e) => setNewRow({ ...newRow, modelName: e.target.value })}
-                placeholder="deepseek-chat" className={`${inputCls} font-mono`} />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className={labelCls}>Base URL</label>
-            <input type="url" value={newRow.baseUrl ?? ""}
-              onChange={(e) => setNewRow({ ...newRow, baseUrl: e.target.value })}
-              placeholder="https://api.deepseek.com/v1" className={`${inputCls} font-mono`} />
-          </div>
-          <div className="space-y-1">
-            <label className={labelCls}>API Key</label>
-            <input type="password" value={newRow.apiKey ?? ""}
-              onChange={(e) => setNewRow({ ...newRow, apiKey: e.target.value })}
-              placeholder="sk-..." autoComplete="off" className={`${inputCls} font-mono`} />
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button onClick={commitNew}
-              disabled={!newRow.alias.trim() || !newRow.modelName.trim()}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors">
-              Save
-            </button>
-            <button onClick={() => setNewRow(null)}
-              className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {defs.length === 0 && !newRow && (
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 italic text-center py-6">
-            No model definitions yet. Click &ldquo;Add Model&rdquo; to create one.
-          </p>
-        )}
-        {defs.map((def, idx) => {
-          const isOpen = expandedIdx === idx;
-          return (
-            <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-[#1e2130]">
-                <button onClick={() => setExpandedIdx(isOpen ? null : idx)}
-                  className="flex-1 flex items-center gap-2 min-w-0 text-left">
-                  <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{def.alias}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate">→ {def.modelName}</span>
-                  {def.baseUrl && (
-                    <span className="text-[10px] text-blue-500 dark:text-blue-400 font-mono truncate hidden sm:block">
-                      {def.baseUrl.replace(/https?:\/\//, "").substring(0, 30)}
-                    </span>
-                  )}
-                </button>
-                <button onClick={() => handleDelete(idx)}
-                  className="shrink-0 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Delete">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-              {isOpen && (
-                <div className="p-3 space-y-2.5 border-t border-gray-200 dark:border-gray-700">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className={labelCls}>Alias</label>
-                      <input type="text" value={def.alias}
-                        onChange={(e) => handleUpdate(idx, "alias", e.target.value)} className={inputCls} />
-                    </div>
-                    <div className="space-y-1">
-                      <label className={labelCls}>Model Name</label>
-                      <input type="text" value={def.modelName}
-                        onChange={(e) => handleUpdate(idx, "modelName", e.target.value)} className={`${inputCls} font-mono`} />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className={labelCls}>Base URL</label>
-                    <input type="url" value={def.baseUrl ?? ""}
-                      onChange={(e) => handleUpdate(idx, "baseUrl", e.target.value || "")}
-                      placeholder="https://api.example.com/v1" className={`${inputCls} font-mono`} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className={labelCls}>API Key</label>
-                    <input type="password" value={def.apiKey ?? ""}
-                      onChange={(e) => handleUpdate(idx, "apiKey", e.target.value || "")}
-                      placeholder="sk-..." autoComplete="off" className={`${inputCls} font-mono`} />
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* ── Saved model definitions ── */}
       {defs.length > 0 && (
-        <p className="text-[10px] text-gray-400 dark:text-gray-500">
-          These aliases appear in the <strong>Providers</strong> tab model selector and resolve to the actual model + connection at session creation.
-        </p>
+        <div className="space-y-1.5">
+          <p className={sectionHeadCls}>Saved Models</p>
+          {defs.map((def, idx) => {
+            const isOpen = expandedIdx === idx;
+            return (
+              <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-[#1e2130]">
+                  <button
+                    onClick={() => setExpandedIdx(isOpen ? null : idx)}
+                    className="flex-1 flex items-center gap-2 min-w-0 text-left"
+                  >
+                    <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{def.alias}</span>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate">→ {def.modelName}</span>
+                    {def.baseUrl && (
+                      <span className="text-[10px] text-blue-500 dark:text-blue-400 font-mono truncate hidden sm:block">
+                        {def.baseUrl.replace(/https?:\/\//, "").substring(0, 30)}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(idx)}
+                    className="shrink-0 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    title="Delete"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+                {isOpen && (
+                  <div className="p-3 space-y-2.5 border-t border-gray-200 dark:border-gray-700">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className={labelCls}>Alias</label>
+                        <input type="text" value={def.alias}
+                          onChange={(e) => handleUpdate(idx, "alias", e.target.value)} className={inputCls} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className={labelCls}>Model Name</label>
+                        <input type="text" value={def.modelName}
+                          onChange={(e) => handleUpdate(idx, "modelName", e.target.value)} className={`${inputCls} font-mono`} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={labelCls}>Base URL</label>
+                      <input type="url" list={baseUrlListId} value={def.baseUrl ?? ""}
+                        onChange={(e) => handleUpdate(idx, "baseUrl", e.target.value || "")}
+                        placeholder="https://api.example.com/anthropic" className={`${inputCls} font-mono`} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className={labelCls}>API Key</label>
+                      <input type="password" value={def.apiKey ?? ""}
+                        onChange={(e) => handleUpdate(idx, "apiKey", e.target.value || "")}
+                        placeholder="sk-…" autoComplete="off" className={`${inputCls} font-mono`} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 pt-1">
+            Aliases appear in the <strong>Providers</strong> tab model selector and resolve to the actual model + connection at session creation.
+          </p>
+        </div>
       )}
     </div>
   );
