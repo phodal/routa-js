@@ -177,11 +177,14 @@ export function HomeInput({
         const conn = loadProviderConnectionConfig(effectiveProvider);
         const modelAliasOrName = context.model ?? conn.model;
         const def = modelAliasOrName ? getModelDefinitionByAlias(modelAliasOrName) : undefined;
+        // When a custom specialist is selected, use the specialist's role
+        const selectedSpec = selectedSpecialistId ? specialists.find((s) => s.id === selectedSpecialistId) : undefined;
+        const effectiveRole = (selectedSpec?.role as typeof selectedRole) ?? selectedRole;
         const result = await acp.createSession(
           context.cwd ?? repoSelection?.path,
           context.provider,
           context.mode,
-          selectedRole,
+          effectiveRole,
           wsId,
           def ? def.modelName : modelAliasOrName,
           idempotencyKey,
@@ -236,130 +239,121 @@ export function HomeInput({
 
           {/* ─── Bottom Control Bar ─────────────────────────────────── */}
           <div className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 dark:border-[#1c1f2e]">
-            {/* Agent Role — segmented control */}
-            <div
-              className="flex items-center rounded-lg bg-gray-100 dark:bg-[#1a1d2a] p-0.5 gap-0.5"
-              role="group"
-              aria-label="Agent mode"
-            >
-              <button
-                type="button"
-                onClick={() => setSelectedRole("ROUTA")}
-                title="Multi-agent orchestration — spawns specialized agents for complex multi-step tasks (Routa)"
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                  selectedRole === "ROUTA"
-                    ? "bg-white dark:bg-[#1f2233] shadow-sm text-gray-900 dark:text-gray-100"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                }`}
-              >
-                {/* nodes/network icon */}
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "ROUTA" ? 2.5 : 2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1M4.22 4.22l.707.707m13.857 13.857l.707.707M1 12h1m20 0h1M4.22 19.78l.707-.707m13.857-13.857l.707-.707"/>
-                  <circle cx="12" cy="12" r="3" stroke="currentColor" />
-                </svg>
-                Multi-Agent
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedRole("DEVELOPER")}
-                title="Single-agent direct coding — best for focused, simple tasks (Developer)"
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                  selectedRole === "DEVELOPER"
-                    ? "bg-white dark:bg-[#1f2233] shadow-sm text-gray-900 dark:text-gray-100"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                }`}
-              >
-                {/* lightning bolt for direct/fast */}
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "DEVELOPER" ? 2.5 : 2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                </svg>
-                Direct
-              </button>
-            </div>
-
-            <div className="w-px h-4 bg-gray-200 dark:bg-[#1c1f2e]" />
-
-            {/* Specialist Picker */}
-            {specialists.length > 0 && (
-              <div className="relative" ref={specialistDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowSpecialistDropdown((v) => !v)}
-                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs border transition-all ${
-                    selectedSpecialistId
-                      ? "text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-700"
-                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c1f2e] border-transparent hover:border-gray-200 dark:hover:border-[#2a2d3d]"
-                  }`}
-                  title="Select a custom specialist agent"
-                >
-                  <svg className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            {selectedSpecialistId ? (
+              /* ── Specialist mode: show specialist pill as primary selector ── */
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300">
+                  <svg className="w-3.5 h-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                   </svg>
-                  <span className="max-w-[96px] truncate">
-                    {selectedSpecialistId
-                      ? (specialists.find((s) => s.id === selectedSpecialistId)?.name ?? "Custom Specialist")
-                      : "Custom Specialist"}
+                  <span className="max-w-[140px] truncate">
+                    {specialists.find((s) => s.id === selectedSpecialistId)?.name ?? "Custom Specialist"}
                   </span>
-                  {selectedSpecialistId && (
-                    <span
-                      role="button"
-                      aria-label="Clear specialist"
-                      onClick={(e) => { e.stopPropagation(); setSelectedSpecialistId(null); }}
-                      className="ml-0.5 text-violet-400 hover:text-violet-600 dark:hover:text-violet-200 cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSpecialistId(null)}
+                    className="ml-0.5 text-violet-400 hover:text-violet-700 dark:hover:text-violet-200 transition-colors"
+                    title="Switch to built-in role"
+                    aria-label="Clear specialist"
+                  >
+                    ×
+                  </button>
+                </div>
+                {specialists.length > 1 && (
+                  <div className="relative" ref={specialistDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setShowSpecialistDropdown((v) => !v)}
+                      className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c1f2e] border border-transparent hover:border-gray-200 dark:hover:border-[#2a2d3d] transition-all"
+                      title="Switch specialist"
                     >
-                      ×
-                    </span>
-                  )}
-                  {!selectedSpecialistId && (
-                    <svg className="w-2.5 h-2.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  )}
-                </button>
-
-                {showSpecialistDropdown && (
-                  <div className="absolute bottom-full left-0 mb-1 w-56 rounded-xl border border-gray-200 dark:border-[#1c1f2e] bg-white dark:bg-[#181b26] shadow-xl z-50 overflow-hidden">
-                    <div className="px-2 pt-2 pb-1">
-                      <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide px-1 mb-1">Custom Specialists</p>
-                      <button
-                        onClick={() => { setSelectedSpecialistId(null); setShowSpecialistDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 ${
-                          !selectedSpecialistId
-                            ? "bg-amber-50 dark:bg-amber-900/15 text-amber-700 dark:text-amber-400"
-                            : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1f2233]"
-                        }`}
-                      >
-                        <svg className="w-3.5 h-3.5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        Default
-                      </button>
-                    </div>
-                    <div className="border-t border-gray-100 dark:border-[#1c1f2e] p-1 max-h-48 overflow-y-auto">
-                      {specialists.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => { setSelectedSpecialistId(s.id); setShowSpecialistDropdown(false); }}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
-                            s.id === selectedSpecialistId
-                              ? "bg-violet-50 dark:bg-violet-900/15 text-violet-700 dark:text-violet-300"
-                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1f2233]"
-                          }`}
-                        >
-                          <div className="font-medium truncate">{s.name}</div>
-                          {s.description && (
-                            <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{s.description}</div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {showSpecialistDropdown && (
+                      <div className="absolute bottom-full left-0 mb-1 w-52 rounded-xl border border-gray-200 dark:border-[#1c1f2e] bg-white dark:bg-[#181b26] shadow-xl z-50 overflow-hidden">
+                        <div className="p-1 max-h-48 overflow-y-auto">
+                          {specialists.map((s) => (
+                            <button key={s.id} onClick={() => { setSelectedSpecialistId(s.id); setShowSpecialistDropdown(false); }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                                s.id === selectedSpecialistId ? "bg-violet-50 dark:bg-violet-900/15 text-violet-700 dark:text-violet-300" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1f2233]"
+                              }`}>
+                              <div className="font-medium truncate">{s.name}</div>
+                              {s.description && <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{s.description}</div>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+            ) : (
+              /* ── Built-in role mode: segmented toggle + optional specialist picker ── */
+              <>
+                <div className="flex items-center rounded-lg bg-gray-100 dark:bg-[#1a1d2a] p-0.5 gap-0.5" role="group" aria-label="Agent mode">
+                  <button type="button" onClick={() => setSelectedRole("ROUTA")}
+                    title="Multi-agent orchestration — spawns specialized agents for complex multi-step tasks (Routa)"
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                      selectedRole === "ROUTA" ? "bg-white dark:bg-[#1f2233] shadow-sm text-gray-900 dark:text-gray-100" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                    }`}>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "ROUTA" ? 2.5 : 2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1M4.22 4.22l.707.707m13.857 13.857l.707.707M1 12h1m20 0h1M4.22 19.78l.707-.707m13.857-13.857l.707-.707"/>
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" />
+                    </svg>
+                    Multi-Agent
+                  </button>
+                  <button type="button" onClick={() => setSelectedRole("DEVELOPER")}
+                    title="Single-agent direct coding — best for focused, simple tasks (Developer)"
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                      selectedRole === "DEVELOPER" ? "bg-white dark:bg-[#1f2233] shadow-sm text-gray-900 dark:text-gray-100" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                    }`}>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={selectedRole === "DEVELOPER" ? 2.5 : 2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                    Direct
+                  </button>
+                </div>
 
-            {specialists.length > 0 && <div className="w-px h-4 bg-gray-200 dark:bg-[#1c1f2e]" />}
+                {/* Custom Specialist — shown as an additive option when specialists exist */}
+                {specialists.length > 0 && (
+                  <>
+                    <div className="w-px h-4 bg-gray-200 dark:bg-[#1c1f2e]" />
+                    <div className="relative" ref={specialistDropdownRef}>
+                      <button type="button" onClick={() => setShowSpecialistDropdown((v) => !v)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c1f2e] border border-dashed border-gray-300 dark:border-gray-600 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-300 transition-all"
+                        title="Use a custom specialist instead">
+                        <svg className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                        </svg>
+                        Custom
+                        <svg className="w-2.5 h-2.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showSpecialistDropdown && (
+                        <div className="absolute bottom-full left-0 mb-1 w-56 rounded-xl border border-gray-200 dark:border-[#1c1f2e] bg-white dark:bg-[#181b26] shadow-xl z-50 overflow-hidden">
+                          <div className="px-2 pt-2 pb-1">
+                            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide px-1 mb-1">Custom Specialists</p>
+                          </div>
+                          <div className="border-t border-gray-100 dark:border-[#1c1f2e] p-1 max-h-48 overflow-y-auto">
+                            {specialists.map((s) => (
+                              <button key={s.id} onClick={() => { setSelectedSpecialistId(s.id); setShowSpecialistDropdown(false); }}
+                                className="w-full text-left px-3 py-2 rounded-lg text-xs text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/15 hover:text-violet-700 dark:hover:text-violet-300 transition-colors">
+                                <div className="font-medium truncate">{s.name}</div>
+                                {s.description && <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{s.description}</div>}
+                                {s.role && <div className="text-[10px] text-gray-300 dark:text-gray-600 mt-0.5 font-mono">{s.role}</div>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
 
             {/* Workspace Pill */}
             {workspacesHook.workspaces.length > 0 && (
@@ -494,7 +488,23 @@ export function HomeInput({
 
       {/* ─── Mode Tips ──────────────────────────────────────────────── */}
       <div className="mt-2 px-1 min-h-[44px]">
-        {selectedRole === "ROUTA" ? (
+        {selectedSpecialistId ? (
+          (() => {
+            const spec = specialists.find((s) => s.id === selectedSpecialistId);
+            return (
+              <div className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500 animate-fade-in-up">
+                <span className="mt-0.5 shrink-0 w-3.5 h-3.5 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                  <svg className="w-2 h-2 text-violet-500" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" /></svg>
+                </span>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 leading-relaxed">
+                  <span className="text-violet-600 dark:text-violet-400 font-medium">{spec?.name}</span>
+                  {spec?.role && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="font-mono text-[10px]">{spec.role}</span></>}
+                  {spec?.description && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="italic opacity-70">{spec.description}</span></>}
+                </div>
+              </div>
+            );
+          })()
+        ) : selectedRole === "ROUTA" ? (
           <div className="flex items-start gap-2 text-[11px] text-gray-400 dark:text-gray-500 animate-fade-in-up">
             <span className="mt-0.5 shrink-0 w-3.5 h-3.5 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
               <svg className="w-2 h-2 text-amber-500" fill="currentColor" viewBox="0 0 8 8">
