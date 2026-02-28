@@ -281,5 +281,37 @@ describe("StandardAcpAdapter", () => {
     expect(result?.input).toEqual({ filePath: "/path/to/file.ts" });
     expect(result?.inputFinalized).toBe(true);
   });
+
+  it("normalizes plan_update events", () => {
+    const notification = {
+      sessionId: "test-session",
+      update: {
+        sessionUpdate: "plan_update",
+        items: [
+          { description: "Step 1", status: "completed" },
+          { description: "Step 2", status: "in_progress" },
+          { description: "Step 3", status: "pending" },
+        ],
+      },
+    };
+
+    const result = adapter.normalize("test-session", notification) as NormalizedSessionUpdate;
+
+    expect(result).not.toBeNull();
+    expect(result.eventType).toBe("plan_update");
+    expect(result.planItems).toHaveLength(3);
+    expect(result.planItems?.[0]).toEqual({ description: "Step 1", status: "completed" });
+    expect(result.planItems?.[2]).toEqual({ description: "Step 3", status: "pending" });
+  });
+
+  it("returns null for plan_update with missing items", () => {
+    const notification = {
+      sessionId: "test-session",
+      update: { sessionUpdate: "plan_update" },
+    };
+
+    const result = adapter.normalize("test-session", notification);
+    expect(result).toBeNull();
+  });
 });
 
