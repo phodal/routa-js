@@ -239,6 +239,7 @@ export function classifyToolKind(toolName: string): ToolKind {
     name === "ls" ||
     name.startsWith("read_") ||
     name.startsWith("search_") ||
+    name.startsWith("list_") ||
     name.startsWith("view_") ||
     name.includes("_read") ||
     name.includes("_search") ||
@@ -348,6 +349,6 @@ export function extractFileChanges(toolName: string, input?: Record<string, unkn
 
   // write / edit / create / patch
   const afterContent = (input.content ?? input.new_content ?? input.new_str ?? "") as string;
-  const changeType = name === "write" || name === "create" || name.startsWith("create_") ? "create" : "edit";
+  const changeType = name === "write" || name === "create" || name.startsWith("create_") || name.startsWith("write_") ? "create" : "edit";
   return [{ path, changeType, ...(afterContent ? { afterContent } : {}) }];
 }

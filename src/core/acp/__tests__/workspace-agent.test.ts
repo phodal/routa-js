@@ -256,9 +256,7 @@ describe("Workspace Agent → AgentEventBridge pipeline", () => {
     expect(events[0].type).toBe("file_changes_block");
     if (events[0].type === "file_changes_block") {
       expect(events[0].changes[0].path).toBe("src/new.ts");
-      // write_file maps to "edit" changeType via extractFileChanges (not "create")
-      // because classifyToolKind checks the tool name prefix, not the content
-      expect(events[0].changes[0].changeType).toBe("edit");
+      expect(events[0].changes[0].changeType).toBe("create");
     }
   });
 
@@ -344,7 +342,7 @@ describe("Workspace Agent → AgentEventBridge pipeline", () => {
     expect(events[0].type).toBe("read_block");
   });
 
-  it("tool_call → tool_call_block for list_directory (not in classifyToolKind read patterns)", () => {
+  it("tool_call → read_block for list_directory", () => {
     const normalized = providerAdapter.normalize("sess-1", {
       sessionId: "sess-1",
       update: {
@@ -360,9 +358,7 @@ describe("Workspace Agent → AgentEventBridge pipeline", () => {
     const events = bridge.process(update);
 
     expect(events).toHaveLength(1);
-    // list_directory doesn't match classifyToolKind's read patterns
-    // ("list" matches but "list_directory" doesn't — it's "list" exact or startsWith patterns)
-    expect(events[0].type).toBe("tool_call_block");
+    expect(events[0].type).toBe("read_block");
   });
 
   it("message chunk → message_block event", () => {
