@@ -34,7 +34,9 @@ import type { AgentInstanceConfig } from "@/core/acp/agent-instance-factory";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { getRoutaSystem } from "@/core/routa-system";
 import { AgentRole } from "@/core/models/agent";
-import { buildCoordinatorPrompt, getSpecialistByRole, setSpecialistDatabaseEnabled, loadSpecialists, reloadSpecialists } from "@/core/orchestration/specialist-prompts";
+import { buildCoordinatorPrompt, getSpecialistByRole, loadSpecialistsSync } from "@/core/orchestration/specialist-prompts";
+import { getDatabase, isPostgres } from "@/core/db";
+import { PostgresSpecialistStore } from "@/core/store/specialist-store";
 import { AcpError } from "@/core/acp/acp-process";
 import {
   createTraceRecord,
@@ -390,16 +392,23 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Load specialist system prompt from DB if specialistId was provided
+      // Load specialist system prompt if specialistId was provided
       let specialistSystemPrompt: string | undefined;
       if (specialistId) {
-        setSpecialistDatabaseEnabled(true);
-        // Try cached list first; if specialist not found, force reload from DB
-        let allSpecialists = await loadSpecialists();
-        let specialist = allSpecialists.find(s => s.id === specialistId.toLowerCase());
-        if (!specialist) {
-          allSpecialists = await reloadSpecialists();
-          specialist = allSpecialists.find(s => s.id === specialistId.toLowerCase());
+        let specialist: { systemPrompt?: string; roleReminder?: string } | null | undefined;
+        if (isPostgres()) {
+          // Direct DB query — avoids module-level cache issues
+          try {
+            const db = getDatabase();
+            const specStore = new PostgresSpecialistStore(db);
+            specialist = await specStore.get(specialistId.toLowerCase());
+          } catch (err) {
+            console.warn(`[ACP Route] DB specialist lookup failed, trying cache:`, err);
+            specialist = loadSpecialistsSync().find(s => s.id === specialistId.toLowerCase());
+          }
+        } else {
+          // SQLite mode: only bundled specialists available in cache
+          specialist = loadSpecialistsSync().find(s => s.id === specialistId.toLowerCase());
         }
         if (specialist?.systemPrompt) {
           let prompt = specialist.systemPrompt;
