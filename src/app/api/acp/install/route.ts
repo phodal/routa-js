@@ -17,6 +17,7 @@ import {
   type DistributionType,
 } from "@/core/acp/acp-installer";
 import { getRegistryAgent } from "@/core/acp/acp-registry";
+import { AcpWarmupService } from "@/core/acp/acp-warmup";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,11 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       );
+    }
+
+    // Trigger background warmup for npx/uvx agents so first launch is instant
+    if (result.distributionType === "npx" || result.distributionType === "uvx") {
+      AcpWarmupService.getInstance().warmupInBackground(agentId);
     }
 
     return NextResponse.json({

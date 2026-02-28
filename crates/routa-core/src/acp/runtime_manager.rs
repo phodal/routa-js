@@ -128,6 +128,24 @@ impl AcpRuntimeManager {
         self.get_runtime_path(rt).await.is_some()
     }
 
+    /// Run `{binary} --version` and return the trimmed first line of output.
+    /// Returns `None` if the runtime is not available or the command fails.
+    pub async fn get_version(&self, rt: &RuntimeType) -> Option<String> {
+        let path = self.get_runtime_path(rt).await?;
+        let output = tokio::process::Command::new(&path)
+            .arg("--version")
+            .output()
+            .await
+            .ok()?;
+        let combined = String::from_utf8_lossy(&output.stdout).to_string()
+            + &String::from_utf8_lossy(&output.stderr);
+        combined
+            .lines()
+            .next()
+            .map(|l| l.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
     /// Return the best path for a runtime: managed first, then system.
     pub async fn get_runtime_path(&self, rt: &RuntimeType) -> Option<PathBuf> {
         if let Some(info) = self.get_managed_runtime(rt).await {

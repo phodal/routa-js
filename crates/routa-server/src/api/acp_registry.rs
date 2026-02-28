@@ -14,7 +14,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::acp::{AcpPaths, DistributionType, RuntimeType};
+use crate::acp::{AcpPaths, DistributionType, RuntimeType, WarmupStatus};
 use crate::error::ServerError;
 use crate::shell_env;
 use crate::state::AppState;
@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/registry", get(get_registry).post(refresh_registry))
         .route("/install", post(install_agent).delete(uninstall_agent))
         .route("/runtime", get(get_runtime_status).post(ensure_runtime))
+        .route("/warmup", get(get_warmup_status).post(warmup_agent))
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -219,11 +220,14 @@ async fn install_agent(
                 .await
                 .map_err(|e| ServerError::Internal(format!("Failed to save state: {}", e)))?;
 
+            // Trigger background warmup to pre-cache the npm package
+            state.acp_warmup_service.warmup_in_background(&req.agent_id).await;
+
             Ok(Json(serde_json::json!({
                 "success": true,
                 "agentId": req.agent_id,
                 "distributionType": dist_type,
-                "message": format!("Agent '{}' configured for npx (runs on demand)", agent.name)
+                "message": format!("Agent '{}' configured for npx (warmup started)", agent.name)
             })))
         }
         "uvx" => {
@@ -249,11 +253,14 @@ async fn install_agent(
                 .await
                 .map_err(|e| ServerError::Internal(format!("Failed to save state: {}", e)))?;
 
+            // Trigger background warmup to pre-cache the Python package
+            state.acp_warmup_service.warmup_in_background(&req.agent_id).await;
+
             Ok(Json(serde_json::json!({
                 "success": true,
                 "agentId": req.agent_id,
                 "distributionType": dist_type,
-                "message": format!("Agent '{}' configured for uvx (runs on demand)", agent.name)
+                "message": format!("Agent '{}' configured for uvx (warmup started)", agent.name)
             })))
         }
         "binary" => {
@@ -432,24 +439,27 @@ async fn get_runtime_status(
     let rm = &state.acp_runtime_manager;
     let platform = current_platform();
 
-    let check = |rt: RuntimeType| {
+    // Check version for each runtime too
+    let check_with_version = |rt: RuntimeType| {
         let rm = rm;
         async move {
             let managed = rm.get_managed_runtime(&rt).await;
-            let system = rm.get_system_runtime(&rt);
+            let system  = rm.get_system_runtime(&rt);
+            let version = rm.get_version(&rt).await;
             serde_json::json!({
                 "available": managed.is_some() || system.is_some(),
                 "managed": managed.as_ref().map(|i| i.path.to_string_lossy().to_string()),
                 "system":  system.as_ref().map(|i| i.path.to_string_lossy().to_string()),
+                "version": version,
             })
         }
     };
 
     let (node, npx, uv, uvx) = tokio::join!(
-        check(RuntimeType::Node),
-        check(RuntimeType::Npx),
-        check(RuntimeType::Uv),
-        check(RuntimeType::Uvx),
+        check_with_version(RuntimeType::Node),
+        check_with_version(RuntimeType::Npx),
+        check_with_version(RuntimeType::Uv),
+        check_with_version(RuntimeType::Uvx),
     );
 
     Ok(Json(serde_json::json!({
@@ -490,11 +500,75 @@ async fn ensure_runtime(
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to ensure runtime: {}", e)))?;
 
+    // Get actual version string
+    let version = state.acp_runtime_manager.get_version(&rt).await;
+
     Ok(Json(serde_json::json!({
         "success": true,
         "runtime": req.runtime,
         "path": info.path.to_string_lossy(),
-        "version": info.version,
+        "version": version.or(info.version),
         "managed": info.is_managed,
+    })))
+}
+
+// ─── Warmup handlers ───────────────────────────────────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+struct WarmupRequest {
+    #[serde(rename = "agentId")]
+    agent_id: String,
+    /// If true, wait for warmup to finish before returning
+    #[serde(default)]
+    sync: bool,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct WarmupQuery {
+    id: Option<String>,
+}
+
+/// GET /api/acp/warmup - Get warmup status
+async fn get_warmup_status(
+    State(state): State<AppState>,
+    Query(query): Query<WarmupQuery>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    if let Some(agent_id) = query.id {
+        let status = state.acp_warmup_service.get_status(&agent_id).await;
+        return Ok(Json(serde_json::to_value(status)
+            .map_err(|e| ServerError::Internal(e.to_string()))?));
+    }
+    let statuses: Vec<WarmupStatus> = state.acp_warmup_service.get_all_statuses().await;
+    Ok(Json(serde_json::json!({ "statuses": statuses })))
+}
+
+/// POST /api/acp/warmup - Start warmup for an agent
+async fn warmup_agent(
+    State(state): State<AppState>,
+    Json(req): Json<WarmupRequest>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    tracing::info!("[ACP Warmup] Warming up agent: {}", req.agent_id);
+
+    if req.sync {
+        let ok = state
+            .acp_warmup_service
+            .warmup(&req.agent_id)
+            .await
+            .unwrap_or(false);
+
+        let status = state.acp_warmup_service.get_status(&req.agent_id).await;
+        return Ok(Json(serde_json::json!({
+            "agentId": req.agent_id,
+            "success": ok,
+            "status": status,
+        })));
+    }
+
+    state.acp_warmup_service.warmup_in_background(&req.agent_id).await;
+
+    Ok(Json(serde_json::json!({
+        "agentId": req.agent_id,
+        "started": true,
+        "message": format!("Warmup started for agent '{}' in the background", req.agent_id),
     })))
 }

@@ -234,6 +234,34 @@ export class AcpRuntimeManager {
   }
 
   /**
+   * Run `{binary} --version` and capture the output.
+   * Returns null if the runtime is not available or the command fails.
+   */
+  async getVersion(rt: RuntimeType): Promise<string | null> {
+    const binPath = await this.getRuntimePath(rt);
+    if (!binPath) return null;
+
+    return new Promise((resolve) => {
+      const proc = spawn(binPath, ["--version"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 10_000,
+      });
+
+      let output = "";
+      proc.stdout?.on("data", (d: Buffer) => { output += d.toString(); });
+      proc.stderr?.on("data", (d: Buffer) => { output += d.toString(); });
+
+      proc.on("close", () => {
+        const trimmed = output.trim();
+        // node → "v22.12.0", uv/uvx → "uv 0.5.11 ..."
+        resolve(trimmed.length > 0 ? trimmed.split("\n")[0].trim() : null);
+      });
+
+      proc.on("error", () => resolve(null));
+    });
+  }
+
+  /**
    * Return status of all four runtimes.
    */
   async getRuntimeStatus(): Promise<RuntimeStatus> {
@@ -249,6 +277,10 @@ export class AcpRuntimeManager {
           return;
         }
         const system = await this.getSystemRuntime(rt);
+        if (system) {
+          // Populate version lazily
+          system.version = await this.getVersion(rt);
+        }
         runtimes[rt] = system;
       })
     );

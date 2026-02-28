@@ -44,6 +44,9 @@ test.describe("ACP Runtime API", () => {
       expect(nodeInfo.available).toBe(true);
       expect(typeof nodeInfo.path).toBe("string");
       expect(nodeInfo.path.length).toBeGreaterThan(0);
+      // version should now be populated (e.g. "v22.12.0")
+      expect(typeof nodeInfo.version).toBe("string");
+      expect(nodeInfo.version).toMatch(/^v?\d+\.\d+/);
     }
 
     const npxInfo = body.runtimes.npx;
@@ -65,6 +68,8 @@ test.describe("ACP Runtime API", () => {
         expect(typeof entry.path).toBe("string");
         expect(typeof entry.managed).toBe("boolean");
         expect(entry.available).toBe(true);
+        // version may be null or a string
+        expect(entry.version === null || typeof entry.version === "string").toBe(true);
       }
     }
   });
