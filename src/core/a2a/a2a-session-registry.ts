@@ -92,40 +92,77 @@ export class A2aSessionRegistry {
   }
 
   /**
-   * Generate an A2A AgentCard for the Routa platform
+   * Generate an A2A AgentCard for the Routa platform (A2A SDK v0.3.x compatible)
    */
   generateAgentCard(baseUrl: string): AgentCard {
     return {
       name: "Routa Multi-Agent Coordinator",
-      description: "Multi-agent coordination platform with ACP and MCP support",
-      protocolVersion: "0.3.0",
-      version: "0.1.0",
+      description:
+        "Multi-agent coordination platform that orchestrates AI agents for software development tasks. " +
+        "Supports creating CRAFTER, GATE, and DEVELOPER agents to plan, implement, and verify code changes.",
+      version: "0.2.0",
       url: `${baseUrl}/api/a2a/rpc`,
       skills: [
         {
-          id: "coordination",
+          id: "agent-coordination",
           name: "Agent Coordination",
-          description: "Create, delegate tasks to, and coordinate multiple AI agents",
-          tags: ["coordination", "multi-agent", "orchestration"],
+          description:
+            "Create, delegate tasks to, and coordinate multiple AI agents for complex software development workflows",
+          tags: ["coordination", "multi-agent", "orchestration", "planning"],
+          examples: [
+            "Create a new feature for user authentication",
+            "Fix the bug in the payment processing module",
+            "Refactor the database layer to use connection pooling",
+          ],
+          inputModes: ["text/plain"],
+          outputModes: ["text/plain", "application/json"],
         },
         {
-          id: "acp-proxy",
-          name: "ACP Session Proxy",
-          description: "Proxy access to backend ACP agent sessions",
-          tags: ["acp", "session", "proxy"],
+          id: "software-development",
+          name: "Software Development",
+          description:
+            "Implement code changes, write tests, and deliver working software using specialized CRAFTER agents",
+          tags: ["coding", "implementation", "development", "engineering"],
+          examples: [
+            "Implement a REST API endpoint for user management",
+            "Write unit tests for the authentication service",
+            "Add TypeScript types to the existing JavaScript codebase",
+          ],
+          inputModes: ["text/plain"],
+          outputModes: ["text/plain", "application/json"],
+        },
+        {
+          id: "code-verification",
+          name: "Code Verification",
+          description:
+            "Review, validate, and verify code quality using specialized GATE agents",
+          tags: ["review", "verification", "quality", "testing"],
+          examples: [
+            "Review the pull request for security vulnerabilities",
+            "Verify the implementation meets the acceptance criteria",
+            "Check the code for performance issues",
+          ],
+          inputModes: ["text/plain"],
+          outputModes: ["text/plain", "application/json"],
         },
       ],
       capabilities: {
-        pushNotifications: true,
+        streaming: true,
+        pushNotifications: false,
       },
-      defaultInputModes: ["text"],
-      defaultOutputModes: ["text"],
+      defaultInputModes: ["text/plain"],
+      defaultOutputModes: ["text/plain", "application/json"],
       additionalInterfaces: [
         {
           url: `${baseUrl}/api/a2a/rpc`,
           transport: "JSONRPC",
         },
+        {
+          url: `${baseUrl}/api/a2a/message`,
+          transport: "HTTP",
+        },
       ],
+      documentationUrl: `${baseUrl}/a2a`,
     };
   }
 }

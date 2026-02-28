@@ -1,17 +1,19 @@
 /**
  * A2A RPC API - /api/a2a/rpc
  *
- * JSON-RPC endpoint for A2A protocol communication.
- * Forwards requests to backend ACP sessions based on sessionId parameter.
+ * JSON-RPC 2.0 endpoint for A2A protocol communication.
+ * Implements A2A spec section 9 (JSON-RPC Protocol Binding).
  *
  * Supports:
- * - POST: JSON-RPC method calls
- * - GET: Server-Sent Events stream for notifications
+ * - POST: JSON-RPC method calls (SendMessage, GetTask, ListTasks, CancelTask, etc.)
+ * - GET: Server-Sent Events stream for session notifications
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
 import { getRoutaSystem } from "@/core/routa-system";
+import { getA2ATaskBridge } from "@/core/a2a";
+import { AgentRole } from "@/core/models/agent";
 
 export const dynamic = "force-dynamic";
 
@@ -100,18 +102,19 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("A2A RPC error:", error);
-    
+    const code = (error as { code?: number }).code ?? -32603;
+    const isNotFound = code === -32001;
     return NextResponse.json(
       {
         jsonrpc: "2.0",
         error: {
-          code: -32603,
-          message: "Internal error",
-          data: error instanceof Error ? error.message : String(error),
+          code,
+          message: error instanceof Error ? error.message : "Internal error",
+          data: error instanceof Error ? undefined : String(error),
         },
       } as JsonRpcResponse,
       {
-        status: 500,
+        status: isNotFound ? 404 : 500,
         headers: {
           "Access-Control-Allow-Origin": "*",
         },
@@ -202,6 +205,12 @@ async function handleA2aMethod(
   if (method === "method_list") {
     return {
       methods: [
+        // A2A spec v0.3 compliant methods
+        "SendMessage",
+        "GetTask",
+        "ListTasks",
+        "CancelTask",
+        // Legacy methods (kept for backward compatibility)
         "method_list",
         "initialize",
         "session/new",
@@ -215,6 +224,107 @@ async function handleA2aMethod(
       ],
     };
   }
+
+  // ── A2A Spec v0.3 compliant methods ──────────────────────────────────────
+
+  if (method === "SendMessage") {
+    const p = params as Record<string, unknown>;
+    const message = p.message as Record<string, unknown> | undefined;
+    const metadata = p.metadata as Record<string, unknown> | undefined;
+
+    if (!message || typeof message !== "object") {
+      throw new Error("Invalid params: 'message' is required");
+    }
+
+    const parts = (message.parts as Array<Record<string, unknown>>) || [];
+    const userPrompt = parts
+      .filter((part) => typeof part.text === "string")
+      .map((part) => part.text as string)
+      .join("\n");
+
+    if (!userPrompt) {
+      throw new Error("Invalid params: message must contain at least one text part");
+    }
+
+    const workspaceId = (metadata?.workspaceId as string) || "";
+    const contextId = (message.contextId as string) || undefined;
+    const bridge = getA2ATaskBridge();
+
+    // Create A2A task
+    const task = bridge.createTask({ userPrompt, workspaceId, contextId });
+
+    // Optionally create a Routa agent if workspaceId is present
+    if (workspaceId) {
+      try {
+        const agent = await system.tools.createAgent({
+          name: `A2A: ${userPrompt.slice(0, 60)}`,
+          role: AgentRole.ROUTA,
+          workspaceId,
+        });
+        bridge.linkAgent(task.id, (agent as { id: string }).id);
+      } catch (err) {
+        console.error("Failed to create Routa agent for A2A task:", err);
+      }
+    }
+
+    return { task };
+  }
+
+  if (method === "GetTask") {
+    const p = params as Record<string, unknown>;
+    if (typeof p.id !== "string" || !p.id) {
+      throw new Error("Invalid params: 'id' is required");
+    }
+    const bridge = getA2ATaskBridge();
+    const task = bridge.getTask(p.id);
+    if (!task) {
+      throw Object.assign(new Error(`Task not found: ${p.id}`), { code: -32001 });
+    }
+    return { task };
+  }
+
+  if (method === "ListTasks") {
+    const p = (params as Record<string, unknown>) || {};
+    const bridge = getA2ATaskBridge();
+
+    // Sync existing Routa agents into the bridge before listing
+    if (typeof p.workspaceId === "string" && p.workspaceId) {
+      try {
+        const agents = await system.tools.listAgents(p.workspaceId);
+        if (Array.isArray(agents)) {
+          for (const agent of agents) {
+            bridge.registerAgentAsTask(agent as Parameters<typeof bridge.registerAgentAsTask>[0]);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync Routa agents:", err);
+      }
+    }
+
+    const tasks = bridge.listTasks({
+      workspaceId: typeof p.workspaceId === "string" ? p.workspaceId : undefined,
+      contextId: typeof p.contextId === "string" ? p.contextId : undefined,
+      status: typeof p.status === "string" ? (p.status as "submitted" | "working" | "completed" | "failed" | "canceled") : undefined,
+      pageSize: typeof p.pageSize === "number" ? p.pageSize : undefined,
+    });
+
+    return { tasks };
+  }
+
+  if (method === "CancelTask") {
+    const p = params as Record<string, unknown>;
+    if (typeof p.id !== "string" || !p.id) {
+      throw new Error("Invalid params: 'id' is required");
+    }
+    const bridge = getA2ATaskBridge();
+    const cancelled = bridge.cancelTask(p.id);
+    if (!cancelled) {
+      throw Object.assign(new Error(`Task not found: ${p.id}`), { code: -32001 });
+    }
+    return { task: cancelled };
+  }
+
+  // ── End A2A spec methods ──────────────────────────────────────────────────
 
   if (method === "initialize") {
     return {
