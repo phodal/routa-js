@@ -40,7 +40,8 @@
       "Bash(gh issue view:*)",
       "Bash(npm install:*)",
       "WebFetch(domain:*)",
-      "Bash(gh issue comment:*)"
+      "Bash(gh issue comment:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
