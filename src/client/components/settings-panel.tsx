@@ -671,7 +671,10 @@ function MemoryStatsTab() {
       const res = await desktopAwareFetch("/api/memory?history=true");
       if (res.ok) {
         const data = await res.json();
-        setMemoryStats(data);
+        // Validate data structure before setting
+        if (data?.current && typeof data.current.level === "string") {
+          setMemoryStats(data);
+        }
         setCleanupResult(null);
       }
     } catch { /* ignore */ }
@@ -717,7 +720,7 @@ function MemoryStatsTab() {
         </button>
       </div>
 
-      {memoryStats ? (
+      {memoryStats?.current ? (
         <>
           <div className={`p-3 rounded-lg border ${
             memoryStats.current.level === "critical" ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" :
