@@ -292,6 +292,64 @@ export const backgroundTasks = pgTable("background_tasks", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── GitHub Webhook Configs ───────────────────────────────────────────────
+
+/**
+ * Stores user-configured GitHub webhook trigger rules.
+ * Each row describes: which repo, which events, which agent to trigger.
+ */
+export const githubWebhookConfigs = pgTable("github_webhook_configs", {
+  id: text("id").primaryKey(),
+  /** Human-readable name for this trigger config */
+  name: text("name").notNull(),
+  /** GitHub repository in "owner/repo" format */
+  repo: text("repo").notNull(),
+  /** GitHub personal access token (stored encrypted/plaintext) */
+  githubToken: text("github_token").notNull(),
+  /** HMAC secret used to verify webhook payloads */
+  webhookSecret: text("webhook_secret").notNull().default(""),
+  /** GitHub event types to subscribe to, e.g. ["issues", "pull_request"] */
+  eventTypes: jsonb("event_types").$type<string[]>().notNull().default([]),
+  /** Optional label filter for issues.opened events */
+  labelFilter: jsonb("label_filter").$type<string[]>().default([]),
+  /** ACP agent/provider ID to trigger when event fires */
+  triggerAgentId: text("trigger_agent_id").notNull(),
+  /** Workspace scope */
+  workspaceId: text("workspace_id"),
+  /** Whether this config is active */
+  enabled: boolean("enabled").notNull().default(true),
+  /** Optional prompt template; {event} and {payload} are substituted */
+  promptTemplate: text("prompt_template"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Webhook Trigger Logs ─────────────────────────────────────────────────
+
+/**
+ * Audit log for every GitHub webhook event received.
+ */
+export const webhookTriggerLogs = pgTable("webhook_trigger_logs", {
+  id: text("id").primaryKey(),
+  /** Config that matched this event */
+  configId: text("config_id").notNull(),
+  /** GitHub event type (e.g. "issues") */
+  eventType: text("event_type").notNull(),
+  /** GitHub event action (e.g. "opened") */
+  eventAction: text("event_action"),
+  /** Full payload (JSON) */
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  /** Background task created, if any */
+  backgroundTaskId: text("background_task_id"),
+  /** Whether signature verification passed */
+  signatureValid: boolean("signature_valid").notNull().default(false),
+  /** Processing outcome: "triggered" | "skipped" | "error" */
+  outcome: text("outcome").notNull().default("triggered"),
+  /** Error message if outcome = "error" */
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Specialists (user-defined agent specialist configurations) ───────────
 
 export const specialists = pgTable("specialists", {

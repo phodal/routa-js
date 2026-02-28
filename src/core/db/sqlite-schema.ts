@@ -268,6 +268,39 @@ export const backgroundTasks = sqliteTable("background_tasks", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
+// ─── GitHub Webhook Configs ───────────────────────────────────────────────
+
+export const githubWebhookConfigs = sqliteTable("github_webhook_configs", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  repo: text("repo").notNull(),
+  githubToken: text("github_token").notNull(),
+  webhookSecret: text("webhook_secret").notNull().default(""),
+  eventTypes: text("event_types", { mode: "json" }).$type<string[]>().notNull().default([]),
+  labelFilter: text("label_filter", { mode: "json" }).$type<string[]>().default([]),
+  triggerAgentId: text("trigger_agent_id").notNull(),
+  workspaceId: text("workspace_id"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  promptTemplate: text("prompt_template"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
+// ─── Webhook Trigger Logs ─────────────────────────────────────────────────
+
+export const webhookTriggerLogs = sqliteTable("webhook_trigger_logs", {
+  id: text("id").primaryKey(),
+  configId: text("config_id").notNull(),
+  eventType: text("event_type").notNull(),
+  eventAction: text("event_action"),
+  payload: text("payload", { mode: "json" }).$type<Record<string, unknown>>().default({}),
+  backgroundTaskId: text("background_task_id"),
+  signatureValid: integer("signature_valid", { mode: "boolean" }).notNull().default(false),
+  outcome: text("outcome").notNull().default("triggered"),
+  errorMessage: text("error_message"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
 // ─── Specialists (user-defined agent specialist configurations) ───────────
 
 export const specialists = sqliteTable("specialists", {
