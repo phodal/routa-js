@@ -92,6 +92,19 @@ fn default_trigger_type() -> String {
     "manual".to_string()
 }
 
+/// What to do when a step fails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OnFailure {
+    /// Stop the workflow immediately (default)
+    #[default]
+    Stop,
+    /// Continue to the next step
+    Continue,
+    /// Retry the step (up to max_retries times)
+    Retry,
+}
+
 /// A single step in the workflow pipeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowStep {
@@ -132,6 +145,26 @@ pub struct WorkflowStep {
     /// Parallel group: steps in the same group run concurrently
     #[serde(default)]
     pub parallel_group: Option<String>,
+
+    /// What to do if this step fails
+    #[serde(default)]
+    pub on_failure: OnFailure,
+
+    /// Maximum retries (only used when on_failure = retry)
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+
+    /// Timeout in seconds for this step (default: 300)
+    #[serde(default = "default_timeout")]
+    pub timeout_secs: u64,
+}
+
+fn default_max_retries() -> u32 {
+    2
+}
+
+fn default_timeout() -> u64 {
+    300
 }
 
 fn default_adapter() -> String {
@@ -148,6 +181,10 @@ pub struct StepConfig {
     /// Maximum conversation turns
     #[serde(default)]
     pub max_turns: Option<u32>,
+
+    /// Maximum tokens for response
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
 
     /// Base URL for the API endpoint
     #[serde(default)]

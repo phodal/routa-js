@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use crate::workflow::agent_caller::{resolve_env_vars, AcpAgentCaller, AgentCallConfig};
-use crate::workflow::schema::{WorkflowDefinition, WorkflowStep, StepAction};
+use crate::workflow::schema::{WorkflowDefinition, WorkflowStep, StepAction, OnFailure};
 use crate::workflow::specialist::{SpecialistDef, SpecialistLoader};
 
 /// Result of executing a single workflow step.
@@ -47,6 +47,12 @@ pub struct WorkflowExecutor {
     trigger_payload: Option<String>,
     /// Verbose output mode
     verbose: bool,
+}
+
+impl Default for WorkflowExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WorkflowExecutor {
@@ -147,48 +153,103 @@ impl WorkflowExecutor {
                 }
             }
 
-            // Execute the step
-            match self.execute_step(step).await {
-                Ok(result) => {
-                    if result.success {
-                        println!("   ✅ Success (model: {})", result.model);
-                        if let (Some(inp), Some(out)) = (result.input_tokens, result.output_tokens) {
-                            println!("   📊 Tokens: {} in / {} out", inp, out);
-                        }
-                    } else {
-                        println!("   ❌ Failed: {}", result.error.as_deref().unwrap_or("unknown"));
-                        all_success = false;
-                    }
+            // Execute the step with retry support
+            let max_attempts = if step.on_failure == OnFailure::Retry {
+                step.max_retries + 1
+            } else {
+                1
+            };
 
-                    // Store output for downstream steps
-                    if let Some(ref key) = step.output_key {
-                        self.step_outputs.insert(key.clone(), result.output.clone());
-                    }
-                    self.step_outputs
-                        .insert(step.name.clone(), result.output.clone());
+            let mut attempt = 0;
+            let mut last_error: Option<String> = None;
+            let mut step_result: Option<StepResult> = None;
 
-                    if self.verbose {
-                        println!("   📝 Output preview: {}",
-                            truncate(&result.output, 200));
-                    }
-
-                    results.push(result);
+            while attempt < max_attempts {
+                attempt += 1;
+                if attempt > 1 {
+                    println!("   🔄 Retry attempt {}/{}", attempt, max_attempts);
                 }
-                Err(e) => {
-                    println!("   ❌ Error: {}", e);
-                    all_success = false;
-                    results.push(StepResult {
-                        step_name: step.name.clone(),
-                        output: String::new(),
-                        success: false,
-                        error: Some(e),
-                        model: String::new(),
-                        input_tokens: None,
-                        output_tokens: None,
-                    });
+
+                match self.execute_step(step).await {
+                    Ok(result) => {
+                        if result.success {
+                            println!("   ✅ Success (model: {})", result.model);
+                            if let (Some(inp), Some(out)) = (result.input_tokens, result.output_tokens) {
+                                println!("   📊 Tokens: {} in / {} out", inp, out);
+                            }
+
+                            // Store output for downstream steps
+                            if let Some(ref key) = step.output_key {
+                                self.step_outputs.insert(key.clone(), result.output.clone());
+                            }
+                            self.step_outputs
+                                .insert(step.name.clone(), result.output.clone());
+
+                            if self.verbose {
+                                println!("   📝 Output preview: {}",
+                                    truncate(&result.output, 200));
+                            }
+
+                            step_result = Some(result);
+                            break;
+                        } else {
+                            // Step returned but was not successful
+                            last_error = result.error.clone();
+                            if attempt < max_attempts {
+                                println!("   ⚠️  Failed: {} (will retry)", last_error.as_deref().unwrap_or("unknown"));
+                            } else {
+                                step_result = Some(result);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        last_error = Some(e.clone());
+                        if attempt < max_attempts {
+                            println!("   ⚠️  Error: {} (will retry)", e);
+                            // Brief delay before retry
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        }
+                    }
                 }
             }
 
+            // Handle the final result
+            let final_result = step_result.unwrap_or_else(|| StepResult {
+                step_name: step.name.clone(),
+                output: String::new(),
+                success: false,
+                error: last_error.clone(),
+                model: String::new(),
+                input_tokens: None,
+                output_tokens: None,
+            });
+
+            if !final_result.success {
+                println!("   ❌ Failed: {}", final_result.error.as_deref().unwrap_or("unknown"));
+                all_success = false;
+
+                // Handle failure strategy
+                match step.on_failure {
+                    OnFailure::Stop => {
+                        println!("   🛑 Stopping workflow (on_failure: stop)");
+                        results.push(final_result);
+                        println!();
+                        break;
+                    }
+                    OnFailure::Continue => {
+                        println!("   ⏩ Continuing to next step (on_failure: continue)");
+                    }
+                    OnFailure::Retry => {
+                        // Already exhausted retries
+                        println!("   🛑 Stopping workflow (retries exhausted)");
+                        results.push(final_result);
+                        println!();
+                        break;
+                    }
+                }
+            }
+
+            results.push(final_result);
             println!();
         }
 
@@ -352,9 +413,11 @@ impl WorkflowExecutor {
             api_key,
             model,
             max_turns: step.config.max_turns.unwrap_or(1),
+            max_tokens: step.config.max_tokens.unwrap_or(8192),
             temperature: step.config.temperature,
             system_prompt,
             env: step.config.env.clone(),
+            timeout_secs: step.timeout_secs,
         })
     }
 

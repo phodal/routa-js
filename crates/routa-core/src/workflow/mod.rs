@@ -20,7 +20,7 @@ pub mod executor;
 pub mod agent_caller;
 pub mod specialist;
 
-pub use schema::{WorkflowDefinition, WorkflowStep, StepAction, TriggerConfig};
+pub use schema::{WorkflowDefinition, WorkflowStep, StepAction, TriggerConfig, OnFailure};
 pub use executor::WorkflowExecutor;
 pub use agent_caller::AcpAgentCaller;
 pub use specialist::{SpecialistDef, SpecialistLoader};

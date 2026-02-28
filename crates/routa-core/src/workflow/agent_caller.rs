@@ -20,12 +20,16 @@ pub struct AgentCallConfig {
     pub model: String,
     /// Maximum conversation turns (default: 1 for single-shot)
     pub max_turns: u32,
+    /// Maximum tokens for response (default: 8192)
+    pub max_tokens: u32,
     /// Temperature
     pub temperature: Option<f64>,
     /// System prompt
     pub system_prompt: String,
     /// Additional environment variables
     pub env: HashMap<String, String>,
+    /// Timeout in seconds
+    pub timeout_secs: u64,
 }
 
 impl Default for AgentCallConfig {
@@ -36,9 +40,11 @@ impl Default for AgentCallConfig {
             api_key: String::new(),
             model: "GLM-4.7".to_string(),
             max_turns: 1,
+            max_tokens: 8192,
             temperature: None,
             system_prompt: String::new(),
             env: HashMap::new(),
+            timeout_secs: 300,
         }
     }
 }
@@ -115,7 +121,7 @@ impl AcpAgentCaller {
 
         let mut body = serde_json::json!({
             "model": config.model,
-            "max_tokens": 8192,
+            "max_tokens": config.max_tokens,
             "messages": [
                 {
                     "role": "user",
