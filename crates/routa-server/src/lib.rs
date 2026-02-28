@@ -98,13 +98,13 @@ pub async fn create_app_state(db_path: &str) -> Result<state::AppState, String> 
 ///
 /// Returns the actual address the server is listening on.
 pub async fn start_server(config: ServerConfig) -> Result<SocketAddr, String> {
-    // Initialize tracing
-    tracing_subscriber::fmt()
+    // Initialize tracing (ignore if already initialized)
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "routa_core=info,routa_server=info,tower_http=info".into()),
         )
-        .init();
+        .try_init();
 
     // Resolve and set the full shell PATH early so all child processes
     // (agent CLIs, git, etc.) can be found even when launched from Finder.
