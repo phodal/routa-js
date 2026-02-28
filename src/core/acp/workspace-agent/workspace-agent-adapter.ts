@@ -10,7 +10,7 @@
  * streaming support, but generateText works reliably across all providers.
  */
 
-import { generateText } from "ai";
+import { generateText, stepCountIs } from "ai";
 import type { NotificationHandler, JsonRpcMessage } from "@/core/acp/processer";
 import type { AgentTools } from "@/core/tools/agent-tools";
 import { WorkspaceAgentStateMachine } from "./workspace-agent-state";
@@ -144,14 +144,14 @@ export class WorkspaceAgentAdapter {
         model,
         messages: this.messages,
         tools: allTools,
-        maxSteps: this.config.maxSteps,
-        maxTokens: this.config.maxTokens,
+        stopWhen: stepCountIs(this.config.maxSteps),
+        maxOutputTokens: this.config.maxTokens,
         abortSignal: this.abortController.signal,
         onStepFinish: ({ usage }) => {
           stateMachine.incrementStep();
           if (usage) {
-            inputTokens += usage.promptTokens ?? 0;
-            outputTokens += usage.completionTokens ?? 0;
+            inputTokens += usage.inputTokens ?? 0;
+            outputTokens += usage.outputTokens ?? 0;
           }
         },
       });
@@ -166,7 +166,7 @@ export class WorkspaceAgentAdapter {
               sessionUpdate: "tool_call",
               toolCallId: toolCall.toolCallId,
               title: toolCall.toolName,
-              rawInput: toolCall.args ?? {},
+              rawInput: (toolCall as any).input ?? (toolCall as any).args ?? {},
               status: "running",
             },
           });
@@ -182,7 +182,7 @@ export class WorkspaceAgentAdapter {
               toolCallId: toolResult.toolCallId,
               title: toolResult.toolName,
               status: "completed",
-              rawOutput: toolResult.result,
+              rawOutput: (toolResult as any).output ?? (toolResult as any).result,
             },
           });
           this.onNotification(doneNotif);

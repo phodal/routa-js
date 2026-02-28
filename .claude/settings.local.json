@@ -30,7 +30,17 @@
       "Bash(npx tsx:*)",
       "Bash(gh run list:*)",
       "Bash(gh run watch:*)",
-      "Bash(npm run test:*)"
+      "Bash(npm run test:*)",
+      "Bash(xargs:*)",
+      "Bash(javap:*)",
+      "Bash(git remote:*)",
+      "Bash(git stash:*)",
+      "Bash(git stash pop:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(gh issue view:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:*)",
+      "Bash(gh issue comment:*)"
     ]
   }
 }

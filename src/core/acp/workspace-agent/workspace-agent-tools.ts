@@ -9,7 +9,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { readFile, writeFile, readdir, mkdir, stat } from "fs/promises";
-import { join, resolve, relative, isAbsolute } from "path";
+import { resolve, relative, isAbsolute } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { glob } from "glob";
@@ -22,14 +22,48 @@ const MAX_READ_SIZE = 1_048_576;
 /** Max command output size (100KB) */
 const MAX_OUTPUT_SIZE = 102_400;
 
-/**
- * Resolve a path relative to cwd, preventing directory traversal outside cwd.
- */
 function safePath(cwd: string, filePath: string): string {
-  const resolved = isAbsolute(filePath) ? filePath : resolve(cwd, filePath);
-  // Allow absolute paths but log if outside cwd
-  return resolved;
+  return isAbsolute(filePath) ? filePath : resolve(cwd, filePath);
 }
+
+// ─── Zod schemas (reused for type inference) ─────────────────────────────────
+
+const readFileParams = z.object({
+  path: z.string().describe("File path (relative to workspace root or absolute)"),
+});
+
+const writeFileParams = z.object({
+  path: z.string().describe("File path (relative to workspace root or absolute)"),
+  content: z.string().describe("Content to write"),
+});
+
+const editFileParams = z.object({
+  path: z.string().describe("File path"),
+  old_string: z.string().describe("Exact string to find in the file"),
+  new_string: z.string().describe("Replacement string"),
+});
+
+const searchFilesParams = z.object({
+  pattern: z.string().describe("Glob pattern, e.g. '**/*.ts' or 'src/**/*.test.ts'"),
+  path: z.string().optional().describe("Directory to search in (default: workspace root)"),
+});
+
+const grepSearchParams = z.object({
+  pattern: z.string().describe("Regex pattern to search for"),
+  path: z.string().optional().describe("Directory or file to search in (default: workspace root)"),
+  include: z.string().optional().describe("Glob pattern to filter files, e.g. '*.ts'"),
+});
+
+const runCommandParams = z.object({
+  command: z.string().describe("Shell command to execute"),
+  timeout_ms: z.number().optional().default(30_000).describe("Timeout in milliseconds (default: 30000)"),
+});
+
+const listDirectoryParams = z.object({
+  path: z.string().optional().default(".").describe("Directory path (default: workspace root)"),
+});
+
+// ─── Coding Tools ─────────────────────────────────────────────────────────────
 
 /**
  * Create the 7 core coding tools for the workspace agent.
@@ -38,10 +72,8 @@ export function createCodingTools(cwd: string) {
   return {
     read_file: tool({
       description: "Read the contents of a file. Returns the file content as a string.",
-      parameters: z.object({
-        path: z.string().describe("File path (relative to workspace root or absolute)"),
-      }),
-      execute: async ({ path: filePath }) => {
+      parameters: readFileParams,
+      execute: async ({ path: filePath }: z.infer<typeof readFileParams>) => {
         const fullPath = safePath(cwd, filePath);
         const stats = await stat(fullPath);
         if (stats.size > MAX_READ_SIZE) {
@@ -54,13 +86,10 @@ export function createCodingTools(cwd: string) {
 
     write_file: tool({
       description: "Write content to a file. Creates the file and parent directories if they don't exist, or overwrites if it does.",
-      parameters: z.object({
-        path: z.string().describe("File path (relative to workspace root or absolute)"),
-        content: z.string().describe("Content to write"),
-      }),
-      execute: async ({ path: filePath, content }) => {
+      parameters: writeFileParams,
+      execute: async ({ path: filePath, content }: z.infer<typeof writeFileParams>) => {
         const fullPath = safePath(cwd, filePath);
-        await mkdir(join(fullPath, ".."), { recursive: true });
+        await mkdir(resolve(fullPath, ".."), { recursive: true });
         await writeFile(fullPath, content, "utf-8");
         return { path: fullPath, bytesWritten: Buffer.byteLength(content, "utf-8") };
       },
@@ -68,12 +97,8 @@ export function createCodingTools(cwd: string) {
 
     edit_file: tool({
       description: "Apply a search-and-replace edit to a file. The old_string must match exactly one location in the file.",
-      parameters: z.object({
-        path: z.string().describe("File path"),
-        old_string: z.string().describe("Exact string to find in the file"),
-        new_string: z.string().describe("Replacement string"),
-      }),
-      execute: async ({ path: filePath, old_string, new_string }) => {
+      parameters: editFileParams,
+      execute: async ({ path: filePath, old_string, new_string }: z.infer<typeof editFileParams>) => {
         const fullPath = safePath(cwd, filePath);
         const content = await readFile(fullPath, "utf-8");
         const occurrences = content.split(old_string).length - 1;
@@ -91,11 +116,8 @@ export function createCodingTools(cwd: string) {
 
     search_files: tool({
       description: "Search for files matching a glob pattern. Returns a list of matching file paths.",
-      parameters: z.object({
-        pattern: z.string().describe("Glob pattern, e.g. '**/*.ts' or 'src/**/*.test.ts'"),
-        path: z.string().optional().describe("Directory to search in (default: workspace root)"),
-      }),
-      execute: async ({ pattern, path: searchPath }) => {
+      parameters: searchFilesParams,
+      execute: async ({ pattern, path: searchPath }: z.infer<typeof searchFilesParams>) => {
         const searchDir = searchPath ? safePath(cwd, searchPath) : cwd;
         const matches = await glob(pattern, {
           cwd: searchDir,
@@ -114,12 +136,8 @@ export function createCodingTools(cwd: string) {
 
     grep_search: tool({
       description: "Search file contents using a regex pattern. Returns matching lines with file paths and line numbers.",
-      parameters: z.object({
-        pattern: z.string().describe("Regex pattern to search for"),
-        path: z.string().optional().describe("Directory or file to search in (default: workspace root)"),
-        include: z.string().optional().describe("Glob pattern to filter files, e.g. '*.ts'"),
-      }),
-      execute: async ({ pattern, path: searchPath, include }) => {
+      parameters: grepSearchParams,
+      execute: async ({ pattern, path: searchPath, include }: z.infer<typeof grepSearchParams>) => {
         const searchDir = searchPath ? safePath(cwd, searchPath) : cwd;
         const includeFlag = include ? `--include='${include}'` : "";
         const cmd = `grep -rn ${includeFlag} -E '${pattern.replace(/'/g, "'\\''")}' '${searchDir}' 2>/dev/null | head -100`;
@@ -149,11 +167,8 @@ export function createCodingTools(cwd: string) {
 
     run_command: tool({
       description: "Execute a shell command in the workspace directory. Returns stdout, stderr, and exit code.",
-      parameters: z.object({
-        command: z.string().describe("Shell command to execute"),
-        timeout_ms: z.number().optional().default(30_000).describe("Timeout in milliseconds (default: 30000)"),
-      }),
-      execute: async ({ command, timeout_ms }) => {
+      parameters: runCommandParams,
+      execute: async ({ command, timeout_ms }: z.infer<typeof runCommandParams>) => {
         try {
           const { stdout, stderr } = await execAsync(command, {
             cwd,
@@ -183,10 +198,8 @@ export function createCodingTools(cwd: string) {
 
     list_directory: tool({
       description: "List files and directories at the given path.",
-      parameters: z.object({
-        path: z.string().optional().default(".").describe("Directory path (default: workspace root)"),
-      }),
-      execute: async ({ path: dirPath }) => {
+      parameters: listDirectoryParams,
+      execute: async ({ path: dirPath }: z.infer<typeof listDirectoryParams>) => {
         const fullPath = safePath(cwd, dirPath);
         const entries = await readdir(fullPath, { withFileTypes: true });
         return {
@@ -200,6 +213,28 @@ export function createCodingTools(cwd: string) {
     }),
   };
 }
+
+// ─── Agent Management Tools ───────────────────────────────────────────────────
+
+const createAgentParams = z.object({
+  name: z.string().describe("Agent name"),
+  role: z.enum(["ROUTA", "CRAFTER", "GATE", "DEVELOPER"]).describe("Agent role"),
+  modelTier: z.enum(["SMART", "BALANCED", "FAST"]).optional().describe("Model tier"),
+});
+
+const delegateTaskParams = z.object({
+  agentId: z.string().describe("Target agent ID"),
+  taskId: z.string().describe("Task ID to delegate"),
+});
+
+const sendMessageParams = z.object({
+  toAgentId: z.string().describe("Target agent ID"),
+  message: z.string().describe("Message content"),
+});
+
+const getAgentStatusParams = z.object({
+  agentId: z.string().describe("Agent ID to query"),
+});
 
 /**
  * Create agent management tools that bridge to existing AgentTools.
@@ -222,12 +257,8 @@ export function createAgentManagementTools(
 
     create_agent: tool({
       description: "Create a new agent in the workspace.",
-      parameters: z.object({
-        name: z.string().describe("Agent name"),
-        role: z.enum(["ROUTA", "CRAFTER", "GATE", "DEVELOPER"]).describe("Agent role"),
-        modelTier: z.enum(["SMART", "BALANCED", "FAST"]).optional().describe("Model tier"),
-      }),
-      execute: async ({ name, role, modelTier }) => {
+      parameters: createAgentParams,
+      execute: async ({ name, role, modelTier }: z.infer<typeof createAgentParams>) => {
         const result = await agentTools.createAgent({
           name,
           role,
@@ -241,11 +272,8 @@ export function createAgentManagementTools(
 
     delegate_task: tool({
       description: "Delegate a task to an existing agent.",
-      parameters: z.object({
-        agentId: z.string().describe("Target agent ID"),
-        taskId: z.string().describe("Task ID to delegate"),
-      }),
-      execute: async ({ agentId: targetAgentId, taskId }) => {
+      parameters: delegateTaskParams,
+      execute: async ({ agentId: targetAgentId, taskId }: z.infer<typeof delegateTaskParams>) => {
         const result = await agentTools.delegate({
           agentId: targetAgentId,
           taskId,
@@ -257,11 +285,8 @@ export function createAgentManagementTools(
 
     send_message: tool({
       description: "Send a message to another agent.",
-      parameters: z.object({
-        toAgentId: z.string().describe("Target agent ID"),
-        message: z.string().describe("Message content"),
-      }),
-      execute: async ({ toAgentId, message }) => {
+      parameters: sendMessageParams,
+      execute: async ({ toAgentId, message }: z.infer<typeof sendMessageParams>) => {
         const result = await agentTools.messageAgent({
           fromAgentId: agentId,
           toAgentId,
@@ -273,10 +298,8 @@ export function createAgentManagementTools(
 
     get_agent_status: tool({
       description: "Get the current status and details of an agent.",
-      parameters: z.object({
-        agentId: z.string().describe("Agent ID to query"),
-      }),
-      execute: async ({ agentId: targetAgentId }) => {
+      parameters: getAgentStatusParams,
+      execute: async ({ agentId: targetAgentId }: z.infer<typeof getAgentStatusParams>) => {
         const result = await agentTools.getAgentStatus(targetAgentId);
         return result.data;
       },
