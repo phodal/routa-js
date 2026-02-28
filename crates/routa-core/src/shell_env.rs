@@ -62,6 +62,7 @@ fn resolve_full_path() -> String {
 
     let result = parts.join(&PATH_SEP.to_string());
     tracing::info!("[shell_env] Resolved PATH ({} entries)", parts.len());
+    tracing::debug!("[shell_env] Full PATH: {}", result);
     result
 }
 
@@ -152,6 +153,7 @@ fn well_known_dirs(home: &Path) -> Vec<PathBuf> {
 /// Run a `which`-like check for a command using the full PATH.
 pub fn which(cmd: &str) -> Option<String> {
     let path = full_path();
+    tracing::debug!("[shell_env] Looking for '{}' in PATH", cmd);
 
     #[cfg(windows)]
     let extensions: Vec<&str> = {
@@ -169,7 +171,9 @@ pub fn which(cmd: &str) -> Option<String> {
         #[cfg(not(windows))]
         {
             if base.is_file() {
-                return Some(base.to_string_lossy().to_string());
+                let result = base.to_string_lossy().to_string();
+                tracing::debug!("[shell_env] Found '{}' at: {}", cmd, result);
+                return Some(result);
             }
         }
 
@@ -188,5 +192,6 @@ pub fn which(cmd: &str) -> Option<String> {
             }
         }
     }
+    tracing::warn!("[shell_env] Command '{}' not found in PATH", cmd);
     None
 }

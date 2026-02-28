@@ -48,11 +48,17 @@ use crate::trace::{
 #[serde(rename_all = "camelCase")]
 pub struct AcpSessionRecord {
     pub session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub cwd: String,
     pub workspace_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routa_agent_id: Option<String>,
     pub provider: Option<String>,
     pub role: Option<String>,
     pub mode_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub created_at: String,
 }
 
@@ -64,6 +70,16 @@ enum AgentProcessType {
     Acp(Arc<AcpProcess>),
     /// Claude Code stream-json protocol
     Claude(Arc<ClaudeCodeProcess>),
+}
+
+impl AgentProcessType {
+    /// Kill the underlying process.
+    async fn kill(&self) {
+        match self {
+            AgentProcessType::Acp(process) => process.kill().await,
+            AgentProcessType::Claude(process) => process.kill().await,
+        }
+    }
 }
 
 /// A managed agent process with its metadata.
@@ -115,6 +131,36 @@ impl AcpManager {
     pub async fn get_session(&self, session_id: &str) -> Option<AcpSessionRecord> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).cloned()
+    }
+
+    /// Rename a session.
+    /// Returns `Some(())` if the session was found and renamed, `None` if not found.
+    pub async fn rename_session(&self, session_id: &str, name: &str) -> Option<()> {
+        let mut sessions = self.sessions.write().await;
+        let session = sessions.get_mut(session_id)?;
+        session.name = Some(name.to_string());
+        Some(())
+    }
+
+    /// Delete a session.
+    /// Returns `Some(())` if the session was found and deleted, `None` if not found.
+    pub async fn delete_session(&self, session_id: &str) -> Option<()> {
+        let mut sessions = self.sessions.write().await;
+        let mut processes = self.processes.write().await;
+        let mut channels = self.notification_channels.write().await;
+
+        // Remove session record
+        sessions.remove(session_id)?;
+
+        // Kill the process if it exists
+        if let Some(managed) = processes.remove(session_id) {
+            let _ = managed.process.kill().await;
+        }
+
+        // Remove notification channel
+        channels.remove(session_id);
+
+        Some(())
     }
 
     /// Create a new ACP session: spawn agent process, initialize, create session.
@@ -196,11 +242,14 @@ impl AcpManager {
         // Store everything
         let record = AcpSessionRecord {
             session_id: session_id.clone(),
+            name: None,
             cwd: cwd.clone(),
             workspace_id: workspace_id.clone(),
+            routa_agent_id: None,
             provider: Some(provider_name.to_string()),
             role: role.clone().or(Some("CRAFTER".to_string())),
             mode_id: None,
+            model: model.clone(),
             created_at: chrono::Utc::now().to_rfc3339(),
         };
 

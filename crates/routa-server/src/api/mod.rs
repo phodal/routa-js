@@ -6,6 +6,7 @@ pub mod clone;
 pub mod clone_branches;
 pub mod clone_progress;
 pub mod codebases;
+pub mod debug;
 pub mod files;
 pub mod mcp_routes;
 pub mod mcp_server_mgmt;
@@ -56,4 +57,5 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/rpc", rpc::router())
         .nest("/api/a2a", a2a::router())
         .nest("/api/traces", traces::router())
+        .nest("/api/debug", debug::router())
 }
