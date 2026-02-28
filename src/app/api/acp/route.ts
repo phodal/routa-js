@@ -34,7 +34,7 @@ import type { AgentInstanceConfig } from "@/core/acp/agent-instance-factory";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { getRoutaSystem } from "@/core/routa-system";
 import { AgentRole } from "@/core/models/agent";
-import { buildCoordinatorPrompt, getSpecialistByRole } from "@/core/orchestration/specialist-prompts";
+import { buildCoordinatorPrompt, buildSpecialistFirstPrompt, getSpecialistByRole, getSpecialistById } from "@/core/orchestration/specialist-prompts";
 import { AcpError } from "@/core/acp/acp-process";
 import {
   createTraceRecord,
@@ -401,6 +401,7 @@ export async function POST(request: NextRequest) {
         role: role ?? "CRAFTER",
         modeId,
         model,
+        specialistId: specialistId ?? undefined,
         createdAt: now.toISOString(),
       });
 
@@ -431,16 +432,30 @@ export async function POST(request: NextRequest) {
       }
 
       // ── Trace: session_start ────────────────────────────────────────
-      const sessionStartTrace = withMetadata(
-        withMetadata(
-          withWorkspaceId(
-            createTraceRecord(sessionId, "session_start", { provider }),
-            workspaceId
-          ),
-          "cwd", cwd
-        ),
-        "role", role ?? "CRAFTER"
-      );
+      const sessionStartTrace = specialistId
+        ? withMetadata(
+            withMetadata(
+              withMetadata(
+                withWorkspaceId(
+                  createTraceRecord(sessionId, "session_start", { provider }),
+                  workspaceId
+                ),
+                "cwd", cwd
+              ),
+              "role", role ?? "CRAFTER"
+            ),
+            "specialistId", specialistId
+          )
+        : withMetadata(
+            withMetadata(
+              withWorkspaceId(
+                createTraceRecord(sessionId, "session_start", { provider }),
+                workspaceId
+              ),
+              "cwd", cwd
+            ),
+            "role", role ?? "CRAFTER"
+          );
       recordTrace(cwd, sessionStartTrace);
 
       return jsonrpcResponse(id ?? null, {
@@ -642,6 +657,24 @@ export async function POST(request: NextRequest) {
               });
               store.markFirstPromptSent(sessionId);
             }
+          }
+        }
+      }
+
+      // Check if this session uses a custom specialist - inject systemPrompt on first prompt
+      {
+        const sessionRecord = store.getSession(sessionId);
+        if (sessionRecord?.specialistId && !sessionRecord.firstPromptSent) {
+          const specialist = getSpecialistById(sessionRecord.specialistId);
+          if (specialist?.systemPrompt) {
+            promptText = buildSpecialistFirstPrompt({
+              specialist,
+              userRequest: promptText,
+            });
+            store.markFirstPromptSent(sessionId);
+            console.log(
+              `[ACP Route] Injected specialist systemPrompt for ${sessionRecord.specialistId} into session ${sessionId}`
+            );
           }
         }
       }

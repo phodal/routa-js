@@ -35,6 +35,8 @@ export interface RoutaSessionRecord {
   firstPromptSent?: boolean;
   /** Parent session ID for crafter subtasks */
   parentSessionId?: string;
+  /** The custom specialist ID used for this session (if any) */
+  specialistId?: string;
 }
 
 type Controller = ReadableStreamDefaultController<Uint8Array>;

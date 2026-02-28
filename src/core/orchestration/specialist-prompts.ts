@@ -506,6 +506,24 @@ export function buildCoordinatorPrompt(params: {
 }
 
 /**
+ * Build the first-prompt injection for a custom specialist.
+ * Prepends the specialist's systemPrompt before the user's request,
+ * similar to how buildCoordinatorPrompt works for ROUTA.
+ */
+export function buildSpecialistFirstPrompt(params: {
+  specialist: SpecialistConfig;
+  userRequest: string;
+}): string {
+  const { specialist, userRequest } = params;
+  let prompt = specialist.systemPrompt;
+  if (specialist.roleReminder) {
+    prompt += `\n\n---\n**Reminder:** ${specialist.roleReminder}`;
+  }
+  prompt += `\n\n---\n\n${userRequest}`;
+  return prompt;
+}
+
+/**
  * Format specialists for inclusion in coordinator prompts.
  * Returns a markdown table describing available specialists.
  */
