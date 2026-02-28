@@ -110,5 +110,3 @@ async function syncRoutaAgentsToBridge(
     console.warn("[A2A tasks] Failed to sync Routa agents:", err);
   }
 }
-
-export { syncRoutaAgentsToBridge };

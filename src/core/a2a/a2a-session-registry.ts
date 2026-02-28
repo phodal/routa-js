@@ -100,6 +100,7 @@ export class A2aSessionRegistry {
       description:
         "Multi-agent coordination platform that orchestrates AI agents for software development tasks. " +
         "Supports creating CRAFTER, GATE, and DEVELOPER agents to plan, implement, and verify code changes.",
+      protocolVersion: "0.3.0",
       version: "0.2.0",
       url: `${baseUrl}/api/a2a/rpc`,
       skills: [

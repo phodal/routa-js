@@ -256,12 +256,15 @@ async function handleA2aMethod(
     // Optionally create a Routa agent if workspaceId is present
     if (workspaceId) {
       try {
-        const agent = await system.tools.createAgent({
+        const result = await system.tools.createAgent({
           name: `A2A: ${userPrompt.slice(0, 60)}`,
           role: AgentRole.ROUTA,
           workspaceId,
         });
-        bridge.linkAgent(task.id, (agent as { id: string }).id);
+        if (result.success && result.data) {
+          const agentId = (result.data as { agentId: string }).agentId;
+          bridge.linkAgent(task.id, agentId);
+        }
       } catch (err) {
         console.error("Failed to create Routa agent for A2A task:", err);
       }
@@ -301,12 +304,15 @@ async function handleA2aMethod(
       }
     }
 
-    const tasks = bridge.listTasks({
+    const allTasks = bridge.listTasks({
       workspaceId: typeof p.workspaceId === "string" ? p.workspaceId : undefined,
       contextId: typeof p.contextId === "string" ? p.contextId : undefined,
-      status: typeof p.status === "string" ? (p.status as "submitted" | "working" | "completed" | "failed" | "canceled") : undefined,
-      pageSize: typeof p.pageSize === "number" ? p.pageSize : undefined,
+      state: typeof p.status === "string" ? p.status : undefined,
     });
+
+    // Apply pageSize limit if provided
+    const pageSize = typeof p.pageSize === "number" ? Math.min(p.pageSize, 100) : 50;
+    const tasks = allTasks.slice(0, pageSize);
 
     return { tasks };
   }
