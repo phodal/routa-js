@@ -1,3 +1,4 @@
+pub mod acp_session_store;
 pub mod agent_store;
 pub mod codebase_store;
 pub mod conversation_store;
@@ -5,6 +6,7 @@ pub mod note_store;
 pub mod task_store;
 pub mod workspace_store;
 
+pub use acp_session_store::AcpSessionStore;
 pub use agent_store::AgentStore;
 pub use codebase_store::CodebaseStore;
 pub use conversation_store::ConversationStore;

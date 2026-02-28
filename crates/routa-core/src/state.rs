@@ -7,7 +7,8 @@ use crate::db::Database;
 use crate::events::EventBus;
 use crate::skills::SkillRegistry;
 use crate::store::{
-    AgentStore, CodebaseStore, ConversationStore, NoteStore, TaskStore, WorkspaceStore,
+    AcpSessionStore, AgentStore, CodebaseStore, ConversationStore, NoteStore, TaskStore,
+    WorkspaceStore,
 };
 
 /// Shared state accessible by all API handlers.
@@ -19,6 +20,7 @@ pub struct AppStateInner {
     pub task_store: TaskStore,
     pub note_store: NoteStore,
     pub conversation_store: ConversationStore,
+    pub acp_session_store: AcpSessionStore,
     pub skill_registry: SkillRegistry,
     pub acp_manager: AcpManager,
     pub event_bus: EventBus,
@@ -41,6 +43,7 @@ impl AppStateInner {
             task_store: TaskStore::new(db.clone()),
             note_store: NoteStore::new(db.clone()),
             conversation_store: ConversationStore::new(db.clone()),
+            acp_session_store: AcpSessionStore::new(db.clone()),
             skill_registry: SkillRegistry::new(),
             acp_manager: AcpManager::new(),
             event_bus: EventBus::new(),
