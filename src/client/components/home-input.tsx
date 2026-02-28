@@ -290,15 +290,15 @@ export function HomeInput({
                       ? "text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-700"
                       : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c1f2e] border-transparent hover:border-gray-200 dark:hover:border-[#2a2d3d]"
                   }`}
-                  title="Select a specialist agent"
+                  title="Select a custom specialist agent"
                 >
                   <svg className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                   </svg>
                   <span className="max-w-[96px] truncate">
                     {selectedSpecialistId
-                      ? (specialists.find((s) => s.id === selectedSpecialistId)?.name ?? "Specialist")
-                      : "Specialist"}
+                      ? (specialists.find((s) => s.id === selectedSpecialistId)?.name ?? "Custom Specialist")
+                      : "Custom Specialist"}
                   </span>
                   {selectedSpecialistId && (
                     <span
@@ -320,7 +320,7 @@ export function HomeInput({
                 {showSpecialistDropdown && (
                   <div className="absolute bottom-full left-0 mb-1 w-56 rounded-xl border border-gray-200 dark:border-[#1c1f2e] bg-white dark:bg-[#181b26] shadow-xl z-50 overflow-hidden">
                     <div className="px-2 pt-2 pb-1">
-                      <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide px-1 mb-1">Specialists</p>
+                      <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide px-1 mb-1">Custom Specialists</p>
                       <button
                         onClick={() => { setSelectedSpecialistId(null); setShowSpecialistDropdown(false); }}
                         className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 ${

@@ -148,13 +148,11 @@ pub async fn start_server_with_state(
         let static_path = std::path::Path::new(static_dir);
         if static_path.exists() && static_path.is_dir() {
             tracing::info!("Serving static frontend from: {}", static_dir);
-            // Use `fallback` instead of `not_found_service` for SPA routing.
-            // `not_found_service` forces a 404 status code on the fallback response,
-            // but for SPA routing we want to return index.html with a 200 status
-            // so the frontend can handle client-side routing.
+            // For Next.js static export with dynamic routes, serve 404.html for all unknown routes.
+            // The 404.html page will handle client-side routing using Next.js router.
             let serve_dir = tower_http::services::ServeDir::new(static_dir)
                 .fallback(tower_http::services::ServeFile::new(
-                    static_path.join("index.html"),
+                    static_path.join("404.html"),
                 ));
             app = app.fallback_service(serve_dir);
         } else {

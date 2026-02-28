@@ -4,6 +4,7 @@
   "description": "Default capabilities for Routa Desktop",
   "windows": ["*"],
   "webviews": ["*"],
+  "platforms": ["linux", "macOS", "windows"],
   "permissions": [
     "core:default",
     "core:window:default",

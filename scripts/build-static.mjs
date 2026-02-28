@@ -31,7 +31,7 @@ try {
   execSync("npx next build", {
     cwd: rootDir,
     stdio: "inherit",
-    env: { ...process.env, ROUTA_BUILD_STATIC: "1" },
+    env: { ...process.env, ROUTA_BUILD_STATIC: "1", SKIP_ENV_VALIDATION: "1" },
   });
 
   console.log("[build-static] Static export completed successfully.");

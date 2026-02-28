@@ -1199,7 +1199,7 @@ export function SessionPageClient() {
             ))}
             {/* Custom specialists from DB */}
             {specialists.length > 0 && (
-              <optgroup label="Specialists">
+              <optgroup label="Custom Specialists">
                 {specialists.map((s) => (
                   <option key={s.id} value={`specialist:${s.id}`}>
                     {s.name}{s.model ? ` (${s.model})` : ""}
