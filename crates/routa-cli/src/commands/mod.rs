@@ -13,6 +13,7 @@ pub mod rpc;
 pub mod server;
 pub mod skill;
 pub mod task;
+pub mod workflow;
 pub mod workspace;
 
 use routa_core::state::AppState;

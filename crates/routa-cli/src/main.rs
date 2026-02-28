@@ -128,6 +128,12 @@ enum Commands {
         #[arg(long, default_value = "DEVELOPER")]
         role: String,
     },
+
+    /// Run YAML-defined agent workflows
+    Workflow {
+        #[command(subcommand)]
+        action: WorkflowAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -268,6 +274,35 @@ enum SkillAction {
     List,
     /// Reload skills from the current directory
     Reload,
+}
+
+#[derive(Subcommand)]
+enum WorkflowAction {
+    /// Run a workflow from a YAML file
+    Run {
+        /// Path to the workflow YAML file
+        file: String,
+        /// Enable verbose output (show prompts and responses)
+        #[arg(long, short = 'v')]
+        verbose: bool,
+        /// Custom specialist definitions directory
+        #[arg(long)]
+        specialist_dir: Option<String>,
+        /// Trigger payload (JSON string for webhook-triggered workflows)
+        #[arg(long)]
+        trigger_payload: Option<String>,
+    },
+    /// Validate a workflow YAML file without executing it
+    Validate {
+        /// Path to the workflow YAML file
+        file: String,
+    },
+    /// List available specialist definitions
+    Specialists {
+        /// Custom specialist definitions directory
+        #[arg(long)]
+        specialist_dir: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -455,6 +490,33 @@ async fn main() {
         } => {
             let state = commands::init_state(&cli.db).await;
             commands::chat::run(&state, &workspace_id, &provider, &role).await
+        }
+
+        Commands::Workflow { action } => {
+            let state = commands::init_state(&cli.db).await;
+            match action {
+                WorkflowAction::Run {
+                    file,
+                    verbose,
+                    specialist_dir,
+                    trigger_payload,
+                } => {
+                    commands::workflow::run(
+                        &state,
+                        &file,
+                        verbose,
+                        specialist_dir.as_deref(),
+                        trigger_payload.as_deref(),
+                    )
+                    .await
+                }
+                WorkflowAction::Validate { file } => {
+                    commands::workflow::validate(&file).await
+                }
+                WorkflowAction::Specialists { specialist_dir } => {
+                    commands::workflow::list_specialists(specialist_dir.as_deref()).await
+                }
+            }
         }
         }
     } else {

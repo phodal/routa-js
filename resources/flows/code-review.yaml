@@ -1,0 +1,49 @@
+# Code Review Workflow — analyze and review code changes
+#
+# Usage:
+#   routa workflow run resources/flows/code-review.yaml --trigger-payload "Review the changes in PR #42"
+
+name: "Code Review Flow"
+description: "Two-step workflow: analyze changes, then verify quality"
+version: "1.0"
+
+trigger:
+  type: manual
+
+variables:
+  model: "${ANTHROPIC_MODEL:-GLM-4.7}"
+
+steps:
+  - name: "Analyze Changes"
+    specialist: "developer"
+    adapter: "claude-code-sdk"
+    config:
+      model: "${model}"
+    input: |
+      Analyze the following code changes or request:
+
+      ${trigger.payload}
+
+      Provide:
+      1. Summary of changes
+      2. Potential issues or bugs
+      3. Suggestions for improvement
+      4. Security concerns (if any)
+    output_key: "analysis"
+
+  - name: "Quality Gate"
+    specialist: "gate"
+    adapter: "claude-code-sdk"
+    config:
+      model: "${model}"
+    input: |
+      Based on the following analysis, provide a final quality verdict:
+
+      ## Analysis
+      ${steps.Analyze Changes.output}
+
+      ## Original Request
+      ${trigger.payload}
+
+      Provide your verification verdict with evidence for each point.
+    output_key: "verdict"
