@@ -137,7 +137,7 @@ impl WorkflowExecutor {
             // Check condition
             if let Some(ref cond) = step.condition {
                 let resolved = self.resolve_template(cond);
-                if resolved.is_empty() || resolved == "false" || resolved == "" {
+                if resolved.is_empty() || resolved == "false" {
                     println!("   ⏭  Skipped (condition not met)");
                     println!();
                     results.push(StepResult {
