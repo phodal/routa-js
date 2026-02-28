@@ -44,6 +44,7 @@ const sessions = new Map<string, McpSession>();
 async function createSession(
   workspaceId?: string,
   enableStatelessMode = false,
+  acpSessionId?: string,
 ): Promise<WebStandardStreamableHTTPServerTransport> {
   const effectiveWorkspaceId = workspaceId || process.env.ROUTA_WORKSPACE_ID || "default";
   const sessionId = enableStatelessMode
@@ -67,6 +68,7 @@ async function createSession(
   const { server } = createRoutaMcpServer({
     workspaceId: effectiveWorkspaceId,
     toolMode: getGlobalToolMode(),
+    sessionId: acpSessionId,
   });
   await server.connect(transport);
 
@@ -103,14 +105,18 @@ async function getOrCreateSession(
   // 1. Custom header (browser client sends Routa-Workspace-Id)
   // 2. URL query param (AI agents call via URL like /api/mcp?wsId=myWorkspace)
   // 3. Environment variable (server-level default)
+  const url = new URL(request.url);
   const workspaceId =
     request.headers.get("routa-workspace-id") ||
-    new URL(request.url).searchParams.get("wsId") ||
+    url.searchParams.get("wsId") ||
     process.env.ROUTA_WORKSPACE_ID ||
     "default";
 
+  // ACP session ID embedded in URL by orchestrator (?sid=) so notes are scoped correctly
+  const acpSessionId = url.searchParams.get("sid") ?? undefined;
+
   // New session needed (initialize request)
-  return createSession(workspaceId);
+  return createSession(workspaceId, false, acpSessionId);
 }
 
 /**

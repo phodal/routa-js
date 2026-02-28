@@ -473,9 +473,12 @@ export class RoutaOrchestrator {
     const port = this.detectServerPort();
     const host = process.env.HOST ?? "localhost";
     const baseMcpUrl = `http://${host}:${port}/api/mcp`;
-    const mcpUrl = workspaceId && workspaceId !== "default"
-      ? `${baseMcpUrl}?wsId=${encodeURIComponent(workspaceId)}`
-      : baseMcpUrl;
+    // Embed workspaceId (?wsId=) and parentSessionId (?sid=) so the MCP server
+    // can scope tool calls (e.g. create_note) to the correct session.
+    const mcpUrlObj = new URL(baseMcpUrl);
+    if (workspaceId && workspaceId !== "default") mcpUrlObj.searchParams.set("wsId", workspaceId);
+    mcpUrlObj.searchParams.set("sid", parentSessionId);
+    const mcpUrl = mcpUrlObj.toString();
 
     let acpSessionId: string;
 

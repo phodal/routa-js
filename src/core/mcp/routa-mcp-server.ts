@@ -23,6 +23,11 @@ export interface CreateMcpServerOptions {
   toolMode?: ToolMode;
   /** Optional existing RoutaSystem instance */
   system?: RoutaSystem;
+  /**
+   * ACP session ID to scope note/task creation to a specific session.
+   * When set, notes created without an explicit sessionId will inherit this.
+   */
+  sessionId?: string;
 }
 
 /**
@@ -51,6 +56,11 @@ export function createRoutaMcpServer(
 
   const toolManager = new RoutaMcpToolManager(routaSystem.tools, opts.workspaceId);
   toolManager.setToolMode(toolMode);
+
+  // Scope note/task creation to this ACP session when provided
+  if (opts.sessionId) {
+    toolManager.setSessionId(opts.sessionId);
+  }
 
   // Wire in orchestrator if available
   const orchestrator = getRoutaOrchestrator();
