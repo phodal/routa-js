@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { getProviderAdapter, clearAdapterCache } from "../index";
 import { TraceRecorder } from "../trace-recorder";
+import { AgentEventBridge } from "../../agent-event-bridge/agent-event-bridge";
 import type { NormalizedSessionUpdate } from "../types";
 
 // Mock the trace module
@@ -326,6 +327,113 @@ describe("Integration Scenarios", () => {
       }) as NormalizedSessionUpdate;
 
       expect(result.toolCall?.input).toEqual(arrayInput);
+    });
+  });
+
+  describe("Scenario: AgentEventBridge full pipeline", () => {
+    it("converts raw notifications to WorkspaceAgentEvents end-to-end", () => {
+      const adapter = getProviderAdapter("claude");
+      const sessionId = "bridge-session-1";
+      const bridge = new AgentEventBridge(sessionId);
+      const events: unknown[] = [];
+
+      const process = (raw: unknown) => {
+        const normalized = adapter.normalize(sessionId, raw) as NormalizedSessionUpdate | null;
+        if (normalized) {
+          const agentEvents = bridge.process(normalized);
+          events.push(...agentEvents);
+        }
+      };
+
+      // Tool call: read file
+      process({
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-1",
+          kind: "read",
+          rawInput: { path: "src/index.ts" },
+        },
+      });
+      expect(events.at(-1)).toMatchObject({ type: "read_block", status: "in_progress" });
+
+      // Tool call: bash
+      process({
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-2",
+          kind: "bash",
+          rawInput: { command: "npm test" },
+        },
+      });
+      expect(events.at(-1)).toMatchObject({ type: "terminal_block", command: "npm test" });
+
+      // Tool call update: bash completes
+      process({
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-2",
+          kind: "bash",
+          status: "completed",
+          rawOutput: "All tests passed",
+        },
+      });
+      expect(events.at(-1)).toMatchObject({ type: "terminal_block", status: "completed" });
+
+      // Agent message chunk
+      process({
+        sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "Done!" },
+        },
+      });
+      expect(events.at(-1)).toMatchObject({ type: "message_block", isChunk: true });
+
+      // Turn complete
+      process({
+        sessionId,
+        update: {
+          sessionUpdate: "turn_complete",
+          stopReason: "end_turn",
+          usage: { inputTokens: 100, outputTokens: 50 },
+        },
+      });
+      // usage_reported + agent_completed
+      expect(events.at(-2)).toMatchObject({ type: "usage_reported" });
+      expect(events.at(-1)).toMatchObject({ type: "agent_completed", stopReason: "end_turn" });
+    });
+
+    it("converts plan_update through full pipeline", () => {
+      const adapter = getProviderAdapter("opencode");
+      const sessionId = "bridge-plan-session";
+      const bridge = new AgentEventBridge(sessionId);
+
+      const raw = {
+        sessionId,
+        update: {
+          sessionUpdate: "plan_update",
+          items: [
+            { description: "Analyze codebase", status: "completed" },
+            { description: "Write tests", status: "in_progress" },
+          ],
+        },
+      };
+
+      const normalized = adapter.normalize(sessionId, raw) as NormalizedSessionUpdate;
+      expect(normalized.eventType).toBe("plan_update");
+
+      const agentEvents = bridge.process(normalized);
+      expect(agentEvents).toHaveLength(1);
+      expect(agentEvents[0]).toMatchObject({
+        type: "plan_updated",
+        items: [
+          { description: "Analyze codebase", status: "done" },
+          { description: "Write tests", status: "in_progress" },
+        ],
+      });
     });
   });
 });
