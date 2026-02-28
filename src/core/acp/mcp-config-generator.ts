@@ -20,6 +20,11 @@ export interface RoutaMcpConfig {
    * Used by the standalone RoutaMcpHttpServer which serves at /mcp (not /api/mcp).
    */
   mcpEndpoint?: string;
+  /**
+   * Whether to include user-defined custom MCP servers from the database.
+   * Defaults to true. Set to false to only use the built-in routa-coordination server.
+   */
+  includeCustomServers?: boolean;
 }
 
 export interface McpServerConfig {

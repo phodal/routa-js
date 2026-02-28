@@ -96,7 +96,7 @@ export class AcpProcessManager {
         // Pass workspaceId so the MCP endpoint URL has the correct ?wsId= param
         let mcpConfigs: string[] | undefined;
         if (providerSupportsMcp(presetId)) {
-            const mcpResult = ensureMcpForProvider(presetId, getDefaultRoutaMcpConfig(workspaceId));
+            const mcpResult = await ensureMcpForProvider(presetId, getDefaultRoutaMcpConfig(workspaceId));
             mcpConfigs = mcpResult.mcpConfigs.length > 0 ? mcpResult.mcpConfigs : undefined;
             console.log(`[AcpProcessManager] MCP setup for ${presetId}: ${mcpResult.summary}`);
         }

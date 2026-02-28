@@ -5,7 +5,7 @@
 import { ensureMcpForProvider, providerSupportsMcp } from "@/core/acp/mcp-setup";
 import { getDefaultRoutaMcpConfig } from "@/core/acp/mcp-config-generator";
 
-export function testMcpSetup() {
+export async function testMcpSetup() {
   console.log("Testing MCP Configuration\n");
   console.log("=".repeat(60));
 
@@ -19,7 +19,7 @@ export function testMcpSetup() {
     console.log(`Supports MCP: ${supportsMcp}`);
 
     if (supportsMcp) {
-      const result = ensureMcpForProvider(providerId);
+      const result = await ensureMcpForProvider(providerId);
       console.log(`Summary: ${result.summary}`);
       console.log(`CLI args count: ${result.mcpConfigs.length}`);
       if (result.mcpConfigs.length > 0) {

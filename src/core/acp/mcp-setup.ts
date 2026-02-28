@@ -38,6 +38,12 @@ import {
   getDefaultRoutaMcpConfig,
   type RoutaMcpConfig,
 } from "./mcp-config-generator";
+import {
+  type CustomMcpServerConfig,
+  mergeCustomMcpServers,
+  PostgresCustomMcpServerStore,
+} from "../store/custom-mcp-server-store";
+import { getDatabase, isPostgres } from "../db";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -67,15 +73,34 @@ export function providerSupportsMcp(providerId: string): boolean {
 }
 
 /**
+ * Load enabled custom MCP servers from the database.
+ * Returns an empty array if the database is unavailable.
+ */
+async function loadCustomMcpServers(workspaceId?: string): Promise<CustomMcpServerConfig[]> {
+  try {
+    if (!isPostgres()) return [];
+    const db = getDatabase();
+    const store = new PostgresCustomMcpServerStore(db);
+    return await store.listEnabled(workspaceId);
+  } catch (err) {
+    console.warn("[MCP] Failed to load custom MCP servers:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+/**
  * Ensure MCP is configured for `providerId` and return the values that
  * should be forwarded to the process (if any).
  *
  * Call this **before** spawning the process.
+ *
+ * When `config.includeCustomServers` is not explicitly false, custom MCP servers
+ * from the database are merged alongside the built-in routa-coordination server.
  */
-export function ensureMcpForProvider(
+export async function ensureMcpForProvider(
   providerId: string,
   config?: RoutaMcpConfig,
-): McpSetupResult {
+): Promise<McpSetupResult> {
   if (!providerSupportsMcp(providerId)) {
     return { mcpConfigs: [], summary: `${providerId}: MCP not supported` };
   }
@@ -84,6 +109,15 @@ export function ensureMcpForProvider(
   // Use the direct endpoint override if the standalone MCP server is running
   const mcpEndpoint = cfg.mcpEndpoint || `${cfg.routaServerUrl}/api/mcp`;
 
+  // Load custom MCP servers from DB
+  let customServers: CustomMcpServerConfig[] = [];
+  if (cfg.includeCustomServers !== false) {
+    customServers = await loadCustomMcpServers(cfg.workspaceId);
+    if (customServers.length > 0) {
+      console.log(`[MCP] Loaded ${customServers.length} custom MCP server(s)`);
+    }
+  }
+
   // Strip -registry suffix to get base provider ID for MCP setup
   const baseId = providerId.endsWith("-registry")
     ? providerId.slice(0, -"-registry".length)
@@ -91,19 +125,19 @@ export function ensureMcpForProvider(
 
   switch (baseId) {
     case "opencode":
-      return ensureMcpForOpenCode(mcpEndpoint, cfg.workspaceId);
+      return ensureMcpForOpenCode(mcpEndpoint, cfg.workspaceId, customServers);
     case "auggie":
-      return ensureMcpForAuggie(mcpEndpoint, cfg.workspaceId);
+      return ensureMcpForAuggie(mcpEndpoint, cfg.workspaceId, customServers);
     case "claude":
-      return ensureMcpForClaude(mcpEndpoint, cfg.workspaceId);
+      return ensureMcpForClaude(mcpEndpoint, cfg.workspaceId, customServers);
     case "codex":
-      return ensureMcpForCodex(mcpEndpoint);
+      return ensureMcpForCodex(mcpEndpoint, customServers);
     case "gemini":
-      return ensureMcpForGemini(mcpEndpoint);
+      return ensureMcpForGemini(mcpEndpoint, customServers);
     case "kimi":
-      return ensureMcpForKimi(mcpEndpoint);
+      return ensureMcpForKimi(mcpEndpoint, customServers);
     case "copilot":
-      return ensureMcpForCopilot(mcpEndpoint, cfg.workspaceId);
+      return ensureMcpForCopilot(mcpEndpoint, cfg.workspaceId, customServers);
     default:
       return { mcpConfigs: [], summary: `${providerId}: unknown` };
   }
@@ -121,6 +155,7 @@ const OPENCODE_CONFIG_FILE = path.join(OPENCODE_CONFIG_DIR, "opencode.json");
 function ensureMcpForOpenCode(
   mcpEndpoint: string,
   _workspaceId?: string,
+  customServers: CustomMcpServerConfig[] = [],
 ): McpSetupResult {
   try {
     // Read existing config (or start fresh)
@@ -135,11 +170,24 @@ function ensureMcpForOpenCode(
 
     // OpenCode schema: type must be "remote" (not "http"),
     // only allows: type, url, enabled, headers, oauth, timeout
-    mcp["routa-coordination"] = {
-      type: "remote",
-      url: mcpEndpoint,
-      enabled: true,
+    const builtIn: Record<string, unknown> = {
+      "routa-coordination": {
+        type: "remote",
+        url: mcpEndpoint,
+        enabled: true,
+      },
     };
+
+    // Merge custom servers (OpenCode uses "remote" for http, "stdio" for stdio)
+    const merged = mergeCustomMcpServers(builtIn, customServers);
+    for (const [name, cfg] of Object.entries(merged)) {
+      const serverCfg = cfg as Record<string, unknown>;
+      if (serverCfg.type === "http" || serverCfg.type === "sse") {
+        mcp[name] = { type: "remote", url: serverCfg.url, enabled: true };
+      } else {
+        mcp[name] = { ...serverCfg, enabled: true };
+      }
+    }
 
     existing.mcp = mcp;
 
@@ -178,18 +226,18 @@ const AUGGIE_MCP_CONFIG_FILE = path.join(AUGGIE_CONFIG_DIR, "mcp-config.json");
 function ensureMcpForAuggie(
   mcpEndpoint: string,
   workspaceId?: string,
+  customServers: CustomMcpServerConfig[] = [],
 ): McpSetupResult {
   try {
-    const mcpConfigObj = {
-      mcpServers: {
-        "routa-coordination": {
-          url: mcpEndpoint,
-          type: "http",
-          env: {
-            ROUTA_WORKSPACE_ID: workspaceId || "",
-          },
-        },
+    const builtIn: Record<string, unknown> = {
+      "routa-coordination": {
+        url: mcpEndpoint,
+        type: "http",
+        env: { ROUTA_WORKSPACE_ID: workspaceId || "" },
       },
+    };
+    const mcpConfigObj = {
+      mcpServers: mergeCustomMcpServers(builtIn, customServers),
     };
 
     fs.mkdirSync(AUGGIE_CONFIG_DIR, { recursive: true });
@@ -222,17 +270,17 @@ function ensureMcpForAuggie(
 function ensureMcpForClaude(
   mcpEndpoint: string,
   workspaceId?: string,
+  customServers: CustomMcpServerConfig[] = [],
 ): McpSetupResult {
-  const json = JSON.stringify({
-    mcpServers: {
-      "routa-coordination": {
-        url: mcpEndpoint,
-        type: "http",
-        env: {
-          ROUTA_WORKSPACE_ID: workspaceId || "",
-        },
-      },
+  const builtIn: Record<string, unknown> = {
+    "routa-coordination": {
+      url: mcpEndpoint,
+      type: "http",
+      env: { ROUTA_WORKSPACE_ID: workspaceId || "" },
     },
+  };
+  const json = JSON.stringify({
+    mcpServers: mergeCustomMcpServers(builtIn, customServers),
   });
 
   return {
@@ -256,7 +304,7 @@ function ensureMcpForClaude(
 const CODEX_CONFIG_DIR = path.join(os.homedir(), ".codex");
 const CODEX_CONFIG_FILE = path.join(CODEX_CONFIG_DIR, "config.toml");
 
-function ensureMcpForCodex(mcpEndpoint: string): McpSetupResult {
+function ensureMcpForCodex(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): McpSetupResult {
   try {
     // Read existing config (or start fresh)
     let existing: Record<string, unknown> = {};
@@ -266,16 +314,22 @@ function ensureMcpForCodex(mcpEndpoint: string): McpSetupResult {
     }
 
     // Ensure "mcp_servers" key exists as an object
-    const mcpServers = (existing.mcp_servers ?? {}) as Record<
-      string,
-      unknown
-    >;
+    const mcpServers = (existing.mcp_servers ?? {}) as Record<string, unknown>;
 
-    // Add / update the routa-coordination server entry
-    mcpServers["routa-coordination"] = {
-      url: mcpEndpoint,
-      enabled: true,
+    // Built-in server
+    const builtIn: Record<string, unknown> = {
+      "routa-coordination": { url: mcpEndpoint, enabled: true },
     };
+    // Merge custom servers — Codex uses url-based entries with enabled flag
+    const merged = mergeCustomMcpServers(builtIn, customServers);
+    for (const [name, cfg] of Object.entries(merged)) {
+      const serverCfg = cfg as Record<string, unknown>;
+      if (serverCfg.type === "stdio") {
+        mcpServers[name] = { command: serverCfg.command, args: serverCfg.args ?? [], enabled: true };
+      } else {
+        mcpServers[name] = { url: serverCfg.url, enabled: true };
+      }
+    }
 
     existing.mcp_servers = mcpServers;
 
@@ -319,11 +373,10 @@ function ensureMcpForCodex(mcpEndpoint: string): McpSetupResult {
 const GEMINI_CONFIG_DIR = path.join(os.homedir(), ".gemini");
 const GEMINI_CONFIG_FILE = path.join(GEMINI_CONFIG_DIR, "settings.json");
 
-function ensureMcpForGemini(mcpEndpoint: string): McpSetupResult {
+function ensureMcpForGemini(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): McpSetupResult {
   try {
     // Read existing settings (or start fresh)
-    let
-        existing: Record<string, unknown> = {};
+    let existing: Record<string, unknown> = {};
     if (fs.existsSync(GEMINI_CONFIG_FILE)) {
       const raw = fs.readFileSync(GEMINI_CONFIG_FILE, "utf-8");
       existing = JSON.parse(raw);
@@ -332,11 +385,22 @@ function ensureMcpForGemini(mcpEndpoint: string): McpSetupResult {
     // Ensure "mcpServers" key exists
     const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
 
-    // Gemini uses "httpUrl" for Streamable HTTP transport (not "url" which is SSE)
-    mcpServers["routa-coordination"] = {
-      httpUrl: mcpEndpoint,
-      timeout: 30000,
+    // Built-in: Gemini uses "httpUrl" for Streamable HTTP transport
+    const builtIn: Record<string, unknown> = {
+      "routa-coordination": { httpUrl: mcpEndpoint, timeout: 30000 },
     };
+    // Merge custom servers — Gemini uses httpUrl for http, command for stdio
+    const merged = mergeCustomMcpServers(builtIn, customServers);
+    for (const [name, cfg] of Object.entries(merged)) {
+      const serverCfg = cfg as Record<string, unknown>;
+      if (name === "routa-coordination") {
+        mcpServers[name] = serverCfg; // already formatted
+      } else if (serverCfg.type === "stdio") {
+        mcpServers[name] = { command: serverCfg.command, args: serverCfg.args ?? [], timeout: 30000 };
+      } else {
+        mcpServers[name] = { httpUrl: serverCfg.url, timeout: 30000 };
+      }
+    }
 
     existing.mcpServers = mcpServers;
 
@@ -384,7 +448,7 @@ function ensureMcpForGemini(mcpEndpoint: string): McpSetupResult {
 const KIMI_CONFIG_DIR = path.join(os.homedir(), ".kimi");
 const KIMI_CONFIG_FILE = path.join(KIMI_CONFIG_DIR, "config.toml");
 
-function ensureMcpForKimi(mcpEndpoint: string): McpSetupResult {
+function ensureMcpForKimi(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): McpSetupResult {
   try {
     // Read existing config (or start fresh)
     let existing: Record<string, unknown> = {};
@@ -397,11 +461,14 @@ function ensureMcpForKimi(mcpEndpoint: string): McpSetupResult {
     const mcp = (existing.mcp ?? {}) as Record<string, unknown>;
     const servers = (mcp.servers ?? {}) as Record<string, unknown>;
 
-    // Add / update the routa-coordination server entry
-    servers["routa-coordination"] = {
-      type: "http",
-      url: mcpEndpoint,
+    // Built-in server
+    const builtIn: Record<string, unknown> = {
+      "routa-coordination": { type: "http", url: mcpEndpoint },
     };
+    const merged = mergeCustomMcpServers(builtIn, customServers);
+    for (const [name, cfg] of Object.entries(merged)) {
+      servers[name] = cfg;
+    }
 
     mcp.servers = servers;
     existing.mcp = mcp;
@@ -450,6 +517,7 @@ const COPILOT_MCP_CONFIG_FILE = path.join(COPILOT_CONFIG_DIR, "mcp-config.json")
 function ensureMcpForCopilot(
   mcpEndpoint: string,
   workspaceId?: string,
+  customServers: CustomMcpServerConfig[] = [],
 ): McpSetupResult {
   try {
     // Read existing config (or start fresh)
@@ -462,15 +530,25 @@ function ensureMcpForCopilot(
     // Ensure "mcpServers" key exists
     const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
 
-    // Copilot coding agent format: type, url, tools
-    mcpServers["routa-coordination"] = {
-      type: "http",
-      url: mcpEndpoint,
-      tools: ["*"],
-      env: {
-        ROUTA_WORKSPACE_ID: workspaceId || "",
+    // Built-in server
+    const builtIn: Record<string, unknown> = {
+      "routa-coordination": {
+        type: "http",
+        url: mcpEndpoint,
+        tools: ["*"],
+        env: { ROUTA_WORKSPACE_ID: workspaceId || "" },
       },
     };
+    // Merge custom servers — Copilot uses type, url, tools
+    const merged = mergeCustomMcpServers(builtIn, customServers);
+    for (const [name, cfg] of Object.entries(merged)) {
+      const serverCfg = cfg as Record<string, unknown>;
+      if (name === "routa-coordination") {
+        mcpServers[name] = serverCfg; // already formatted
+      } else {
+        mcpServers[name] = { ...serverCfg, tools: ["*"] };
+      }
+    }
 
     existing.mcpServers = mcpServers;
 
@@ -504,35 +582,35 @@ function ensureMcpForCopilot(
 // ─── Legacy convenience wrappers ───────────────────────────────────────
 
 /** @deprecated Use ensureMcpForProvider("claude", config) */
-export function setupMcpForProvider(
+export async function setupMcpForProvider(
   providerId: McpSupportedProvider,
   config?: RoutaMcpConfig,
-): string[] {
-  return ensureMcpForProvider(providerId, config).mcpConfigs;
+): Promise<string[]> {
+  return (await ensureMcpForProvider(providerId, config)).mcpConfigs;
 }
 
-export function setupMcpForClaudeCode(config?: RoutaMcpConfig): string[] {
-  return ensureMcpForProvider("claude", config).mcpConfigs;
+export async function setupMcpForClaudeCode(config?: RoutaMcpConfig): Promise<string[]> {
+  return (await ensureMcpForProvider("claude", config)).mcpConfigs;
 }
 
-export function setupMcpForAuggie(config?: RoutaMcpConfig): string[] {
-  return ensureMcpForProvider("auggie", config).mcpConfigs;
+export async function setupMcpForAuggie(config?: RoutaMcpConfig): Promise<string[]> {
+  return (await ensureMcpForProvider("auggie", config)).mcpConfigs;
 }
 
-export function setupMcpForCodex(config?: RoutaMcpConfig): string[] {
-  return ensureMcpForProvider("codex", config).mcpConfigs;
+export async function setupMcpForCodex(config?: RoutaMcpConfig): Promise<string[]> {
+  return (await ensureMcpForProvider("codex", config)).mcpConfigs;
 }
 
-export function setupMcpForGemini(config?: RoutaMcpConfig): string[] {
-  return ensureMcpForProvider("gemini", config).mcpConfigs;
+export async function setupMcpForGemini(config?: RoutaMcpConfig): Promise<string[]> {
+  return (await ensureMcpForProvider("gemini", config)).mcpConfigs;
 }
 
-export function setupMcpForKimi(config?: RoutaMcpConfig): string[] {
-  return ensureMcpForProvider("kimi", config).mcpConfigs;
+export async function setupMcpForKimi(config?: RoutaMcpConfig): Promise<string[]> {
+  return (await ensureMcpForProvider("kimi", config)).mcpConfigs;
 }
 
-export function setupMcpForCopilot(config?: RoutaMcpConfig): string[] {
-  return ensureMcpForProvider("copilot", config).mcpConfigs;
+export async function setupMcpForCopilot(config?: RoutaMcpConfig): Promise<string[]> {
+  return (await ensureMcpForProvider("copilot", config)).mcpConfigs;
 }
 
 // ─── Helpers (unchanged) ───────────────────────────────────────────────

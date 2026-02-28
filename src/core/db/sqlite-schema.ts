@@ -210,6 +210,35 @@ export const workspaceSkills = sqliteTable("workspace_skills", {
   installedAt: integer("installed_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [primaryKey({ columns: [table.workspaceId, table.skillId] })]);
 
+// ─── Custom MCP Servers ───────────────────────────────────────────────────
+
+export const customMcpServers = sqliteTable("custom_mcp_servers", {
+  /** Unique identifier */
+  id: text("id").primaryKey(),
+  /** Human-readable name */
+  name: text("name").notNull(),
+  /** Short description */
+  description: text("description"),
+  /** MCP server type: "stdio" | "http" | "sse" */
+  type: text("type").notNull(),
+  /** Command to execute (for stdio type) */
+  command: text("command"),
+  /** Command arguments (for stdio type) */
+  args: text("args", { mode: "json" }).$type<string[]>(),
+  /** URL endpoint (for http/sse type) */
+  url: text("url"),
+  /** HTTP headers (for http/sse type) */
+  headers: text("headers", { mode: "json" }).$type<Record<string, string>>(),
+  /** Environment variables */
+  env: text("env", { mode: "json" }).$type<Record<string, string>>(),
+  /** Whether this server is enabled */
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  /** Workspace scope (null = global) */
+  workspaceId: text("workspace_id"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
 // ─── Specialists (user-defined agent specialist configurations) ───────────
 
 export const specialists = sqliteTable("specialists", {

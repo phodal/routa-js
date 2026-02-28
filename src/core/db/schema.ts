@@ -234,6 +234,35 @@ export const workspaceSkills = pgTable("workspace_skills", {
   installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [primaryKey({ columns: [table.workspaceId, table.skillId] })]);
 
+// ─── Custom MCP Servers ───────────────────────────────────────────────────
+
+export const customMcpServers = pgTable("custom_mcp_servers", {
+  /** Unique identifier */
+  id: text("id").primaryKey(),
+  /** Human-readable name */
+  name: text("name").notNull(),
+  /** Short description */
+  description: text("description"),
+  /** MCP server type: "stdio" | "http" | "sse" */
+  type: text("type").notNull(),
+  /** Command to execute (for stdio type) */
+  command: text("command"),
+  /** Command arguments (for stdio type) */
+  args: jsonb("args").$type<string[]>(),
+  /** URL endpoint (for http/sse type) */
+  url: text("url"),
+  /** HTTP headers (for http/sse type) */
+  headers: jsonb("headers").$type<Record<string, string>>(),
+  /** Environment variables */
+  env: jsonb("env").$type<Record<string, string>>(),
+  /** Whether this server is enabled */
+  enabled: boolean("enabled").notNull().default(true),
+  /** Workspace scope (null = global) */
+  workspaceId: text("workspace_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Specialists (user-defined agent specialist configurations) ───────────
 
 export const specialists = pgTable("specialists", {

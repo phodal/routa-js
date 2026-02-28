@@ -16,7 +16,7 @@ export async function GET() {
     const supported = providerSupportsMcp(providerId);
 
     if (supported) {
-      const result = ensureMcpForProvider(providerId);
+      const result = await ensureMcpForProvider(providerId);
       results[providerId] = {
         supportsMcp: true,
         summary: result.summary,
