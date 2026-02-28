@@ -109,6 +109,7 @@ fn log_frontend(level: String, scope: String, message: String) {
 
 /// Shared state for ACP agent installation.
 pub struct AcpState {
+    #[allow(dead_code)]
     paths: AcpPaths,
     installation_state: AcpInstallationState,
     binary_manager: AcpBinaryManager,
