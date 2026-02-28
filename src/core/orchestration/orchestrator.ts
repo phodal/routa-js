@@ -36,6 +36,9 @@ import {
   calculateChildDepth,
   buildAgentMetadata,
 } from "./delegation-depth";
+import { getProviderAdapter } from "../acp/provider-adapter";
+import { AgentEventBridge, makeStartedEvent } from "../acp/agent-event-bridge";
+import type { WorkspaceAgentEvent } from "../acp/agent-event-bridge";
 
 export interface DelegateWithSpawnParams {
   /** Task ID to delegate */
@@ -123,6 +126,10 @@ export class RoutaOrchestrator {
   }) => void;
   /** Map: agentId → file watcher cleanup function */
   private reportFileWatchers = new Map<string, () => void>();
+  /** Map: agentId → AgentEventBridge for semantic event conversion */
+  private childAgentBridges = new Map<string, AgentEventBridge>();
+  /** Map: agentId → set of WorkspaceAgentEvent subscribers */
+  private childAgentEventSubscribers = new Map<string, Set<(event: WorkspaceAgentEvent) => void>>();
 
   constructor(
     system: RoutaSystem,
@@ -161,6 +168,23 @@ export class RoutaOrchestrator {
     handler: (sessionId: string, data: unknown) => void
   ): void {
     this.notificationHandler = handler;
+  }
+
+  /**
+   * Subscribe to WorkspaceAgentEvents emitted by a specific child agent.
+   * Returns an unsubscribe function.
+   */
+  subscribeToChildAgentEvents(
+    agentId: string,
+    handler: (event: WorkspaceAgentEvent) => void
+  ): () => void {
+    let subscribers = this.childAgentEventSubscribers.get(agentId);
+    if (!subscribers) {
+      subscribers = new Set();
+      this.childAgentEventSubscribers.set(agentId, subscribers);
+    }
+    subscribers.add(handler);
+    return () => subscribers!.delete(handler);
   }
 
   /**
@@ -408,12 +432,30 @@ export class RoutaOrchestrator {
   ): Promise<void> {
     const isClaudeCode = provider === "claude";
 
+    // Create AgentEventBridge for this child agent
+    const bridge = new AgentEventBridge(sessionId);
+    this.childAgentBridges.set(agentId, bridge);
+    this.dispatchChildAgentEvent(agentId, makeStartedEvent(sessionId, provider));
+
     const notificationHandler: NotificationHandler = (msg) => {
       if (msg.method === "session/update" && msg.params) {
         const params = msg.params as Record<string, unknown>;
 
         // Check for completion signals in the update
         this.checkForCompletion(agentId, params);
+
+        // Convert to semantic WorkspaceAgentEvents via bridge
+        const adapter = getProviderAdapter(provider);
+        const normalized = adapter.normalize(sessionId, params);
+        if (normalized) {
+          const updates = Array.isArray(normalized) ? normalized : [normalized];
+          for (const update of updates) {
+            const agentEvents = bridge.process(update);
+            for (const agentEvent of agentEvents) {
+              this.dispatchChildAgentEvent(agentId, agentEvent);
+            }
+          }
+        }
 
         // Forward notifications to the parent session's SSE
         if (this.notificationHandler) {
@@ -553,6 +595,21 @@ export class RoutaOrchestrator {
 
     // Trigger completion handling
     await this.handleChildCompletion(childAgentId, record);
+  }
+
+  /**
+   * Dispatch a WorkspaceAgentEvent to all subscribers for a child agent.
+   */
+  private dispatchChildAgentEvent(agentId: string, event: WorkspaceAgentEvent): void {
+    const subscribers = this.childAgentEventSubscribers.get(agentId);
+    if (!subscribers || subscribers.size === 0) return;
+    for (const handler of subscribers) {
+      try {
+        handler(event);
+      } catch {
+        // subscriber errors must not break the notification pipeline
+      }
+    }
   }
 
   /**
@@ -715,6 +772,11 @@ export class RoutaOrchestrator {
   ): Promise<void> {
     // Clean up the report file watcher
     this.cleanupReportWatcher(childAgentId);
+
+    // Clean up AgentEventBridge for this child
+    this.childAgentBridges.get(childAgentId)?.cleanup();
+    this.childAgentBridges.delete(childAgentId);
+    this.childAgentEventSubscribers.delete(childAgentId);
 
     // Check if this child is part of an after_all group
     for (const [groupId, group] of this.delegationGroups.entries()) {
