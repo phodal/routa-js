@@ -51,12 +51,16 @@ Instead of a single AI handling everything, Routa enables multiple agents to wor
 | 🟠   | **CRAFTER (Implementor)** | Executes implementation tasks, writes code, makes minimal focused changes               |
 | 🟢   | **GATE (Verifier)**       | Reviews work, validates against acceptance criteria, approves or requests fixes         |
 | 🎯   | **DEVELOPER (Solo)**      | Plans and implements independently without delegation (single-agent mode)               |
+| 🛠️   | **Custom Specialists**    | User-defined specialist roles with custom system prompts, model tiers, and behaviors    |
 
 - **🔄 Task Orchestration**: Create tasks, delegate to agents, track dependencies, parallel execution
 - **💬 Inter-Agent Communication**: Message passing, conversation history, completion reports
 - **📡 Multi-Protocol Support**: MCP, ACP, A2A for connecting diverse AI clients
 - **🎯 Skills System**: OpenCode-compatible skill discovery and dynamic loading
 - **🔌 ACP Registry**: Discover and install pre-configured agents from the community registry (supports npx, uvx, and binary distributions)
+- **🔧 Custom MCP Servers**: Register and manage user-defined MCP servers (stdio/http/sse) alongside the built-in coordination server
+- **🧑‍💻 Custom Specialists**: Define custom agent roles via Web UI, REST API, or Markdown files with YAML frontmatter
+- **🐙 GitHub Virtual Workspace**: Import GitHub repos as virtual workspaces for browsing and code review without local clones
 - **📊 Real-Time UI**: Live agent status, task progress, streaming chat interface
 
 👉 For detailed protocol specs and API reference, see [AGENTS.md](AGENTS.md)
@@ -109,6 +113,33 @@ docker compose --profile postgres up --build
 
 The service is available at `http://localhost:3000`.
 Health check: `http://localhost:3000/api/health`
+
+## 🔧 Custom MCP Servers
+
+Register user-defined MCP servers (`stdio`/`http`/`sse`) alongside the built-in coordination server. Managed via Web UI (Settings panel) or REST API. When an ACP agent spawns, enabled custom servers are automatically merged into its MCP configuration.
+
+Supported providers: Claude, OpenCode, Codex, Gemini, Kimi, Augment, Copilot.
+
+## 🧑‍💻 Custom Specialists
+
+Define custom specialist roles beyond the built-in four, with their own system prompts, model tiers, and behaviors. Managed via Web UI (Specialist Manager), REST API, or Markdown files with YAML frontmatter placed in `~/.routa/specialists/`.
+
+Loading priority: Database > User files (`~/.routa/specialists/`) > Bundled (`resources/specialists/`) > Hardcoded fallback.
+
+## 🐙 GitHub Virtual Workspace
+
+Import GitHub repos as virtual workspaces for browsing and code review — no local `git clone` required. Supports file tree browsing, content reading, and search. Works on serverless (Vercel) via zipball download with TTL-based cache cleanup.
+
+## ⌨️ CLI (Rust)
+
+The desktop distribution includes a `routa` CLI built on the same `routa-core` logic as the Rust server:
+
+```bash
+routa -p "Implement feature X"    # Full coordinator flow
+routa agent list|create|status    # Agent management
+routa task list|create|get        # Task management
+routa chat                        # Interactive chat
+```
 
 ## 🏗 Architecture
 
