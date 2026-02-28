@@ -19,6 +19,7 @@ export type ProviderType =
   | "codex"       // OpenAI Codex - standard ACP
   | "auggie"      // Augment Code - standard ACP
   | "kiro"        // Amazon Kiro - standard ACP
+  | "workspace"   // Native Workspace Agent - Vercel AI SDK
   | "standard";   // Generic standard ACP
 
 /**

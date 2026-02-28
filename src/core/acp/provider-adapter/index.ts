@@ -10,11 +10,13 @@ export { BaseProviderAdapter } from "./base-adapter";
 export { ClaudeCodeAdapter } from "./claude-adapter";
 export { OpenCodeAdapter } from "./opencode-adapter";
 export { StandardAcpAdapter } from "./standard-acp-adapter";
+export { WorkspaceAgentProviderAdapter } from "../workspace-agent/workspace-agent-provider";
 
 import type { IProviderAdapter, ProviderType } from "./types";
 import { ClaudeCodeAdapter } from "./claude-adapter";
 import { OpenCodeAdapter } from "./opencode-adapter";
 import { StandardAcpAdapter } from "./standard-acp-adapter";
+import { WorkspaceAgentProviderAdapter } from "../workspace-agent/workspace-agent-provider";
 
 /**
  * Cache for adapter instances (singleton per provider type).
@@ -79,6 +81,11 @@ function normalizeProviderType(provider: string): ProviderType {
     case "kiro-cli":
       return "kiro";
 
+    case "workspace":
+    case "workspace-agent":
+    case "routa-native":
+      return "workspace";
+
     default:
       return "standard";
   }
@@ -94,6 +101,9 @@ function createAdapter(provider: ProviderType): IProviderAdapter {
 
     case "opencode":
       return new OpenCodeAdapter();
+
+    case "workspace":
+      return new WorkspaceAgentProviderAdapter();
 
     // All standard ACP providers use the same adapter with different type
     case "kimi":
@@ -128,6 +138,7 @@ export function getKnownProviderTypes(): ProviderType[] {
     "codex",
     "auggie",
     "kiro",
+    "workspace",
     "standard",
   ];
 }

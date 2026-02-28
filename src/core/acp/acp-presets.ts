@@ -134,6 +134,15 @@ export const ACP_AGENT_PRESETS: readonly AcpAgentPreset[] = [
     description: "Anthropic Claude Code (native ACP support)",
     nonStandardApi: true,
   },
+  // Workspace Agent runs natively via Vercel AI SDK (no external CLI)
+  {
+    id: "workspace",
+    name: "Workspace Agent",
+    command: "",
+    args: [],
+    description: "Native Routa workspace agent powered by Vercel AI SDK",
+    nonStandardApi: true,
+  },
 ] as const;
 
 /**

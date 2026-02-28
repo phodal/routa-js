@@ -5,6 +5,7 @@ import {ensureMcpForProvider, providerSupportsMcp} from "@/core/acp/mcp-setup";
 import {getDefaultRoutaMcpConfig} from "@/core/acp/mcp-config-generator";
 import {OpencodeSdkAdapter, OpencodeSdkDirectAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl, isOpencodeServerConfigured, isOpencodeDirectApiConfigured} from "@/core/acp/opencode-sdk-adapter";
 import {ClaudeCodeSdkAdapter, shouldUseClaudeCodeSdkAdapter} from "@/core/acp/claude-code-sdk-adapter";
+import {WorkspaceAgentAdapter, type WorkspaceAgentAdapterOptions} from "@/core/acp/workspace-agent";
 import {isServerlessEnvironment} from "@/core/acp/api-based-providers";
 import {getHttpSessionStore} from "@/core/acp/http-session-store";
 import {getDatabaseDriver, getPostgresDatabase} from "@/core/db/index";
@@ -41,6 +42,16 @@ export interface ManagedClaudeCodeSdkAdapter {
 }
 
 /**
+ * A managed Workspace Agent adapter (native Vercel AI SDK agent).
+ */
+export interface ManagedWorkspaceAgent {
+    adapter: WorkspaceAgentAdapter;
+    acpSessionId: string;
+    presetId: string;
+    createdAt: Date;
+}
+
+/**
  * Singleton manager for ACP agent processes.
  * Maps our session IDs to ACP process instances.
  * Supports spawning different agent types via presets, including Claude Code.
@@ -51,6 +62,7 @@ export class AcpProcessManager {
     private claudeProcesses = new Map<string, ManagedClaudeProcess>();
     private opencodeAdapters = new Map<string, ManagedOpencodeAdapter>();
     private claudeCodeSdkAdapters = new Map<string, ManagedClaudeCodeSdkAdapter>();
+    private workspaceAgents = new Map<string, ManagedWorkspaceAgent>();
 
     /**
      * Spawn a new ACP agent process, initialize the protocol, and create a session.
@@ -249,6 +261,38 @@ export class AcpProcessManager {
         return acpSessionId;
     }
 
+    /**
+     * Create a session using the native Workspace Agent adapter (Vercel AI SDK).
+     *
+     * @param sessionId - Our internal session ID
+     * @param cwd - Working directory for the agent
+     * @param onNotification - Handler for session/update notifications
+     * @param options - Agent tools, workspace ID, agent ID, config overrides
+     * @returns The agent's ACP session ID
+     */
+    async createWorkspaceAgentSession(
+        sessionId: string,
+        cwd: string,
+        onNotification: NotificationHandler,
+        options?: Omit<WorkspaceAgentAdapterOptions, never>,
+    ): Promise<string> {
+        console.log(`[AcpProcessManager] Creating Workspace Agent session`);
+
+        const adapter = new WorkspaceAgentAdapter(cwd, onNotification, options);
+        await adapter.connect();
+        const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
+
+        this.workspaceAgents.set(sessionId, {
+            adapter,
+            acpSessionId,
+            presetId: "workspace",
+            createdAt: new Date(),
+        });
+
+        console.log(`[AcpProcessManager] Workspace Agent session created: ${acpSessionId}`);
+        return acpSessionId;
+    }
+
     async setSessionMode(sessionId: string, modeId: string): Promise<void> {
         if (this.isClaudeSession(sessionId)) {
             const claudeProc = this.getClaudeProcess(sessionId);
@@ -298,6 +342,13 @@ export class AcpProcessManager {
      */
     getClaudeCodeSdkAdapter(sessionId: string): ClaudeCodeSdkAdapter | undefined {
         return this.claudeCodeSdkAdapters.get(sessionId)?.adapter;
+    }
+
+    /**
+     * Get the Workspace Agent adapter for a session.
+     */
+    getWorkspaceAgent(sessionId: string): WorkspaceAgentAdapter | undefined {
+        return this.workspaceAgents.get(sessionId)?.adapter;
     }
 
     /**
@@ -573,7 +624,8 @@ export class AcpProcessManager {
             this.processes.get(sessionId)?.acpSessionId ??
             this.claudeProcesses.get(sessionId)?.acpSessionId ??
             this.opencodeAdapters.get(sessionId)?.acpSessionId ??
-            this.claudeCodeSdkAdapters.get(sessionId)?.acpSessionId
+            this.claudeCodeSdkAdapters.get(sessionId)?.acpSessionId ??
+            this.workspaceAgents.get(sessionId)?.acpSessionId
         );
     }
 
@@ -585,7 +637,8 @@ export class AcpProcessManager {
             this.processes.get(sessionId)?.presetId ??
             this.claudeProcesses.get(sessionId)?.presetId ??
             this.opencodeAdapters.get(sessionId)?.presetId ??
-            this.claudeCodeSdkAdapters.get(sessionId)?.presetId
+            this.claudeCodeSdkAdapters.get(sessionId)?.presetId ??
+            this.workspaceAgents.get(sessionId)?.presetId
         );
     }
 
@@ -631,7 +684,15 @@ export class AcpProcessManager {
             createdAt: managed.createdAt,
         }));
 
-        return [...acpSessions, ...claudeSessions, ...adapterSessions, ...claudeCodeSdkSessions];
+        const workspaceAgentSessions = Array.from(this.workspaceAgents.entries()).map(([sessionId, managed]) => ({
+            sessionId,
+            acpSessionId: managed.acpSessionId,
+            presetId: managed.presetId,
+            alive: managed.adapter.alive,
+            createdAt: managed.createdAt,
+        }));
+
+        return [...acpSessions, ...claudeSessions, ...adapterSessions, ...claudeCodeSdkSessions, ...workspaceAgentSessions];
     }
 
     /**
@@ -663,6 +724,13 @@ export class AcpProcessManager {
         if (claudeCodeSdkManaged) {
             claudeCodeSdkManaged.adapter.kill();
             this.claudeCodeSdkAdapters.delete(sessionId);
+            return;
+        }
+
+        const workspaceManaged = this.workspaceAgents.get(sessionId);
+        if (workspaceManaged) {
+            workspaceManaged.adapter.kill();
+            this.workspaceAgents.delete(sessionId);
         }
     }
 
@@ -689,5 +757,10 @@ export class AcpProcessManager {
             managed.adapter.kill();
         }
         this.claudeCodeSdkAdapters.clear();
+
+        for (const [, managed] of this.workspaceAgents) {
+            managed.adapter.kill();
+        }
+        this.workspaceAgents.clear();
     }
 }
