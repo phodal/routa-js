@@ -7,7 +7,7 @@
  */
 
 import { tool } from "ai";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { readFile, writeFile, readdir, mkdir, stat } from "fs/promises";
 import { resolve, relative, isAbsolute } from "path";
 import { exec } from "child_process";
@@ -72,7 +72,7 @@ export function createCodingTools(cwd: string) {
   return {
     read_file: tool({
       description: "Read the contents of a file. Returns the file content as a string.",
-      parameters: readFileParams,
+      inputSchema: readFileParams,
       execute: async ({ path: filePath }: z.infer<typeof readFileParams>) => {
         const fullPath = safePath(cwd, filePath);
         const stats = await stat(fullPath);
@@ -86,7 +86,7 @@ export function createCodingTools(cwd: string) {
 
     write_file: tool({
       description: "Write content to a file. Creates the file and parent directories if they don't exist, or overwrites if it does.",
-      parameters: writeFileParams,
+      inputSchema: writeFileParams,
       execute: async ({ path: filePath, content }: z.infer<typeof writeFileParams>) => {
         const fullPath = safePath(cwd, filePath);
         await mkdir(resolve(fullPath, ".."), { recursive: true });
@@ -97,7 +97,7 @@ export function createCodingTools(cwd: string) {
 
     edit_file: tool({
       description: "Apply a search-and-replace edit to a file. The old_string must match exactly one location in the file.",
-      parameters: editFileParams,
+      inputSchema: editFileParams,
       execute: async ({ path: filePath, old_string, new_string }: z.infer<typeof editFileParams>) => {
         const fullPath = safePath(cwd, filePath);
         const content = await readFile(fullPath, "utf-8");
@@ -116,7 +116,7 @@ export function createCodingTools(cwd: string) {
 
     search_files: tool({
       description: "Search for files matching a glob pattern. Returns a list of matching file paths.",
-      parameters: searchFilesParams,
+      inputSchema: searchFilesParams,
       execute: async ({ pattern, path: searchPath }: z.infer<typeof searchFilesParams>) => {
         const searchDir = searchPath ? safePath(cwd, searchPath) : cwd;
         const matches = await glob(pattern, {
@@ -136,7 +136,7 @@ export function createCodingTools(cwd: string) {
 
     grep_search: tool({
       description: "Search file contents using a regex pattern. Returns matching lines with file paths and line numbers.",
-      parameters: grepSearchParams,
+      inputSchema: grepSearchParams,
       execute: async ({ pattern, path: searchPath, include }: z.infer<typeof grepSearchParams>) => {
         const searchDir = searchPath ? safePath(cwd, searchPath) : cwd;
         const includeFlag = include ? `--include='${include}'` : "";
@@ -167,7 +167,7 @@ export function createCodingTools(cwd: string) {
 
     run_command: tool({
       description: "Execute a shell command in the workspace directory. Returns stdout, stderr, and exit code.",
-      parameters: runCommandParams,
+      inputSchema: runCommandParams,
       execute: async ({ command, timeout_ms }: z.infer<typeof runCommandParams>) => {
         try {
           const { stdout, stderr } = await execAsync(command, {
@@ -198,7 +198,7 @@ export function createCodingTools(cwd: string) {
 
     list_directory: tool({
       description: "List files and directories at the given path.",
-      parameters: listDirectoryParams,
+      inputSchema: listDirectoryParams,
       execute: async ({ path: dirPath }: z.infer<typeof listDirectoryParams>) => {
         const fullPath = safePath(cwd, dirPath);
         const entries = await readdir(fullPath, { withFileTypes: true });
@@ -248,7 +248,7 @@ export function createAgentManagementTools(
   return {
     list_agents: tool({
       description: "List all agents in the current workspace with their status.",
-      parameters: z.object({}),
+      inputSchema: z.object({}),
       execute: async () => {
         const result = await agentTools.listAgents(workspaceId);
         return result.data;
@@ -257,7 +257,7 @@ export function createAgentManagementTools(
 
     create_agent: tool({
       description: "Create a new agent in the workspace.",
-      parameters: createAgentParams,
+      inputSchema: createAgentParams,
       execute: async ({ name, role, modelTier }: z.infer<typeof createAgentParams>) => {
         const result = await agentTools.createAgent({
           name,
@@ -272,7 +272,7 @@ export function createAgentManagementTools(
 
     delegate_task: tool({
       description: "Delegate a task to an existing agent.",
-      parameters: delegateTaskParams,
+      inputSchema: delegateTaskParams,
       execute: async ({ agentId: targetAgentId, taskId }: z.infer<typeof delegateTaskParams>) => {
         const result = await agentTools.delegate({
           agentId: targetAgentId,
@@ -285,7 +285,7 @@ export function createAgentManagementTools(
 
     send_message: tool({
       description: "Send a message to another agent.",
-      parameters: sendMessageParams,
+      inputSchema: sendMessageParams,
       execute: async ({ toAgentId, message }: z.infer<typeof sendMessageParams>) => {
         const result = await agentTools.messageAgent({
           fromAgentId: agentId,
@@ -298,7 +298,7 @@ export function createAgentManagementTools(
 
     get_agent_status: tool({
       description: "Get the current status and details of an agent.",
-      parameters: getAgentStatusParams,
+      inputSchema: getAgentStatusParams,
       execute: async ({ agentId: targetAgentId }: z.infer<typeof getAgentStatusParams>) => {
         const result = await agentTools.getAgentStatus(targetAgentId);
         return result.data;
