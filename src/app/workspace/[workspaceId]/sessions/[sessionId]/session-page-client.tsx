@@ -32,7 +32,7 @@ import type {RepoSelection} from "@/client/components/repo-picker";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
 import {ProtocolBadge} from "@/app/protocol-badge";
 import {consumePendingPrompt} from "@/client/utils/pending-prompt";
-import {SettingsPanel, loadDefaultProviders} from "@/client/components/settings-panel";
+import {SettingsPanel, loadDefaultProviders, type AgentModelConfig} from "@/client/components/settings-panel";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -576,11 +576,18 @@ export function SessionPageClient() {
     }
   }, [isSessionEmpty]);
 
-  /** Resolve effective provider: explicit > per-role default > global selection */
-  const resolveProvider = useCallback((explicit?: string) => {
+  /** Resolve effective { provider, model }: explicit > per-role settings > global selection */
+  const resolveAgentConfig = useCallback((explicitProvider?: string, explicitModel?: string): { provider: string; model?: string } => {
     const defaults = loadDefaultProviders();
-    return explicit || defaults[selectedAgent] || acp.selectedProvider;
+    const roleConfig: AgentModelConfig = defaults[selectedAgent] ?? {};
+    return {
+      provider: explicitProvider || roleConfig.provider || acp.selectedProvider,
+      model: explicitModel || roleConfig.model,
+    };
   }, [selectedAgent, acp.selectedProvider]);
+
+  /** @deprecated use resolveAgentConfig */
+  const resolveProvider = useCallback((explicit?: string) => resolveAgentConfig(explicit).provider, [resolveAgentConfig]);
 
   const handleCreateSession = useCallback(
     async (provider: string) => {
@@ -592,14 +599,14 @@ export function SessionPageClient() {
       const cwd = repoSelection?.path ?? undefined;
       // Always pass the selected role - don't skip CRAFTER
       const role = selectedAgent;
-      const effectiveProvider = resolveProvider(provider);
-      console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, role=${role}, specialistId=${selectedSpecialistId}`);
-      const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId, undefined, undefined, selectedSpecialistId ?? undefined);
+      const { provider: effectiveProvider, model: resolvedModel } = resolveAgentConfig(provider);
+      console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, model=${resolvedModel}, role=${role}, specialistId=${selectedSpecialistId}`);
+      const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId, resolvedModel, undefined, selectedSpecialistId ?? undefined);
       if (result?.sessionId) {
         router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       }
     },
-    [acp, ensureConnected, repoSelection, selectedAgent, selectedSpecialistId, sessionId, deleteEmptySession, workspaceId, router, resolveProvider]
+    [acp, ensureConnected, repoSelection, selectedAgent, selectedSpecialistId, sessionId, deleteEmptySession, workspaceId, router, resolveAgentConfig]
   );
 
   const handleSelectSession = useCallback(
@@ -622,15 +629,15 @@ export function SessionPageClient() {
 
     // Fallback: create a new session
     const role = selectedAgent;
-    const effectiveProvider = resolveProvider(provider);
-    console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${model}, specialistId=${selectedSpecialistId}`);
-    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, model, undefined, selectedSpecialistId ?? undefined);
+    const { provider: effectiveProvider, model: resolvedModel } = resolveAgentConfig(provider, model);
+    console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, model=${resolvedModel}, role=${role}, specialistId=${selectedSpecialistId}`);
+    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, resolvedModel, undefined, selectedSpecialistId ?? undefined);
     if (result?.sessionId) {
       router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       return result.sessionId;
     }
     return null;
-  }, [acp, sessionId, ensureConnected, selectedAgent, selectedSpecialistId, workspaceId, router, resolveProvider]);
+  }, [acp, sessionId, ensureConnected, selectedAgent, selectedSpecialistId, workspaceId, router, resolveAgentConfig]);
 
   const handleLoadSkill = useCallback(async (name: string): Promise<string | null> => {
     const skill = await skillsHook.loadSkill(name, repoSelection?.path);

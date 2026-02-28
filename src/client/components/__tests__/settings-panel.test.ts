@@ -36,13 +36,24 @@ describe("settings-panel default provider helpers", () => {
     expect(loadDefaultProviders()).toEqual({});
   });
 
-  it("round-trips settings through localStorage", () => {
+  it("round-trips AgentModelConfig settings through localStorage", () => {
     const settings: DefaultProviderSettings = {
-      ROUTA: "claude-code-sdk",
-      CRAFTER: "opencode-sdk",
+      ROUTA: { provider: "claude-code-sdk", model: "claude-opus-4-5" },
+      CRAFTER: { provider: "claude-code-sdk", model: "claude-3-5-haiku-20241022" },
     };
     saveDefaultProviders(settings);
     expect(loadDefaultProviders()).toEqual(settings);
+  });
+
+  it("normalizes old plain-string format to AgentModelConfig", () => {
+    // Old format: { ROUTA: "claude-code-sdk" }
+    localStorage.setItem("routa.defaultProviders", JSON.stringify({
+      ROUTA: "claude-code-sdk",
+      CRAFTER: "opencode-sdk",
+    }));
+    const loaded = loadDefaultProviders();
+    expect(loaded.ROUTA).toEqual({ provider: "claude-code-sdk" });
+    expect(loaded.CRAFTER).toEqual({ provider: "opencode-sdk" });
   });
 
   it("handles invalid JSON gracefully", () => {
@@ -51,9 +62,16 @@ describe("settings-panel default provider helpers", () => {
   });
 
   it("preserves partial settings", () => {
-    saveDefaultProviders({ GATE: "gemini" });
+    saveDefaultProviders({ GATE: { provider: "gemini" } });
     const loaded = loadDefaultProviders();
-    expect(loaded.GATE).toBe("gemini");
+    expect(loaded.GATE).toEqual({ provider: "gemini" });
     expect(loaded.ROUTA).toBeUndefined();
+  });
+
+  it("stores model alongside provider", () => {
+    saveDefaultProviders({ CRAFTER: { provider: "claude-code-sdk", model: "claude-3-5-haiku-20241022" } });
+    const loaded = loadDefaultProviders();
+    expect(loaded.CRAFTER?.provider).toBe("claude-code-sdk");
+    expect(loaded.CRAFTER?.model).toBe("claude-3-5-haiku-20241022");
   });
 });
