@@ -291,6 +291,9 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
   const selectSession = useCallback((sessionId: string) => {
     const client = clientRef.current;
     if (!client) return;
+    // Skip if sessionId is a placeholder (static export mode)
+    if (sessionId === "__placeholder__") return;
+
     sessionIdRef.current = sessionId;
     client.attachSession(sessionId);
     // Reset updates first, then restore history from server

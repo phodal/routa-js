@@ -726,7 +726,14 @@ pub fn run() {
                     println!("[desktop-server] API mode is off, using embedded static UI only");
                 }
                 "rust" => {
-                    // New: Start embedded Rust server (no Node.js dependency!)
+                    // Start embedded Rust server that serves both API and static frontend.
+                    // The Rust server handles SPA routing by returning the correct HTML
+                    // for dynamic routes like /workspace/[id]/sessions/[sessionId].
+                    //
+                    // We navigate the WebView to the HTTP server URL because:
+                    // 1. Tauri's built-in protocol doesn't support SPA fallback for dynamic routes
+                    // 2. The Rust server can serve the correct placeholder HTML for each route
+                    // 3. The `remote` capability allows IPC access from http://127.0.0.1:*
                     match start_rust_server(&app.handle(), &api_host, port) {
                         Ok(()) => {
                             // Wait for the Rust server to become ready

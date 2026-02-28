@@ -83,7 +83,8 @@ export function useCodebases(workspaceId: string): {
   const [codebases, setCodebases] = useState<CodebaseData[]>([]);
 
   const fetchCodebases = useCallback(async () => {
-    if (!workspaceId) return;
+    // Skip if workspaceId is missing or is a placeholder (static export mode)
+    if (!workspaceId || workspaceId === "__placeholder__") return;
     const res = await desktopAwareFetch(`/api/workspaces/${workspaceId}/codebases`);
     if (!res.ok) return;
     const data = await res.json();

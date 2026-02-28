@@ -52,11 +52,80 @@ const BUILTIN_ROLES: { value: AgentRole; label: string }[] = [
   { value: "DEVELOPER", label: "DEVELOPER" },
 ];
 
+/**
+ * Extract route params from URL pathname.
+ * In static export mode, useParams() returns "__placeholder__" because that's what
+ * was used in generateStaticParams(). We need to parse the actual URL instead.
+ *
+ * Returns { workspaceId, sessionId, isResolved } where isResolved indicates
+ * whether the actual URL params have been parsed (vs still showing placeholder).
+ */
+function useRealParams() {
+  const params = useParams();
+
+  // Check if we're in static export mode with placeholder values
+  const isPlaceholder =
+    params.workspaceId === "__placeholder__" ||
+    params.sessionId === "__placeholder__";
+
+  // State to hold the resolved params
+  const [realParams, setRealParams] = useState<{
+    workspaceId: string;
+    sessionId: string;
+    isResolved: boolean;
+  }>({
+    // Start with placeholder values, will be resolved in useEffect
+    workspaceId: params.workspaceId as string,
+    sessionId: params.sessionId as string,
+    isResolved: false,
+  });
+
+  // Resolve params on mount and when URL changes
+  useEffect(() => {
+    if (isPlaceholder) {
+      // Static export mode - parse from URL
+      const pathname = window.location.pathname;
+      const match = pathname.match(/^\/workspace\/([^/]+)\/sessions\/([^/]+)/);
+      if (match) {
+        const newWorkspaceId = match[1];
+        const newSessionId = match[2];
+        // Only update if values changed to avoid unnecessary re-renders
+        if (
+          newWorkspaceId !== realParams.workspaceId ||
+          newSessionId !== realParams.sessionId ||
+          !realParams.isResolved
+        ) {
+          setRealParams({
+            workspaceId: newWorkspaceId,
+            sessionId: newSessionId,
+            isResolved: true,
+          });
+        }
+      }
+    } else {
+      // Normal mode - use Next.js params directly
+      const newWorkspaceId = params.workspaceId as string;
+      const newSessionId = params.sessionId as string;
+      if (
+        newWorkspaceId !== realParams.workspaceId ||
+        newSessionId !== realParams.sessionId ||
+        !realParams.isResolved
+      ) {
+        setRealParams({
+          workspaceId: newWorkspaceId,
+          sessionId: newSessionId,
+          isResolved: true,
+        });
+      }
+    }
+  }, [params.workspaceId, params.sessionId, isPlaceholder, realParams]);
+
+  return realParams;
+}
+
 export function SessionPageClient() {
   const router = useRouter();
-  const params = useParams();
-  const workspaceId = params.workspaceId as string;
-  const sessionId = params.sessionId as string;
+  const { workspaceId, sessionId, isResolved } = useRealParams();
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentRole>("ROUTA");
@@ -180,14 +249,18 @@ export function SessionPageClient() {
 
   // Select the session from URL on mount
   useEffect(() => {
+    // Wait for params to be resolved and not be placeholder
+    if (!isResolved || sessionId === "__placeholder__") return;
     if (sessionId && acp.connected) {
       acp.selectSession(sessionId);
     }
-  }, [sessionId, acp.connected, acp.selectSession]);
+  }, [sessionId, acp.connected, acp.selectSession, isResolved]);
 
   // Restore session metadata (role, provider, model) when navigating to an existing session
   const sessionMetadataLoadedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    // Wait for params to be resolved and not be placeholder
+    if (!isResolved || sessionId === "__placeholder__") return;
     if (!sessionId || !acp.connected) return;
     // Only fetch once per session
     if (sessionMetadataLoadedRef.current.has(sessionId)) return;
@@ -214,7 +287,7 @@ export function SessionPageClient() {
       .catch((err) => {
         console.warn("[SessionPage] Failed to restore session metadata:", err);
       });
-  }, [sessionId, acp.connected, acp.setProvider]);
+  }, [sessionId, acp.connected, acp.setProvider, isResolved]);
 
   // Track if we've already sent the pending prompt for this session
   const pendingPromptSentRef = useRef<Set<string>>(new Set());
@@ -1109,17 +1182,19 @@ export function SessionPageClient() {
 
   useEffect(() => {
     // Don't redirect if:
+    // - URL params not yet resolved (static export mode)
     // - Still loading workspaces
     // - Workspace found in list
     // - Using "default" workspace (always allowed)
+    if (!isResolved) return; // Wait for URL params to be parsed
     if (!workspacesHook.loading && !workspace && !isDefaultWorkspace) {
       router.push("/");
     }
-  }, [workspace, workspacesHook.loading, router, isDefaultWorkspace]);
+  }, [workspace, workspacesHook.loading, router, isDefaultWorkspace, isResolved, workspaceId]);
 
-  // Show loading state while workspaces are loading
-  // But don't block if using "default" workspace
-  if (workspacesHook.loading && !isDefaultWorkspace) {
+  // Show loading state while URL params are being resolved (static export mode)
+  // or while workspaces are loading
+  if (!isResolved || (workspacesHook.loading && !isDefaultWorkspace)) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f1117]">
         <div className="text-gray-400 dark:text-gray-500">Loading...</div>

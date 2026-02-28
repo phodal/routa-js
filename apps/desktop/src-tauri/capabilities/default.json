@@ -5,6 +5,9 @@
   "windows": ["*"],
   "webviews": ["*"],
   "platforms": ["linux", "macOS", "windows"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*", "http://localhost:*"]
+  },
   "permissions": [
     "core:default",
     "core:window:default",

@@ -310,6 +310,9 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
 
   // Connect SSE and fetch initial notes
   useEffect(() => {
+    // Skip if workspaceId is a placeholder (static export mode)
+    if (workspaceId === "__placeholder__") return;
+
     fetchNotes();
     connectSSE();
 
@@ -322,7 +325,7 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
         clearTimeout(reconnectTimerRef.current);
       }
     };
-  }, [fetchNotes, connectSSE]);
+  }, [fetchNotes, connectSSE, workspaceId]);
 
   return {
     notes,

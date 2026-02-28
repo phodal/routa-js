@@ -224,8 +224,9 @@ export function ChatPanel({
 
   // Fetch and process session history when switching sessions
   const fetchSessionHistory = useCallback(async (sessionId: string) => {
-    // Skip if already loaded
+    // Skip if already loaded or if sessionId is a placeholder (static export mode)
     if (loadedHistoryRef.current.has(sessionId)) return;
+    if (sessionId === "__placeholder__") return;
 
     try {
       const res = await desktopAwareFetch(`/api/sessions/${sessionId}/history`, { cache: "no-store" });

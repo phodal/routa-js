@@ -148,12 +148,99 @@ pub async fn start_server_with_state(
         let static_path = std::path::Path::new(static_dir);
         if static_path.exists() && static_path.is_dir() {
             tracing::info!("Serving static frontend from: {}", static_dir);
-            // For Next.js static export with dynamic routes, serve 404.html for all unknown routes.
-            // The 404.html page will handle client-side routing using Next.js router.
-            let serve_dir = tower_http::services::ServeDir::new(static_dir)
-                .fallback(tower_http::services::ServeFile::new(
-                    static_path.join("404.html"),
-                ));
+
+            // For Next.js static export with dynamic routes, we need custom fallback logic.
+            // Next.js generates placeholder files for dynamic routes:
+            // - workspace/__placeholder__.html (for /workspace/[workspaceId])
+            // - workspace/__placeholder__/sessions/__placeholder__.html (for /workspace/[workspaceId]/sessions/[sessionId])
+            //
+            // Additionally, Next.js client navigation requests .txt RSC payload files:
+            // - workspace/default/sessions/abc123.txt → workspace/__placeholder__/sessions/__placeholder__.txt
+            //
+            // We match the URL pattern and serve the corresponding placeholder file.
+            let static_dir_clone = static_dir.clone();
+            let fallback_service =
+                tower::service_fn(move |req: axum::http::Request<axum::body::Body>| {
+                    let static_dir = static_dir_clone.clone();
+                    async move {
+                        let path = req.uri().path();
+
+                        // Check if this is a .txt RSC payload request
+                        let is_rsc_request = path.ends_with(".txt");
+
+                        // Determine which file to serve based on the route pattern.
+                        let (target_file, content_type) = if path.starts_with("/workspace/") {
+                            // Strip .txt extension if present to analyze the path
+                            let clean_path = path.trim_end_matches(".txt");
+                            let segments: Vec<&str> = clean_path
+                                .trim_start_matches("/workspace/")
+                                .split('/')
+                                .filter(|s| !s.is_empty())
+                                .collect();
+
+                            let ext = if is_rsc_request { "txt" } else { "html" };
+                            let content = if is_rsc_request {
+                                "text/x-component; charset=utf-8"
+                            } else {
+                                "text/html; charset=utf-8"
+                            };
+
+                            if segments.len() >= 3 && segments[1] == "sessions" {
+                                // /workspace/{workspaceId}/sessions/{sessionId}[.txt]
+                                (
+                                    format!(
+                                        "workspace/__placeholder__/sessions/__placeholder__.{}",
+                                        ext
+                                    ),
+                                    content,
+                                )
+                            } else if !segments.is_empty() {
+                                // /workspace/{workspaceId}[.txt]
+                                (format!("workspace/__placeholder__.{}", ext), content)
+                            } else {
+                                ("index.html".to_string(), "text/html; charset=utf-8")
+                            }
+                        } else {
+                            ("index.html".to_string(), "text/html; charset=utf-8")
+                        };
+
+                        let file_path = std::path::Path::new(&static_dir).join(&target_file);
+                        tracing::debug!(
+                            "SPA fallback: {} -> {} (rsc={})",
+                            path,
+                            file_path.to_string_lossy(),
+                            is_rsc_request
+                        );
+
+                        let response = match tokio::fs::read(&file_path).await {
+                            Ok(contents) => axum::http::Response::builder()
+                                .status(axum::http::StatusCode::OK)
+                                .header("content-type", content_type)
+                                .body(axum::body::Body::from(contents))
+                                .unwrap(),
+                            Err(_) => {
+                                // If the specific file doesn't exist, fall back to index.html
+                                let index_path =
+                                    std::path::Path::new(&static_dir).join("index.html");
+                                match tokio::fs::read(&index_path).await {
+                                    Ok(contents) => axum::http::Response::builder()
+                                        .status(axum::http::StatusCode::OK)
+                                        .header("content-type", "text/html; charset=utf-8")
+                                        .body(axum::body::Body::from(contents))
+                                        .unwrap(),
+                                    Err(_) => axum::http::Response::builder()
+                                        .status(axum::http::StatusCode::NOT_FOUND)
+                                        .body(axum::body::Body::from("Not found"))
+                                        .unwrap(),
+                                }
+                            }
+                        };
+                        Ok::<_, std::convert::Infallible>(response)
+                    }
+                });
+
+            let serve_dir =
+                tower_http::services::ServeDir::new(static_dir).fallback(fallback_service);
             app = app.fallback_service(serve_dir);
         } else {
             tracing::warn!(

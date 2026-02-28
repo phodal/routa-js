@@ -18,7 +18,7 @@ export default defineConfig({
     // Run with a visible browser window for local development / debugging
     {
       name: "chromium-headed",
-      use: { browserName: "chromium", headless: false, slowMo: 200 },
+      use: { browserName: "chromium", headless: false, launchOptions: { slowMo: 200 } },
     },
   ],
 });
