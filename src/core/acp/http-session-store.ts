@@ -15,6 +15,8 @@
 import { getProviderAdapter } from "./provider-adapter";
 import { TraceRecorder } from "./provider-adapter/trace-recorder";
 import { hydrateSessionsFromDb } from "./session-db-persister";
+import { AgentEventBridge, makeStartedEvent } from "./agent-event-bridge";
+import type { WorkspaceAgentEvent } from "./agent-event-bridge";
 
 export interface RoutaSessionRecord {
   sessionId: string;
@@ -115,6 +117,10 @@ class HttpSessionStore {
   private messageHistory = new Map<string, SessionUpdateNotification[]>();
   /** TraceRecorder handles all trace recording with provider-specific normalization */
   private traceRecorder = new TraceRecorder();
+  /** AgentEventBridge instances per session for semantic event conversion */
+  private agentEventBridges = new Map<string, AgentEventBridge>();
+  /** Subscribers for WorkspaceAgentEvents per session */
+  private agentEventSubscribers = new Map<string, Set<(event: WorkspaceAgentEvent) => void>>();
   /**
    * Sessions currently streaming a prompt response via their own SSE body.
    * While in streaming mode, pushNotification() stores to history/trace but
@@ -159,6 +165,15 @@ class HttpSessionStore {
     this.sessions.set(record.sessionId, record);
     this.updateAccessTime(record.sessionId);
 
+    // Initialize AgentEventBridge for new sessions
+    if (!this.agentEventBridges.has(record.sessionId)) {
+      const bridge = new AgentEventBridge(record.sessionId);
+      this.agentEventBridges.set(record.sessionId, bridge);
+      // Emit agent_started event
+      const startedEvent = makeStartedEvent(record.sessionId, record.provider ?? "unknown");
+      this.dispatchAgentEvent(record.sessionId, startedEvent);
+    }
+
     // Periodic cleanup check (runs every 5 minutes)
     this.maybeCleanup();
   }
@@ -179,9 +194,30 @@ class HttpSessionStore {
     this.traceRecorder.cleanupSession(sessionId);
     this.messageHistory.delete(sessionId);
     this.pendingNotifications.delete(sessionId);
+    // Clean up AgentEventBridge
+    this.agentEventBridges.get(sessionId)?.cleanup();
+    this.agentEventBridges.delete(sessionId);
+    this.agentEventSubscribers.delete(sessionId);
     // Detach SSE if connected
     this.sseControllers.delete(sessionId);
     return this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Subscribe to WorkspaceAgentEvents for a session.
+   * Returns an unsubscribe function.
+   */
+  subscribeToAgentEvents(
+    sessionId: string,
+    handler: (event: WorkspaceAgentEvent) => void
+  ): () => void {
+    let subscribers = this.agentEventSubscribers.get(sessionId);
+    if (!subscribers) {
+      subscribers = new Set();
+      this.agentEventSubscribers.set(sessionId, subscribers);
+    }
+    subscribers.add(handler);
+    return () => subscribers!.delete(handler);
   }
 
   /**
@@ -299,11 +335,19 @@ class HttpSessionStore {
     // Normalize the raw notification using the provider adapter
     const normalized = adapter.normalize(sessionId, notification);
 
-    // Record traces from normalized messages
+    // Record traces and dispatch semantic events from normalized messages
     if (normalized) {
       const updates = Array.isArray(normalized) ? normalized : [normalized];
+      const bridge = this.agentEventBridges.get(sessionId);
       for (const update of updates) {
         this.traceRecorder.recordFromUpdate(update, cwd);
+        // Convert to semantic WorkspaceAgentEvents and dispatch to subscribers
+        if (bridge) {
+          const agentEvents = bridge.process(update);
+          for (const agentEvent of agentEvents) {
+            this.dispatchAgentEvent(sessionId, agentEvent);
+          }
+        }
       }
     }
 
@@ -381,6 +425,18 @@ class HttpSessionStore {
       });
     }
     this.pendingNotifications.delete(sessionId);
+  }
+
+  private dispatchAgentEvent(sessionId: string, event: WorkspaceAgentEvent): void {
+    const subscribers = this.agentEventSubscribers.get(sessionId);
+    if (!subscribers || subscribers.size === 0) return;
+    for (const handler of subscribers) {
+      try {
+        handler(event);
+      } catch {
+        // subscriber errors must not break the notification pipeline
+      }
+    }
   }
 
   private writeSse(controller: Controller, payload: unknown) {
