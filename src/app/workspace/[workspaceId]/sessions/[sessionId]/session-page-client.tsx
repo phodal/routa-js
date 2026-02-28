@@ -32,7 +32,7 @@ import type {RepoSelection} from "@/client/components/repo-picker";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
 import {ProtocolBadge} from "@/app/protocol-badge";
 import {consumePendingPrompt} from "@/client/utils/pending-prompt";
-import {SettingsPanel, loadDefaultProviders, loadProviderConnectionConfig} from "@/client/components/settings-panel";
+import {SettingsPanel, loadDefaultProviders, loadProviderConnectionConfig, getModelDefinitionByAlias} from "@/client/components/settings-panel";
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
@@ -581,12 +581,14 @@ export function SessionPageClient() {
     const defaults = loadDefaultProviders();
     const roleConfig = defaults[selectedAgent];
     const effectiveProvider = explicitProvider || roleConfig?.provider || acp.selectedProvider;
+    const modelAliasOrName = roleConfig?.model;
+    const def = modelAliasOrName ? getModelDefinitionByAlias(modelAliasOrName) : undefined;
     const conn = loadProviderConnectionConfig(effectiveProvider);
     return {
       provider: effectiveProvider,
-      model: roleConfig?.model ?? conn.model,
-      baseUrl: conn.baseUrl,
-      apiKey: conn.apiKey,
+      model: def ? def.modelName : (modelAliasOrName ?? conn.model),
+      baseUrl: def?.baseUrl ?? conn.baseUrl,
+      apiKey: def?.apiKey ?? conn.apiKey,
     };
   }, [selectedAgent, acp.selectedProvider]);
 

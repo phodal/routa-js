@@ -18,7 +18,7 @@ import { useSkills } from "../hooks/use-skills";
 import { useWorkspaces, useCodebases } from "../hooks/use-workspaces";
 import type { RepoSelection } from "./repo-picker";
 import { storePendingPrompt } from "../utils/pending-prompt";
-import { loadProviderConnectionConfig } from "./settings-panel";
+import { loadProviderConnectionConfig, getModelDefinitionByAlias } from "./settings-panel";
 
 type AgentRole = "ROUTA" | "DEVELOPER";
 
@@ -148,17 +148,19 @@ export function HomeInput({
         const wsId = selectedWorkspaceId ?? undefined;
         const effectiveProvider = context.provider ?? acp.selectedProvider;
         const conn = loadProviderConnectionConfig(effectiveProvider);
+        const modelAliasOrName = context.model ?? conn.model;
+        const def = modelAliasOrName ? getModelDefinitionByAlias(modelAliasOrName) : undefined;
         const result = await acp.createSession(
           context.cwd ?? repoSelection?.path,
           context.provider,
           context.mode,
           selectedRole,
           wsId,
-          context.model ?? conn.model,
+          def ? def.modelName : modelAliasOrName,
           idempotencyKey,
           undefined, // specialistId
-          conn.baseUrl,
-          conn.apiKey,
+          def?.baseUrl ?? conn.baseUrl,
+          def?.apiKey ?? conn.apiKey,
         );
 
         if (result?.sessionId) {
