@@ -54,6 +54,7 @@ pub enum NormalizedEventType {
     AgentMessage,
     AgentThought,
     UserMessage,
+    PlanUpdate,
     TurnComplete,
     Error,
 }
@@ -109,6 +110,15 @@ pub struct NormalizedSessionUpdate {
     pub event_type: NormalizedEventType,
     pub tool_call: Option<NormalizedToolCall>,
     pub message: Option<NormalizedMessage>,
+    /// Plan items (for PlanUpdate events)
+    pub plan_items: Option<Vec<NormalizedPlanItem>>,
+}
+
+/// A single plan item in a plan_update event.
+#[derive(Debug, Clone)]
+pub struct NormalizedPlanItem {
+    pub description: String,
+    pub status: String,
 }
 
 /// Normalized message content.

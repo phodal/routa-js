@@ -55,7 +55,7 @@ impl TraceRecorder {
             NormalizedEventType::AgentThought => self.handle_agent_thought(update, cwd).await,
             NormalizedEventType::UserMessage => self.handle_user_message(update, cwd).await,
             NormalizedEventType::TurnComplete => self.flush_buffers(&update.session_id, cwd, &update.provider).await,
-            NormalizedEventType::Error => {}
+            NormalizedEventType::PlanUpdate | NormalizedEventType::Error => {}
         }
     }
 
