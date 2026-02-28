@@ -32,7 +32,12 @@
     "api:validate:full": "./scripts/validate-api-parity.sh --runtime",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --project=chromium-headed",
+    "test:e2e:specialist": "playwright test e2e/specialist-selection.spec.ts",
+    "test:e2e:specialist:headed": "playwright test e2e/specialist-selection.spec.ts --project=chromium-headed",
+    "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.10",
