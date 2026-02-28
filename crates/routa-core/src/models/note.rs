@@ -69,6 +69,9 @@ pub struct Note {
     pub title: String,
     pub content: String,
     pub workspace_id: String,
+    /// Session ID that created this note (for session-scoped grouping)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     pub metadata: NoteMetadata,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -88,6 +91,29 @@ impl Note {
             title,
             content,
             workspace_id,
+            session_id: None,
+            metadata: metadata.unwrap_or_default(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    /// Create a new note with session ID
+    pub fn new_with_session(
+        id: String,
+        title: String,
+        content: String,
+        workspace_id: String,
+        session_id: Option<String>,
+        metadata: Option<NoteMetadata>,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            id,
+            title,
+            content,
+            workspace_id,
+            session_id,
             metadata: metadata.unwrap_or_default(),
             created_at: now,
             updated_at: now,

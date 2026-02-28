@@ -180,6 +180,7 @@ impl Database {
                 CREATE TABLE IF NOT EXISTS notes (
                     id                  TEXT NOT NULL,
                     workspace_id        TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    session_id          TEXT,
                     title               TEXT NOT NULL,
                     content             TEXT NOT NULL DEFAULT '',
                     type                TEXT NOT NULL DEFAULT 'general',
@@ -241,9 +242,12 @@ impl Database {
         self.with_conn(|conn| {
             // Add session_id to tasks if it doesn't exist yet (ignore error if already present)
             let _ = conn.execute("ALTER TABLE tasks ADD COLUMN session_id TEXT", []);
-            // Now it's safe to create the index
+            // Add session_id to notes if it doesn't exist yet (ignore error if already present)
+            let _ = conn.execute("ALTER TABLE notes ADD COLUMN session_id TEXT", []);
+            // Create indexes for session_id columns
             conn.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);"
+                "CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
+                 CREATE INDEX IF NOT EXISTS idx_notes_session ON notes(session_id);"
             )
         })
     }

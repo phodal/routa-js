@@ -21,10 +21,11 @@ impl NoteStore {
         self.db
             .with_conn_async(move |conn| {
                 conn.execute(
-                    "INSERT INTO notes (id, workspace_id, title, content, type, task_status,
+                    "INSERT INTO notes (id, workspace_id, session_id, title, content, type, task_status,
                      assigned_agent_ids, parent_note_id, linked_task_id, custom_metadata, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                      ON CONFLICT(workspace_id, id) DO UPDATE SET
+                       session_id = excluded.session_id,
                        title = excluded.title,
                        content = excluded.content,
                        type = excluded.type,
@@ -37,6 +38,7 @@ impl NoteStore {
                     rusqlite::params![
                         n.id,
                         n.workspace_id,
+                        n.session_id,
                         n.title,
                         n.content,
                         n.metadata.note_type.as_str(),
@@ -60,7 +62,7 @@ impl NoteStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, workspace_id, title, content, type, task_status,
+                    "SELECT id, workspace_id, session_id, title, content, type, task_status,
                      assigned_agent_ids, parent_note_id, linked_task_id, custom_metadata, created_at, updated_at
                      FROM notes WHERE id = ?1 AND workspace_id = ?2",
                 )?;
@@ -75,7 +77,7 @@ impl NoteStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, workspace_id, title, content, type, task_status,
+                    "SELECT id, workspace_id, session_id, title, content, type, task_status,
                      assigned_agent_ids, parent_note_id, linked_task_id, custom_metadata, created_at, updated_at
                      FROM notes WHERE workspace_id = ?1 ORDER BY created_at DESC",
                 )?;
@@ -97,7 +99,7 @@ impl NoteStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, workspace_id, title, content, type, task_status,
+                    "SELECT id, workspace_id, session_id, title, content, type, task_status,
                      assigned_agent_ids, parent_note_id, linked_task_id, custom_metadata, created_at, updated_at
                      FROM notes WHERE workspace_id = ?1 AND type = ?2 ORDER BY created_at DESC",
                 )?;
@@ -135,33 +137,38 @@ impl NoteStore {
 
 use rusqlite::Row;
 
+/// Convert a database row to a Note.
+/// Column order: id(0), workspace_id(1), session_id(2), title(3), content(4), type(5),
+///               task_status(6), assigned_agent_ids(7), parent_note_id(8), linked_task_id(9),
+///               custom_metadata(10), created_at(11), updated_at(12)
 fn row_to_note(row: &Row<'_>) -> Note {
-    let created_ms: i64 = row.get(10).unwrap_or(0);
-    let updated_ms: i64 = row.get(11).unwrap_or(0);
+    let created_ms: i64 = row.get(11).unwrap_or(0);
+    let updated_ms: i64 = row.get(12).unwrap_or(0);
 
     let assigned_agent_ids: Option<Vec<String>> = row
-        .get::<_, Option<String>>(6)
+        .get::<_, Option<String>>(7)
         .unwrap_or(None)
         .and_then(|s| serde_json::from_str(&s).ok());
     let custom: Option<HashMap<String, String>> = row
-        .get::<_, Option<String>>(9)
+        .get::<_, Option<String>>(10)
         .unwrap_or(None)
         .and_then(|s| serde_json::from_str(&s).ok());
 
     Note {
         id: row.get(0).unwrap_or_default(),
         workspace_id: row.get(1).unwrap_or_default(),
-        title: row.get(2).unwrap_or_default(),
-        content: row.get(3).unwrap_or_default(),
+        session_id: row.get(2).unwrap_or(None),
+        title: row.get(3).unwrap_or_default(),
+        content: row.get(4).unwrap_or_default(),
         metadata: NoteMetadata {
-            note_type: NoteType::from_str(&row.get::<_, String>(4).unwrap_or_default()),
+            note_type: NoteType::from_str(&row.get::<_, String>(5).unwrap_or_default()),
             task_status: row
-                .get::<_, Option<String>>(5)
+                .get::<_, Option<String>>(6)
                 .unwrap_or(None)
                 .and_then(|s| TaskStatus::from_str(&s)),
             assigned_agent_ids,
-            parent_note_id: row.get(7).unwrap_or(None),
-            linked_task_id: row.get(8).unwrap_or(None),
+            parent_note_id: row.get(8).unwrap_or(None),
+            linked_task_id: row.get(9).unwrap_or(None),
             custom,
         },
         created_at: chrono::DateTime::from_timestamp_millis(created_ms)

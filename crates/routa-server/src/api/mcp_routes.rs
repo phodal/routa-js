@@ -762,12 +762,19 @@ async fn execute_tool(
             let note_id = args.get("noteId").and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let note = crate::models::note::Note::new(
+            let session_id = args.get("sessionId").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let note_type_str = args.get("type").and_then(|v| v.as_str()).unwrap_or("general");
+            let note_type = crate::models::note::NoteType::from_str(note_type_str);
+            let note = crate::models::note::Note::new_with_session(
                 note_id.clone(),
                 title.to_string(),
                 content.to_string(),
                 workspace_id.to_string(),
-                None,
+                session_id,
+                Some(crate::models::note::NoteMetadata {
+                    note_type,
+                    ..Default::default()
+                }),
             );
             match state.note_store.save(&note).await {
                 Ok(_) => tool_result_json(&serde_json::json!({
@@ -789,9 +796,14 @@ async fn execute_tool(
         "set_note_content" => {
             let note_id = args.get("noteId").and_then(|v| v.as_str()).unwrap_or("");
             let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let session_id = args.get("sessionId").and_then(|v| v.as_str()).map(|s| s.to_string());
             match state.note_store.get(note_id, workspace_id).await {
                 Ok(Some(mut note)) => {
                     note.content = content.to_string();
+                    // Update session_id if provided and note doesn't have one yet
+                    if note.session_id.is_none() && session_id.is_some() {
+                        note.session_id = session_id;
+                    }
                     note.updated_at = chrono::Utc::now();
                     match state.note_store.save(&note).await {
                         Ok(_) => tool_result_json(&serde_json::json!({
@@ -802,22 +814,29 @@ async fn execute_tool(
                     }
                 }
                 Ok(None) => {
-                    // Auto-create if spec note
-                    if note_id == "spec" {
-                        let note = crate::models::note::Note::new(
-                            "spec".to_string(),
-                            "Spec".to_string(),
+                    // Auto-create if spec or task note
+                    if note_id == "spec" || note_id == "task" {
+                        let note_type = if note_id == "spec" {
+                            crate::models::note::NoteType::Spec
+                        } else {
+                            crate::models::note::NoteType::Task
+                        };
+                        let title = if note_id == "spec" { "Spec" } else { "Tasks" };
+                        let note = crate::models::note::Note::new_with_session(
+                            note_id.to_string(),
+                            title.to_string(),
                             content.to_string(),
                             workspace_id.to_string(),
+                            session_id,
                             Some(crate::models::note::NoteMetadata {
-                                note_type: crate::models::note::NoteType::Spec,
+                                note_type,
                                 ..Default::default()
                             }),
                         );
                         match state.note_store.save(&note).await {
                             Ok(_) => tool_result_json(&serde_json::json!({
                                 "success": true,
-                                "noteId": "spec",
+                                "noteId": note_id,
                                 "created": true
                             })),
                             Err(e) => tool_result_error(&e.to_string()),
