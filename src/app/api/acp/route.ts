@@ -30,6 +30,7 @@ import { isServerlessEnvironment } from "@/core/acp/api-based-providers";
 import { shouldUseOpencodeAdapter, isOpencodeServerConfigured } from "@/core/acp/opencode-sdk-adapter";
 import type { OpencodeSdkAdapter } from "@/core/acp/opencode-sdk-adapter";
 import { isClaudeCodeSdkConfigured } from "@/core/acp/claude-code-sdk-adapter";
+import type { AgentInstanceConfig } from "@/core/acp/agent-instance-factory";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { getRoutaSystem } from "@/core/routa-system";
 import { AgentRole } from "@/core/models/agent";
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
       const modeId = (p.modeId as string | undefined) ?? (p.mode as string | undefined);
       const role = (p.role as string | undefined)?.toUpperCase();
       const model = (p.model as string | undefined);
+      const specialistId = (p.specialistId as string | undefined);
       const workspaceId = (p.workspaceId as string) || "default";
       const idempotencyKey = p.idempotencyKey as string | undefined;
 
@@ -281,10 +283,18 @@ export async function POST(request: NextRequest) {
         }
 
         // Always use SDK adapter for claude-code-sdk provider
+        // Build AgentInstanceConfig from session params for model resolution
+        const instanceConfig: AgentInstanceConfig = {
+          model,
+          provider: "claude-code-sdk",
+          specialistId,
+          role,
+        };
         acpSessionId = await manager.createClaudeCodeSdkSession(
           sessionId,
           cwd,
-          forwardSessionUpdate
+          forwardSessionUpdate,
+          instanceConfig,
         );
       } else if (isClaudeCode) {
         // ── Claude Code: stream-json protocol with MCP (CLI process) ───
@@ -536,7 +546,9 @@ export async function POST(request: NextRequest) {
             acpSessionId = await manager.createClaudeCodeSdkSession(
               sessionId,
               cwd,
-              forwardSessionUpdate
+              forwardSessionUpdate,
+              // Auto-created sessions pass role for tier-based model resolution
+              { provider: "claude-code-sdk", role },
             );
           } else if (isClaudeCode) {
             // Claude Code CLI session

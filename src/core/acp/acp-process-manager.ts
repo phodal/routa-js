@@ -8,6 +8,7 @@ import {ClaudeCodeSdkAdapter, shouldUseClaudeCodeSdkAdapter} from "@/core/acp/cl
 import {WorkspaceAgentAdapter, type WorkspaceAgentAdapterOptions} from "@/core/acp/workspace-agent";
 import {isServerlessEnvironment} from "@/core/acp/api-based-providers";
 import {getHttpSessionStore} from "@/core/acp/http-session-store";
+import {AgentInstanceFactory, getAgentInstanceManager, type AgentInstanceConfig} from "@/core/acp/agent-instance-factory";
 import {getDatabaseDriver, getPostgresDatabase} from "@/core/db/index";
 import {PgAcpSessionStore} from "@/core/db/pg-acp-session-store";
 
@@ -238,15 +239,23 @@ export class AcpProcessManager {
      * Create a session using Claude Code SDK adapter (for serverless environments).
      * This is public so that the API route can explicitly request SDK-based session
      * when the provider is 'claude-code-sdk'.
+     *
+     * @param instanceConfig - Optional config from AgentInstanceFactory to set model/specialist.
+     *   If omitted, the adapter falls back to env-var / SDK defaults.
      */
     async createClaudeCodeSdkSession(
         sessionId: string,
         cwd: string,
-        onNotification: NotificationHandler
+        onNotification: NotificationHandler,
+        instanceConfig?: AgentInstanceConfig,
     ): Promise<string> {
         console.log(`[AcpProcessManager] Using Claude Code SDK adapter for serverless environment`);
 
-        const adapter = new ClaudeCodeSdkAdapter(cwd, onNotification);
+        const { adapter, resolved } = AgentInstanceFactory.createClaudeCodeSdkAdapter(
+            cwd,
+            onNotification,
+            instanceConfig,
+        );
         await adapter.connect();
         const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
 
@@ -257,7 +266,10 @@ export class AcpProcessManager {
             createdAt: new Date(),
         });
 
-        console.log(`[AcpProcessManager] Claude Code SDK session created: ${acpSessionId}`);
+        // Track instance config for observability
+        getAgentInstanceManager().register(sessionId, resolved);
+
+        console.log(`[AcpProcessManager] Claude Code SDK session created: ${acpSessionId} (model: ${resolved.resolvedModel ?? 'default'})`);
         return acpSessionId;
     }
 

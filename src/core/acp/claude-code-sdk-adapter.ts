@@ -107,10 +107,20 @@ export class ClaudeCodeSdkAdapter {
    * we fall back to dispatching text from the assistant message blocks.
    */
   private _hasSeenStreamTextDelta = false;
+  /** Per-instance model override — takes precedence over env-var config. */
+  private _modelOverride: string | undefined;
+  /** Per-instance maxTurns override. */
+  private _maxTurnsOverride: number | undefined;
 
-  constructor(cwd: string, onNotification: NotificationHandler) {
+  constructor(
+    cwd: string,
+    onNotification: NotificationHandler,
+    options?: { model?: string; maxTurns?: number }
+  ) {
     this.cwd = cwd;
     this.onNotification = onNotification;
+    this._modelOverride = options?.model;
+    this._maxTurnsOverride = options?.maxTurns;
   }
 
   get alive(): boolean {
@@ -126,6 +136,7 @@ export class ClaudeCodeSdkAdapter {
    */
   async connect(): Promise<void> {
     const config = getClaudeCodeSdkConfig();
+    const effectiveModel = this._modelOverride ?? config.model;
 
     if (!config.apiKey) {
       throw new Error(
@@ -149,7 +160,7 @@ export class ClaudeCodeSdkAdapter {
 
     this.sessionId = `claude-sdk-${Date.now()}`;
     this._alive = true;
-    console.log(`[ClaudeCodeSdkAdapter] Initialized with model: ${config.model}`);
+    console.log(`[ClaudeCodeSdkAdapter] Initialized with model: ${effectiveModel}${this._modelOverride ? ' (per-instance override)' : ''}`);
     if (config.baseUrl) {
       console.log(`[ClaudeCodeSdkAdapter] Using custom API endpoint: ${config.baseUrl}`);
     }
@@ -211,8 +222,8 @@ export class ClaudeCodeSdkAdapter {
     try {
       const queryOptions: Parameters<typeof query>[0]["options"] = {
         cwd: promptCwd,
-        model: config.model,
-        maxTurns: 30,
+        model: this._modelOverride ?? config.model,
+        maxTurns: this._maxTurnsOverride ?? 30,
         abortController: this.abortController,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
@@ -390,8 +401,8 @@ export class ClaudeCodeSdkAdapter {
       // Build query options with session continuity support
       const queryOptions: Parameters<typeof query>[0]["options"] = {
         cwd: promptCwd,
-        model: config.model,
-        maxTurns: 30,
+        model: this._modelOverride ?? config.model,
+        maxTurns: this._maxTurnsOverride ?? 30,
         abortController: this.abortController,
         // Allow the agent to execute tools without interactive permission prompts.
         // Required for autonomous operation in serverless environments.

@@ -58,6 +58,8 @@ export interface UseAcpActions {
     model?: string,
     /** Idempotency key to prevent duplicate session creation */
     idempotencyKey?: string,
+    /** Specialist ID for per-specialist model configuration */
+    specialistId?: string,
   ) => Promise<AcpNewSessionResult | null>;
   selectSession: (sessionId: string) => void;
   setProvider: (provider: string) => void;
@@ -203,6 +205,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       workspaceId?: string,
       model?: string,
       idempotencyKey?: string,
+      specialistId?: string,
     ): Promise<AcpNewSessionResult | null> => {
       const client = clientRef.current;
       if (!client) return null;
@@ -218,6 +221,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           workspaceId,
           model,
           idempotencyKey,
+          specialistId,
         });
         sessionIdRef.current = result.sessionId;
         setState((s) => ({

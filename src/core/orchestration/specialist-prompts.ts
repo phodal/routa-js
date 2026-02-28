@@ -28,6 +28,9 @@ export interface SpecialistConfig {
   systemPrompt: string;
   roleReminder: string;
   source?: "user" | "bundled" | "hardcoded";
+  /** Optional model override (e.g. "claude-3-5-haiku-20241022"). Takes precedence over tier-based selection. */
+  model?: string;
+  enabled?: boolean;
 }
 
 // ─── Hardcoded Fallbacks ─────────────────────────────────────────────────

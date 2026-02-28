@@ -186,6 +186,8 @@ export class PostgresSpecialistStore implements SpecialistStore {
       systemPrompt: record.systemPrompt as string,
       roleReminder: record.roleReminder as string,
       source: record.source as "user" | "bundled" | "hardcoded",
+      model: (record.model as string) ?? undefined,
+      enabled: record.enabled as boolean ?? true,
     };
   }
 }

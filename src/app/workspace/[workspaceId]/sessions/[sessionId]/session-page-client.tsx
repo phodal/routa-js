@@ -36,6 +36,22 @@ import {SettingsPanel, loadDefaultProviders} from "@/client/components/settings-
 
 type AgentRole = "CRAFTER" | "ROUTA" | "GATE" | "DEVELOPER";
 
+/** Specialist loaded from DB for the agent selector */
+interface SpecialistOption {
+  id: string;
+  name: string;
+  role: AgentRole;
+  model?: string;
+}
+
+/** Built-in roles always available in the selector */
+const BUILTIN_ROLES: { value: AgentRole; label: string }[] = [
+  { value: "CRAFTER", label: "CRAFTER" },
+  { value: "ROUTA", label: "ROUTA" },
+  { value: "GATE", label: "GATE" },
+  { value: "DEVELOPER", label: "DEVELOPER" },
+];
+
 export function SessionPageClient() {
   const router = useRouter();
   const params = useParams();
@@ -44,6 +60,8 @@ export function SessionPageClient() {
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<AgentRole>("ROUTA");
+  const [selectedSpecialistId, setSelectedSpecialistId] = useState<string | null>(null);
+  const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
   const [showAgentToast, setShowAgentToast] = useState(false);
   const [repoSelection, setRepoSelection] = useState<RepoSelection | null>(null);
   const [routaTasks, setRoutaTasks] = useState<ParsedTask[]>([]);
@@ -115,6 +133,30 @@ export function SessionPageClient() {
   }, []);
   const agentInstallCloseRef = useRef<HTMLButtonElement>(null);
   const installAgentsButtonRef = useRef<HTMLButtonElement>(null);
+
+  // ── Load custom specialists for agent selector ──────────────────────
+  useEffect(() => {
+    const loadSpecialists = async () => {
+      try {
+        const res = await fetch("/api/specialists");
+        if (res.ok) {
+          const data = await res.json();
+          const items: SpecialistOption[] = (data.specialists || [])
+            .filter((s: any) => s.enabled !== false)
+            .map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              role: s.role as AgentRole,
+              model: s.model,
+            }));
+          setSpecialists(items);
+        }
+      } catch {
+        // Specialists are optional — DB may not have the table yet
+      }
+    };
+    loadSpecialists();
+  }, [showSpecialistManager]); // Reload when specialist manager closes
 
   // ── CRAFTERs view state ──────────────────────────────────────────────
   const [crafterAgents, setCrafterAgents] = useState<CrafterAgent[]>([]);
@@ -551,13 +593,13 @@ export function SessionPageClient() {
       // Always pass the selected role - don't skip CRAFTER
       const role = selectedAgent;
       const effectiveProvider = resolveProvider(provider);
-      console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, role=${role}`);
-      const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId);
+      console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, role=${role}, specialistId=${selectedSpecialistId}`);
+      const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId, undefined, undefined, selectedSpecialistId ?? undefined);
       if (result?.sessionId) {
         router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       }
     },
-    [acp, ensureConnected, repoSelection, selectedAgent, sessionId, deleteEmptySession, workspaceId, router, resolveProvider]
+    [acp, ensureConnected, repoSelection, selectedAgent, selectedSpecialistId, sessionId, deleteEmptySession, workspaceId, router, resolveProvider]
   );
 
   const handleSelectSession = useCallback(
@@ -581,28 +623,42 @@ export function SessionPageClient() {
     // Fallback: create a new session
     const role = selectedAgent;
     const effectiveProvider = resolveProvider(provider);
-    console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${model}`);
-    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, model);
+    console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${model}, specialistId=${selectedSpecialistId}`);
+    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, model, undefined, selectedSpecialistId ?? undefined);
     if (result?.sessionId) {
       router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       return result.sessionId;
     }
     return null;
-  }, [acp, sessionId, ensureConnected, selectedAgent, workspaceId, router, resolveProvider]);
+  }, [acp, sessionId, ensureConnected, selectedAgent, selectedSpecialistId, workspaceId, router, resolveProvider]);
 
   const handleLoadSkill = useCallback(async (name: string): Promise<string | null> => {
     const skill = await skillsHook.loadSkill(name, repoSelection?.path);
     return skill?.content ?? null;
   }, [skillsHook, repoSelection?.path]);
 
-  const handleAgentChange = useCallback((role: AgentRole) => {
-    console.log(`[handleAgentChange] Changing agent role to: ${role}`);
-    setSelectedAgent(role);
-    if (role === "ROUTA") {
-      setShowAgentToast(true);
-      setTimeout(() => setShowAgentToast(false), 2500);
+  const handleAgentChange = useCallback((value: string) => {
+    // Check if selecting a custom specialist (prefixed with "specialist:")
+    if (value.startsWith("specialist:")) {
+      const specId = value.slice("specialist:".length);
+      const spec = specialists.find((s) => s.id === specId);
+      if (spec) {
+        console.log(`[handleAgentChange] Selecting specialist: ${spec.name} (id=${specId}, role=${spec.role})`);
+        setSelectedAgent(spec.role);
+        setSelectedSpecialistId(specId);
+      }
+    } else {
+      // Built-in role selected
+      const role = value as AgentRole;
+      console.log(`[handleAgentChange] Changing agent role to: ${role}`);
+      setSelectedAgent(role);
+      setSelectedSpecialistId(null);
+      if (role === "ROUTA") {
+        setShowAgentToast(true);
+        setTimeout(() => setShowAgentToast(false), 2500);
+      }
     }
-  }, []);
+  }, [specialists]);
 
   // ── Routa Task Panel Handlers ─────────────────────────────────────────
   const handleTasksDetected = useCallback(async (tasks: ParsedTask[]) => {
@@ -1119,14 +1175,26 @@ export function SessionPageClient() {
         {/* Agent selector */}
         <div className="relative">
           <select
-            value={selectedAgent}
-            onChange={(e) => handleAgentChange(e.target.value as AgentRole)}
+            value={selectedSpecialistId ? `specialist:${selectedSpecialistId}` : selectedAgent}
+            onChange={(e) => handleAgentChange(e.target.value)}
             className="appearance-none pl-2.5 pr-6 py-0.5 text-xs font-medium rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 cursor-pointer focus:ring-1 focus:ring-blue-500"
           >
-            <option value="CRAFTER">CRAFTER</option>
-            <option value="ROUTA">ROUTA</option>
-            <option value="GATE">GATE</option>
-            <option value="DEVELOPER">DEVELOPER</option>
+            {/* Built-in roles */}
+            {BUILTIN_ROLES.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+            {/* Custom specialists from DB */}
+            {specialists.length > 0 && (
+              <optgroup label="Specialists">
+                {specialists.map((s) => (
+                  <option key={s.id} value={`specialist:${s.id}`}>
+                    {s.name}{s.model ? ` (${s.model})` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />

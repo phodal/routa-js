@@ -126,6 +126,7 @@ export class BrowserAcpClient {
     workspaceId?: string;
     model?: string;
     idempotencyKey?: string;
+    specialistId?: string;
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", {
       cwd: params.cwd,
@@ -138,6 +139,7 @@ export class BrowserAcpClient {
       workspaceId: params.workspaceId,
       model: params.model,
       idempotencyKey: params.idempotencyKey,
+      specialistId: params.specialistId,
     });
     this._sessionId = result.sessionId;
 
