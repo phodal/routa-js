@@ -125,19 +125,19 @@ export async function ensureMcpForProvider(
 
   switch (baseId) {
     case "opencode":
-      return ensureMcpForOpenCode(mcpEndpoint, cfg.workspaceId, customServers);
+      return await ensureMcpForOpenCode(mcpEndpoint, cfg.workspaceId, customServers);
     case "auggie":
-      return ensureMcpForAuggie(mcpEndpoint, cfg.workspaceId, customServers);
+      return await ensureMcpForAuggie(mcpEndpoint, cfg.workspaceId, customServers);
     case "claude":
       return ensureMcpForClaude(mcpEndpoint, cfg.workspaceId, customServers);
     case "codex":
-      return ensureMcpForCodex(mcpEndpoint, customServers);
+      return await ensureMcpForCodex(mcpEndpoint, customServers);
     case "gemini":
-      return ensureMcpForGemini(mcpEndpoint, customServers);
+      return await ensureMcpForGemini(mcpEndpoint, customServers);
     case "kimi":
-      return ensureMcpForKimi(mcpEndpoint, customServers);
+      return await ensureMcpForKimi(mcpEndpoint, customServers);
     case "copilot":
-      return ensureMcpForCopilot(mcpEndpoint, cfg.workspaceId, customServers);
+      return await ensureMcpForCopilot(mcpEndpoint, cfg.workspaceId, customServers);
     default:
       return { mcpConfigs: [], summary: `${providerId}: unknown` };
   }
@@ -152,17 +152,19 @@ export async function ensureMcpForProvider(
 const OPENCODE_CONFIG_DIR = path.join(os.homedir(), ".config", "opencode");
 const OPENCODE_CONFIG_FILE = path.join(OPENCODE_CONFIG_DIR, "opencode.json");
 
-function ensureMcpForOpenCode(
+async function ensureMcpForOpenCode(
   mcpEndpoint: string,
   _workspaceId?: string,
   customServers: CustomMcpServerConfig[] = [],
-): McpSetupResult {
+): Promise<McpSetupResult> {
   try {
     // Read existing config (or start fresh)
     let existing: Record<string, unknown> = {};
-    if (fs.existsSync(OPENCODE_CONFIG_FILE)) {
-      const raw = fs.readFileSync(OPENCODE_CONFIG_FILE, "utf-8");
+    try {
+      const raw = await fs.promises.readFile(OPENCODE_CONFIG_FILE, "utf-8");
       existing = JSON.parse(raw);
+    } catch {
+      // file doesn't exist yet
     }
 
     // Ensure "mcp" key exists
@@ -192,8 +194,8 @@ function ensureMcpForOpenCode(
     existing.mcp = mcp;
 
     // Write back
-    fs.mkdirSync(OPENCODE_CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(
+    await fs.promises.mkdir(OPENCODE_CONFIG_DIR, { recursive: true });
+    await fs.promises.writeFile(
       OPENCODE_CONFIG_FILE,
       JSON.stringify(existing, null, 2) + "\n",
       "utf-8",
@@ -223,11 +225,11 @@ function ensureMcpForOpenCode(
 const AUGGIE_CONFIG_DIR = path.join(os.homedir(), ".augment");
 const AUGGIE_MCP_CONFIG_FILE = path.join(AUGGIE_CONFIG_DIR, "mcp-config.json");
 
-function ensureMcpForAuggie(
+async function ensureMcpForAuggie(
   mcpEndpoint: string,
   workspaceId?: string,
   customServers: CustomMcpServerConfig[] = [],
-): McpSetupResult {
+): Promise<McpSetupResult> {
   try {
     const builtIn: Record<string, unknown> = {
       "routa-coordination": {
@@ -240,8 +242,8 @@ function ensureMcpForAuggie(
       mcpServers: mergeCustomMcpServers(builtIn, customServers),
     };
 
-    fs.mkdirSync(AUGGIE_CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(
+    await fs.promises.mkdir(AUGGIE_CONFIG_DIR, { recursive: true });
+    await fs.promises.writeFile(
       AUGGIE_MCP_CONFIG_FILE,
       JSON.stringify(mcpConfigObj, null, 2) + "\n",
       "utf-8",
@@ -304,13 +306,15 @@ function ensureMcpForClaude(
 const CODEX_CONFIG_DIR = path.join(os.homedir(), ".codex");
 const CODEX_CONFIG_FILE = path.join(CODEX_CONFIG_DIR, "config.toml");
 
-function ensureMcpForCodex(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): McpSetupResult {
+async function ensureMcpForCodex(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): Promise<McpSetupResult> {
   try {
     // Read existing config (or start fresh)
     let existing: Record<string, unknown> = {};
-    if (fs.existsSync(CODEX_CONFIG_FILE)) {
-      const raw = fs.readFileSync(CODEX_CONFIG_FILE, "utf-8");
+    try {
+      const raw = await fs.promises.readFile(CODEX_CONFIG_FILE, "utf-8");
       existing = TOML.parse(raw) as Record<string, unknown>;
+    } catch {
+      // file doesn't exist yet
     }
 
     // Ensure "mcp_servers" key exists as an object
@@ -334,8 +338,8 @@ function ensureMcpForCodex(mcpEndpoint: string, customServers: CustomMcpServerCo
     existing.mcp_servers = mcpServers;
 
     // Write back
-    fs.mkdirSync(CODEX_CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(
+    await fs.promises.mkdir(CODEX_CONFIG_DIR, { recursive: true });
+    await fs.promises.writeFile(
       CODEX_CONFIG_FILE,
       TOML.stringify(existing as Record<string, unknown>) + "\n",
       "utf-8",
@@ -373,13 +377,15 @@ function ensureMcpForCodex(mcpEndpoint: string, customServers: CustomMcpServerCo
 const GEMINI_CONFIG_DIR = path.join(os.homedir(), ".gemini");
 const GEMINI_CONFIG_FILE = path.join(GEMINI_CONFIG_DIR, "settings.json");
 
-function ensureMcpForGemini(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): McpSetupResult {
+async function ensureMcpForGemini(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): Promise<McpSetupResult> {
   try {
     // Read existing settings (or start fresh)
     let existing: Record<string, unknown> = {};
-    if (fs.existsSync(GEMINI_CONFIG_FILE)) {
-      const raw = fs.readFileSync(GEMINI_CONFIG_FILE, "utf-8");
+    try {
+      const raw = await fs.promises.readFile(GEMINI_CONFIG_FILE, "utf-8");
       existing = JSON.parse(raw);
+    } catch {
+      // file doesn't exist yet
     }
 
     // Ensure "mcpServers" key exists
@@ -405,8 +411,8 @@ function ensureMcpForGemini(mcpEndpoint: string, customServers: CustomMcpServerC
     existing.mcpServers = mcpServers;
 
     // Write back
-    fs.mkdirSync(GEMINI_CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(
+    await fs.promises.mkdir(GEMINI_CONFIG_DIR, { recursive: true });
+    await fs.promises.writeFile(
       GEMINI_CONFIG_FILE,
       JSON.stringify(existing, null, 2) + "\n",
       "utf-8",
@@ -448,13 +454,15 @@ function ensureMcpForGemini(mcpEndpoint: string, customServers: CustomMcpServerC
 const KIMI_CONFIG_DIR = path.join(os.homedir(), ".kimi");
 const KIMI_CONFIG_FILE = path.join(KIMI_CONFIG_DIR, "config.toml");
 
-function ensureMcpForKimi(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): McpSetupResult {
+async function ensureMcpForKimi(mcpEndpoint: string, customServers: CustomMcpServerConfig[] = []): Promise<McpSetupResult> {
   try {
     // Read existing config (or start fresh)
     let existing: Record<string, unknown> = {};
-    if (fs.existsSync(KIMI_CONFIG_FILE)) {
-      const raw = fs.readFileSync(KIMI_CONFIG_FILE, "utf-8");
+    try {
+      const raw = await fs.promises.readFile(KIMI_CONFIG_FILE, "utf-8");
       existing = TOML.parse(raw) as Record<string, unknown>;
+    } catch {
+      // file doesn't exist yet
     }
 
     // Ensure nested "mcp" → "servers" path exists
@@ -474,8 +482,8 @@ function ensureMcpForKimi(mcpEndpoint: string, customServers: CustomMcpServerCon
     existing.mcp = mcp;
 
     // Write back
-    fs.mkdirSync(KIMI_CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(
+    await fs.promises.mkdir(KIMI_CONFIG_DIR, { recursive: true });
+    await fs.promises.writeFile(
       KIMI_CONFIG_FILE,
       TOML.stringify(existing as Record<string, unknown>) + "\n",
       "utf-8",
@@ -514,17 +522,19 @@ function ensureMcpForKimi(mcpEndpoint: string, customServers: CustomMcpServerCon
 const COPILOT_CONFIG_DIR = path.join(os.homedir(), ".copilot");
 const COPILOT_MCP_CONFIG_FILE = path.join(COPILOT_CONFIG_DIR, "mcp-config.json");
 
-function ensureMcpForCopilot(
+async function ensureMcpForCopilot(
   mcpEndpoint: string,
   workspaceId?: string,
   customServers: CustomMcpServerConfig[] = [],
-): McpSetupResult {
+): Promise<McpSetupResult> {
   try {
     // Read existing config (or start fresh)
     let existing: Record<string, unknown> = {};
-    if (fs.existsSync(COPILOT_MCP_CONFIG_FILE)) {
-      const raw = fs.readFileSync(COPILOT_MCP_CONFIG_FILE, "utf-8");
+    try {
+      const raw = await fs.promises.readFile(COPILOT_MCP_CONFIG_FILE, "utf-8");
       existing = JSON.parse(raw);
+    } catch {
+      // file doesn't exist yet
     }
 
     // Ensure "mcpServers" key exists
@@ -553,8 +563,8 @@ function ensureMcpForCopilot(
     existing.mcpServers = mcpServers;
 
     // Write back
-    fs.mkdirSync(COPILOT_CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(
+    await fs.promises.mkdir(COPILOT_CONFIG_DIR, { recursive: true });
+    await fs.promises.writeFile(
       COPILOT_MCP_CONFIG_FILE,
       JSON.stringify(existing, null, 2) + "\n",
       "utf-8",
