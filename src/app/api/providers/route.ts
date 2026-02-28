@@ -156,7 +156,7 @@ async function getRegistryProviders(shouldCheck = false): Promise<ProviderInfo[]
       timeoutPromise,
     ]) as Awaited<ReturnType<typeof fetchRegistry>>;
 
-    const staticIds = new Set(["claude", "opencode", "gemini", "openai"]);
+    const staticIds = new Set(["claude", "opencode", "gemini", "openai", "auggie", "codex", "copilot", "kimi", "kiro"]);
     const platform = detectPlatformTarget();
 
     if (shouldCheck) {
