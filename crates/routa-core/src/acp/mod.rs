@@ -93,6 +93,7 @@ struct ManagedProcess {
     /// Trace writer for recording agent activities to JSONL
     trace_writer: TraceWriter,
     /// Working directory (for contributor context)
+    #[allow(dead_code)]
     cwd: String,
 }
 

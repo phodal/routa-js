@@ -10,7 +10,6 @@
 
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
-use chrono::{DateTime, Datelike, Utc};
 use serde_json::Value;
 
 use super::types::TraceRecord;

@@ -33,6 +33,7 @@ pub fn router() -> Router<AppState> {
 #[derive(Debug, Deserialize)]
 struct RegistryQuery {
     id: Option<String>,
+    #[allow(dead_code)]
     refresh: Option<bool>,
 }
 
@@ -64,6 +65,7 @@ struct AgentWithStatus {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct RegistryResponse {
     agents: Vec<AgentWithStatus>,
     platform: Option<String>,
@@ -72,6 +74,7 @@ struct RegistryResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct RuntimeAvailability {
     npx: bool,
     uvx: bool,

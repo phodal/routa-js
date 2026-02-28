@@ -18,6 +18,7 @@ struct PendingToolCall {
     tool_call_id: String,
     name: String,
     title: Option<String>,
+    #[allow(dead_code)]
     provider: String,
     traced: bool,
 }

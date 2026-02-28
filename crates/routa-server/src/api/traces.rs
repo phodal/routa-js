@@ -28,7 +28,7 @@ pub fn router() -> Router<AppState> {
 /// - limit: Max number of results
 /// - offset: Skip N results
 async fn query_traces(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     QueryParams(params): QueryParams<TraceQueryParams>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
     // Get current working directory for trace base path
@@ -81,7 +81,7 @@ async fn get_trace_by_id(
 
 /// POST /api/traces/export — Export traces in Agent Trace JSON format.
 async fn export_traces(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     QueryParams(params): QueryParams<TraceQueryParams>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
     let cwd = std::env::current_dir()

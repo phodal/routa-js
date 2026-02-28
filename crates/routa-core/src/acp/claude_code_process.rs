@@ -31,9 +31,11 @@ struct ClaudeStreamDelta {
     delta_type: String,
     text: Option<String>,
     thinking: Option<String>,
+    #[allow(dead_code)]
     partial_json: Option<String>,
     // For message_delta events
     stop_reason: Option<String>,
+    #[allow(dead_code)]
     stop_sequence: Option<String>,
 }
 
@@ -41,10 +43,13 @@ struct ClaudeStreamDelta {
 struct ClaudeStreamContentBlock {
     #[serde(rename = "type")]
     block_type: String,
+    #[allow(dead_code)]
     text: Option<String>,
+    #[allow(dead_code)]
     thinking: Option<String>,
     id: Option<String>,
     name: Option<String>,
+    #[allow(dead_code)]
     input: Option<serde_json::Value>,
 }
 
@@ -52,6 +57,7 @@ struct ClaudeStreamContentBlock {
 struct ClaudeStreamEvent {
     #[serde(rename = "type", default)]
     event_type: String,
+    #[allow(dead_code)]
     index: Option<i32>,
     content_block: Option<ClaudeStreamContentBlock>,
     delta: Option<ClaudeStreamDelta>,
@@ -62,6 +68,7 @@ struct ClaudeContent {
     #[serde(rename = "type")]
     content_type: String,
     text: Option<String>,
+    #[allow(dead_code)]
     thinking: Option<String>,
     id: Option<String>,
     name: Option<String>,
@@ -73,6 +80,7 @@ struct ClaudeContent {
 
 #[derive(Debug, Clone, Deserialize)]
 struct ClaudeMessage {
+    #[allow(dead_code)]
     role: String,
     content: Vec<ClaudeContent>,
 }
@@ -86,6 +94,7 @@ struct ClaudeOutputMessage {
     message: Option<ClaudeMessage>,
     event: Option<ClaudeStreamEvent>,
     result: Option<String>,
+    #[allow(dead_code)]
     is_error: Option<bool>,
 }
 
