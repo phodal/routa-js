@@ -9,7 +9,8 @@
 
 Both backends implement **identical REST APIs** for seamless frontend compatibility.
 
-## Commit Message
+## Commit
 
+- Keep Key Principles of Baby-Step Commits
 - Always include the related GitHub issue ID when applicable.
 - Append a co-author line in the following format: (YourName, like Copilot,Augment,Claude, etc.) <YourEmail, like, <claude@anthropic.com>, <auggie@augment.com>)
