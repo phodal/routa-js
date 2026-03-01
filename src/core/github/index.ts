@@ -13,3 +13,15 @@ export type {
   VirtualFileEntry,
   GitHubWorkspaceErrorCode,
 } from "./github-workspace";
+
+export {
+  postPRComment,
+  postPRReview,
+  getPRFiles,
+  getPRDetails,
+} from "./github-pr-comment";
+
+export type {
+  PostPRCommentOptions,
+  PostPRReviewOptions,
+} from "./github-pr-comment";
