@@ -97,6 +97,25 @@ export class BackgroundTaskWorker {
   private async createAndSendPrompt(task: BackgroundTask): Promise<string> {
     const base = getInternalBaseUrl();
 
+    // Known ACP providers — everything else is treated as a specialist ID
+    const KNOWN_PROVIDERS = new Set([
+      "opencode",
+      "gemini",
+      "codex",
+      "copilot",
+      "auggie",
+      "kimi",
+      "kiro",
+      "claude",
+      "claude-code-sdk",
+    ]);
+
+    // Determine provider and specialistId based on task.agentId
+    const isKnownProvider = KNOWN_PROVIDERS.has(task.agentId);
+    // Use default provider if agentId is not a known provider (it's a specialist)
+    const provider = isKnownProvider ? task.agentId : undefined; // Let API use default
+    const specialistId = isKnownProvider ? undefined : task.agentId;
+
     // 1. Create session
     const newRes = await fetch(`${base}/api/acp`, {
       method: "POST",
@@ -106,7 +125,8 @@ export class BackgroundTaskWorker {
         id: 1,
         method: "session/new",
         params: {
-          provider: task.agentId,
+          provider,
+          specialistId,
           workspaceId: task.workspaceId,
           cwd: process.cwd(),
           role: "CRAFTER",
