@@ -13,4 +13,5 @@ Both backends implement **identical REST APIs** for seamless frontend compatibil
 
 - Follow the Baby-Step Commit principle — keep commits small, but not excessively granular.
 - Always include the related GitHub issue ID when applicable.
+- Make sure tests pass before pushing.
 - Append a co-author line in the following format: (YourName, like Copilot,Augment,Claude, etc.) <YourEmail, like, <claude@anthropic.com>, <augmentcode@augment.com>)
