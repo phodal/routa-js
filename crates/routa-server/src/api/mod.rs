@@ -11,6 +11,7 @@ pub mod files;
 pub mod memory;
 pub mod mcp_routes;
 pub mod mcp_server_mgmt;
+pub mod mcp_servers;
 pub mod mcp_tools;
 pub mod notes;
 pub mod polling;
@@ -53,6 +54,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/mcp", mcp_routes::router())
         .nest("/api/mcp/tools", mcp_tools::router())
         .nest("/api/mcp-server", mcp_server_mgmt::router())
+        .nest("/api/mcp-servers", mcp_servers::router())
         .nest("/api/test-mcp", test_mcp::router())
         .nest("/api/clone", clone::router())
         .nest("/api/clone/progress", clone_progress::router())

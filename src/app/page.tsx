@@ -19,6 +19,7 @@ import { useAcp } from "@/client/hooks/use-acp";
 import { useSkills } from "@/client/hooks/use-skills";
 import { AgentInstallPanel } from "@/client/components/agent-install-panel";
 import { SettingsPanel } from "@/client/components/settings-panel";
+import { NotificationProvider, NotificationBell } from "@/client/components/notification-center";
 
 export default function HomePage() {
   const router = useRouter();
@@ -64,6 +65,7 @@ export default function HomePage() {
   }, [activeWorkspaceId, router]);
 
   return (
+    <NotificationProvider>
     <div className="h-screen flex flex-col bg-[#fafafa] dark:bg-[#0a0c12]">
       {/* ─── Minimal Header ─────────────────────────────────────────── */}
       <header className="h-11 shrink-0 flex items-center px-5 z-10 border-b border-gray-100 dark:border-[#151720]">
@@ -107,6 +109,13 @@ export default function HomePage() {
           >
             Schedules
           </a>
+          <a
+            href="/messages"
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+          >
+            Messages
+          </a>
+          <NotificationBell />
           <button
             onClick={() => setShowSettingsPanel(true)}
             className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
@@ -172,6 +181,7 @@ export default function HomePage() {
         providers={acp.providers}
       />
     </div>
+    </NotificationProvider>
   );
 }
 
