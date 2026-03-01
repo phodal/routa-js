@@ -1,5 +1,8 @@
 # Routa.js Architecture Guide
 
+Building an agent is not trivial. During API calls or web interactions, unexpected issues often occur. It’s recommended
+to keep a simple Markdown (issues/**.md) file to document errors, observations, and troubleshooting notes. 
+
 ## Project Overview
 
 **Routa.js** is a multi-agent coordination platform with a **dual-backend architecture**:
