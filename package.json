@@ -37,7 +37,9 @@
     "test:e2e:headed": "playwright test --project=chromium-headed",
     "test:e2e:specialist": "playwright test e2e/specialist-selection.spec.ts",
     "test:e2e:specialist:headed": "playwright test e2e/specialist-selection.spec.ts --project=chromium-headed",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:tauri": "playwright test --config=playwright.tauri.config.ts e2e/tauri-backend-check.spec.ts",
+    "test:e2e:tauri:headed": "playwright test --config=playwright.tauri.config.ts e2e/tauri-backend-check.spec.ts --project=chromium-headed"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.10",
@@ -91,6 +93,7 @@
     "marked": "^17.0.2",
     "mermaid": "^11.12.2",
     "next": "^15.1.0",
+    "node-cron": "^4.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "smol-toml": "^1.6.0",
@@ -117,6 +120,7 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/eventsource": "^1.1.15",
     "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/uuid": "^10.0.0",
