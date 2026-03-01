@@ -14,6 +14,8 @@ import { fileURLToPath } from "url";
 const rootDir = join(fileURLToPath(import.meta.url), "..", "..");
 const apiDir = join(rootDir, "src/app/api");
 const apiBackup = join(rootDir, "src/app/_api_excluded");
+const wellKnownDir = join(rootDir, "src/app/.well-known");
+const wellKnownBackup = join(rootDir, "src/app/_well-known_excluded");
 
 function moveDir(from, to) {
   if (existsSync(from)) {
@@ -24,8 +26,9 @@ function moveDir(from, to) {
 let buildFailed = false;
 
 try {
-  console.log("[build-static] Temporarily excluding API routes...");
+  console.log("[build-static] Temporarily excluding API routes and .well-known...");
   moveDir(apiDir, apiBackup);
+  moveDir(wellKnownDir, wellKnownBackup);
 
   console.log("[build-static] Running Next.js static export...");
   execSync("npx next build", {
@@ -39,8 +42,9 @@ try {
   buildFailed = true;
   console.error("[build-static] Build failed:", err.message);
 } finally {
-  console.log("[build-static] Restoring API routes...");
+  console.log("[build-static] Restoring API routes and .well-known...");
   moveDir(apiBackup, apiDir);
+  moveDir(wellKnownBackup, wellKnownDir);
 
   if (buildFailed) {
     process.exit(1);
