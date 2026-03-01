@@ -97,7 +97,7 @@ const EMPTY_FORM: FormState = {
   name: "",
   cronExpr: "0 2 * * *",
   taskPrompt: "",
-  agentId: "claude-code",
+  agentId: "",
   enabled: true,
   promptTemplate: "",
   cronMode: "preset",

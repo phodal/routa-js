@@ -95,6 +95,18 @@ export default function HomePage() {
           >
             Traces
           </a>
+          <a
+            href="/settings/webhooks"
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+          >
+            Webhooks
+          </a>
+          <a
+            href="/settings/schedules"
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
+          >
+            Schedules
+          </a>
           <button
             onClick={() => setShowSettingsPanel(true)}
             className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#151720] transition-colors"
