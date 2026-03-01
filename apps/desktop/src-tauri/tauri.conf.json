@@ -13,9 +13,9 @@
     "windows": [
       {
         "label": "main",
-        "title": "Routa - Multi-Agent Coordination Platform for AI Development",
-        "width": 1280,
-        "height": 800,
+        "title": "Routa",
+        "width": 1440,
+        "height": 900,
         "minWidth": 900,
         "minHeight": 600,
         "resizable": true,
