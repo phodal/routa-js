@@ -1,0 +1,206 @@
+name: 'API Schema Validation'
+
+on:
+  pull_request:
+    paths:
+      - 'api-contract.yaml'
+      - 'src/app/api/**'
+      - 'crates/routa-server/src/api/**'
+      - 'scripts/check-api-parity.ts'
+      - 'scripts/validate-openapi-schema.ts'
+      - 'tests/api-contract/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'api-contract.yaml'
+      - 'src/app/api/**'
+      - 'crates/routa-server/src/api/**'
+      - 'scripts/check-api-parity.ts'
+      - 'scripts/validate-openapi-schema.ts'
+      - 'tests/api-contract/**'
+  workflow_dispatch:
+    inputs:
+      run_runtime_tests:
+        description: 'Run runtime API tests (requires running backend)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  # ── Static schema validation (no server required) ──────────────────
+  schema-static-validation:
+    name: 'Static Schema Validation'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate OpenAPI schema structure
+        run: npm run api:schema:validate
+
+      - name: Check API route parity (Next.js vs Rust vs Contract)
+        run: npm run api:check
+
+      - name: Generate schema coverage report
+        run: npm run api:schema:report
+
+      - name: Upload schema report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-schema-report
+          path: |
+            api-contract.yaml
+          retention-days: 30
+
+  # ── Runtime schema validation (Next.js backend) ────────────────────
+  schema-runtime-nextjs:
+    name: 'Runtime Schema Validation — Next.js'
+    runs-on: ubuntu-latest
+    needs: schema-static-validation
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: routa_test
+          POSTGRES_USER: routa
+          POSTGRES_PASSWORD: routa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js app
+        env:
+          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
+        run: npm run build
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
+        run: npm run db:migrate
+
+      - name: Start Next.js server
+        env:
+          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
+          NODE_ENV: test
+        run: |
+          npm run start &
+          echo "Waiting for Next.js server to start..."
+          timeout 60 bash -c 'until curl -sf http://localhost:3000/api/health; do sleep 2; done'
+          echo "Server is ready"
+
+      - name: Run schema validation tests against Next.js
+        env:
+          BASE_URL: http://localhost:3000
+        run: npm run api:test:schema:nextjs
+
+      - name: Run full API contract tests against Next.js
+        env:
+          BASE_URL: http://localhost:3000
+        run: npm run api:test:nextjs
+
+  # ── Runtime schema validation (Rust backend) ──────────────────────
+  schema-runtime-rust:
+    name: 'Runtime Schema Validation — Rust'
+    runs-on: ubuntu-latest
+    needs: schema-static-validation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build Rust server
+        run: cargo build -p routa-server
+
+      - name: Start Rust server
+        run: |
+          cargo run -p routa-server &
+          echo "Waiting for Rust server to start..."
+          timeout 60 bash -c 'until curl -sf http://localhost:3210/api/health; do sleep 2; done'
+          echo "Server is ready"
+
+      - name: Run schema validation tests against Rust
+        env:
+          BASE_URL: http://localhost:3210
+        run: npm run api:test:schema:rust
+
+      - name: Run full API contract tests against Rust
+        env:
+          BASE_URL: http://localhost:3210
+        run: npm run api:test:rust
+
+  # ── Backend parity comparison ──────────────────────────────────────
+  schema-parity-report:
+    name: 'Schema Parity Report'
+    runs-on: ubuntu-latest
+    needs: [schema-runtime-nextjs, schema-runtime-rust]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate JSON parity report
+        run: |
+          npm run api:check:json > api-parity-report.json || true
+          npm run api:schema:validate:json > api-schema-report.json || true
+
+      - name: Upload parity reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-parity-reports
+          path: |
+            api-parity-report.json
+            api-schema-report.json
+          retention-days: 30

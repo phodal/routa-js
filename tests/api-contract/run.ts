@@ -20,6 +20,7 @@ import { testTasks } from "./test-tasks";
 import { testNotes } from "./test-notes";
 import { testWorkspaces } from "./test-workspaces";
 import { testSessions, testSkills } from "./test-sessions";
+import { testSchemaValidation } from "./test-schema-validation";
 
 const jsonMode = process.argv.includes("--json");
 const bail = process.argv.includes("--bail");
@@ -40,6 +41,7 @@ const suites: { name: string; run: () => Promise<TestResult[]> }[] = [
   { name: "notes", run: testNotes },
   { name: "sessions", run: testSessions },
   { name: "skills", run: testSkills },
+  { name: "schema-validation", run: testSchemaValidation },
 ];
 
 async function checkBackendAvailable(): Promise<boolean> {

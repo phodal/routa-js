@@ -41,7 +41,9 @@
       "Bash(npm install:*)",
       "WebFetch(domain:*)",
       "Bash(gh issue comment:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(wc:*)"
     ]
   }
 }
