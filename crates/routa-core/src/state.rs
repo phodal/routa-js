@@ -7,7 +7,7 @@ use crate::db::Database;
 use crate::events::EventBus;
 use crate::skills::SkillRegistry;
 use crate::store::{
-    AcpSessionStore, AgentStore, CodebaseStore, ConversationStore, CustomMcpServerStore, NoteStore, ScheduleStore, TaskStore,
+    AcpSessionStore, AgentStore, CodebaseStore, ConversationStore, NoteStore, ScheduleStore, TaskStore,
     WorkspaceStore,
 };
 
@@ -20,7 +20,6 @@ pub struct AppStateInner {
     pub task_store: TaskStore,
     pub note_store: NoteStore,
     pub schedule_store: ScheduleStore,
-    pub custom_mcp_server_store: CustomMcpServerStore,
     pub conversation_store: ConversationStore,
     pub acp_session_store: AcpSessionStore,
     pub skill_registry: SkillRegistry,
@@ -49,7 +48,6 @@ impl AppStateInner {
             task_store: TaskStore::new(db.clone()),
             note_store: NoteStore::new(db.clone()),
             schedule_store: ScheduleStore::new(db.clone()),
-            custom_mcp_server_store: CustomMcpServerStore::new(db.clone()),
             conversation_store: ConversationStore::new(db.clone()),
             acp_session_store: AcpSessionStore::new(db.clone()),
             skill_registry: SkillRegistry::new(),
