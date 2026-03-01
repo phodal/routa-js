@@ -1,6 +1,9 @@
 use axum::{
     extract::{Query, State},
-    response::sse::{Event, Sse},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse, Response,
+    },
     routing::get,
     Json, Router,
 };
@@ -16,12 +19,30 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/", get(acp_sse).post(acp_rpc))
 }
 
+/// Response type that can be either JSON or SSE stream.
+enum AcpResponse {
+    Json(Json<serde_json::Value>),
+    Sse(Sse<std::pin::Pin<Box<dyn tokio_stream::Stream<Item = Result<Event, Infallible>> + Send>>>),
+}
+
+impl IntoResponse for AcpResponse {
+    fn into_response(self) -> Response {
+        match self {
+            AcpResponse::Json(json) => json.into_response(),
+            AcpResponse::Sse(sse) => sse.into_response(),
+        }
+    }
+}
+
 /// POST /api/acp — Handle ACP JSON-RPC requests.
 /// Compatible with the Next.js frontend's acp-client.ts.
+///
+/// For Claude sessions, `session/prompt` returns an SSE stream so the frontend
+/// receives real-time notifications as they're generated.
 async fn acp_rpc(
     State(state): State<AppState>,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>, ServerError> {
+) -> Result<AcpResponse, ServerError> {
     let method = body
         .get("method")
         .and_then(|m| m.as_str())
@@ -36,7 +57,7 @@ async fn acp_rpc(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(1);
 
-            Ok(Json(serde_json::json!({
+            Ok(AcpResponse::Json(Json(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": {
@@ -47,7 +68,7 @@ async fn acp_rpc(
                         "version": "0.1.0"
                     }
                 }
-            })))
+            }))))
         }
 
         "_providers/list" => {
@@ -155,11 +176,11 @@ async fn acp_rpc(
                 }
             });
 
-            Ok(Json(serde_json::json!({
+            Ok(AcpResponse::Json(Json(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": { "providers": providers }
-            })))
+            }))))
         }
 
         "session/new" => {
@@ -204,7 +225,7 @@ async fn acp_rpc(
                 .await
             {
                 Ok((_our_sid, _agent_sid)) => {
-                    Ok(Json(serde_json::json!({
+                    Ok(AcpResponse::Json(Json(serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": id,
                         "result": {
@@ -212,18 +233,18 @@ async fn acp_rpc(
                             "provider": provider.as_deref().unwrap_or("opencode"),
                             "role": role.as_deref().unwrap_or("CRAFTER"),
                         }
-                    })))
+                    }))))
                 }
                 Err(e) => {
                     tracing::error!("[ACP Route] Failed to create session: {}", e);
-                    Ok(Json(serde_json::json!({
+                    Ok(AcpResponse::Json(Json(serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": id,
                         "error": {
                             "code": -32000,
                             "message": format!("Failed to create session: {}", e)
                         }
-                    })))
+                    }))))
                 }
             }
         }
@@ -234,11 +255,11 @@ async fn acp_rpc(
             let session_id = match session_id {
                 Some(sid) => sid.to_string(),
                 None => {
-                    return Ok(Json(serde_json::json!({
+                    return Ok(AcpResponse::Json(Json(serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": id,
                         "error": { "code": -32602, "message": "Missing sessionId" }
-                    })));
+                    }))));
                 }
             };
 
@@ -311,35 +332,130 @@ async fn acp_rpc(
                     }
                     Err(e) => {
                         tracing::error!("[ACP Route] Failed to auto-create session: {}", e);
-                        return Ok(Json(serde_json::json!({
+                        return Ok(AcpResponse::Json(Json(serde_json::json!({
                             "jsonrpc": "2.0",
                             "id": id,
                             "error": {
                                 "code": -32000,
                                 "message": format!("Failed to auto-create session: {}", e)
                             }
-                        })));
+                        }))));
                     }
                 }
             }
 
-            // Forward to the live agent process
-            match state.acp_manager.prompt(&session_id, &prompt_text).await {
-                Ok(result) => Ok(Json(serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "result": result,
-                }))),
-                Err(e) => {
-                    tracing::error!("[ACP Route] Prompt failed: {}", e);
-                    Ok(Json(serde_json::json!({
+            // Check if this is a Claude session - if so, return SSE stream
+            let is_claude = state.acp_manager.is_claude_session(&session_id).await;
+
+            if is_claude {
+                // For Claude, return SSE stream so frontend receives real-time notifications
+                tracing::info!(
+                    "[ACP Route] Claude session detected, returning SSE stream for prompt"
+                );
+
+                // Subscribe to notifications before starting the prompt
+                let rx = state.acp_manager.subscribe(&session_id).await;
+
+                // Start the prompt asynchronously
+                if let Err(e) = state
+                    .acp_manager
+                    .prompt_claude_async(&session_id, &prompt_text)
+                    .await
+                {
+                    tracing::error!("[ACP Route] Failed to start Claude prompt: {}", e);
+                    return Ok(AcpResponse::Json(Json(serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": id,
                         "error": {
                             "code": -32000,
                             "message": e
                         }
-                    })))
+                    }))));
+                }
+
+                // Return SSE stream
+                type SseStream = std::pin::Pin<
+                    Box<dyn tokio_stream::Stream<Item = Result<Event, Infallible>> + Send>,
+                >;
+
+                let stream: SseStream = if let Some(mut rx) = rx {
+                    let session_id_clone = session_id.clone();
+                    Box::pin(async_stream::stream! {
+                        // Stream notifications until turn_complete or disconnect
+                        loop {
+                            match rx.recv().await {
+                                Ok(msg) => {
+                                    // Check if this is turn_complete
+                                    let is_turn_complete = msg
+                                        .get("params")
+                                        .and_then(|p| p.get("update"))
+                                        .and_then(|u| u.get("sessionUpdate"))
+                                        .and_then(|s| s.as_str())
+                                        == Some("turn_complete");
+
+                                    yield Ok::<_, Infallible>(
+                                        Event::default().data(msg.to_string())
+                                    );
+
+                                    if is_turn_complete {
+                                        tracing::info!(
+                                            "[ACP Route] Claude prompt complete for session {}",
+                                            session_id_clone
+                                        );
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "[ACP Route] SSE stream error for session {}: {}",
+                                        session_id_clone,
+                                        e
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    })
+                } else {
+                    // No broadcast channel - return empty stream with error
+                    Box::pin(tokio_stream::once(Ok::<_, Infallible>(
+                        Event::default().data(
+                            serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "method": "session/update",
+                                "params": {
+                                    "sessionId": session_id,
+                                    "update": {
+                                        "sessionUpdate": "turn_complete",
+                                        "stopReason": "error"
+                                    }
+                                }
+                            })
+                            .to_string(),
+                        ),
+                    )))
+                };
+
+                return Ok(AcpResponse::Sse(Sse::new(stream)));
+            }
+
+            // For ACP providers, use the traditional JSON response
+            match state.acp_manager.prompt(&session_id, &prompt_text).await {
+                Ok(result) => Ok(AcpResponse::Json(Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": result,
+                })))),
+                Err(e) => {
+                    tracing::error!("[ACP Route] Prompt failed: {}", e);
+                    Ok(AcpResponse::Json(Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32000,
+                            "message": e
+                        }
+                    }))))
                 }
             }
         }
@@ -348,21 +464,21 @@ async fn acp_rpc(
             if let Some(sid) = params.get("sessionId").and_then(|v| v.as_str()) {
                 state.acp_manager.cancel(sid).await;
             }
-            Ok(Json(serde_json::json!({
+            Ok(AcpResponse::Json(Json(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": { "cancelled": true }
-            })))
+            }))))
         }
 
-        "session/load" => Ok(Json(serde_json::json!({
+        "session/load" => Ok(AcpResponse::Json(Json(serde_json::json!({
             "jsonrpc": "2.0",
             "id": id,
             "error": {
                 "code": -32601,
                 "message": "session/load not supported - create a new session instead"
             }
-        }))),
+        })))),
 
         "session/set_mode" => {
             let _session_id = params.get("sessionId").and_then(|v| v.as_str());
@@ -372,30 +488,30 @@ async fn acp_rpc(
                 .and_then(|v| v.as_str());
 
             // Acknowledge (mode switching stub)
-            Ok(Json(serde_json::json!({
+            Ok(AcpResponse::Json(Json(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": {}
-            })))
+            }))))
         }
 
-        _ if method.starts_with('_') => Ok(Json(serde_json::json!({
+        _ if method.starts_with('_') => Ok(AcpResponse::Json(Json(serde_json::json!({
             "jsonrpc": "2.0",
             "id": id,
             "error": {
                 "code": -32601,
                 "message": format!("Extension method not supported: {}", method)
             }
-        }))),
+        })))),
 
-        _ => Ok(Json(serde_json::json!({
+        _ => Ok(AcpResponse::Json(Json(serde_json::json!({
             "jsonrpc": "2.0",
             "id": id,
             "error": {
                 "code": -32601,
                 "message": format!("Method not found: {}", method)
             }
-        }))),
+        })))),
     }
 }
 

@@ -434,6 +434,55 @@ impl AcpManager {
         let processes = self.processes.read().await;
         processes.get(session_id).map(|m| m.preset_id.clone())
     }
+
+    /// Check if a session uses Claude (stream-json protocol, not ACP).
+    pub async fn is_claude_session(&self, session_id: &str) -> bool {
+        let processes = self.processes.read().await;
+        processes
+            .get(session_id)
+            .map(|m| matches!(&m.process, AgentProcessType::Claude(_)))
+            .unwrap_or(false)
+    }
+
+    /// Send a prompt to Claude session and return immediately.
+    /// The actual response is streamed via the broadcast channel.
+    /// Use `subscribe()` to receive notifications.
+    pub async fn prompt_claude_async(&self, session_id: &str, text: &str) -> Result<(), String> {
+        let processes = self.processes.read().await;
+        let managed = processes
+            .get(session_id)
+            .ok_or_else(|| format!("No agent process for session: {}", session_id))?;
+
+        // Record trace
+        let trace = TraceRecord::new(
+            session_id,
+            TraceEventType::UserMessage,
+            Contributor::new(&managed.preset_id, None),
+        )
+        .with_conversation(TraceConversation {
+            turn: None,
+            role: Some("user".to_string()),
+            content_preview: Some(text[..text.len().min(200)].to_string()),
+            full_content: Some(text.to_string()),
+        });
+
+        managed.trace_writer.append_safe(&trace).await;
+
+        match &managed.process {
+            AgentProcessType::Claude(p) => {
+                // Spawn the prompt in a background task so we can return immediately
+                let process = Arc::clone(p);
+                let text = text.to_string();
+                tokio::spawn(async move {
+                    let _ = process.prompt(&text).await;
+                });
+                Ok(())
+            }
+            AgentProcessType::Acp(_) => {
+                Err("prompt_claude_async is only for Claude sessions".to_string())
+            }
+        }
+    }
 }
 
 // ─── ACP Presets ────────────────────────────────────────────────────────
