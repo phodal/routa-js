@@ -1046,6 +1046,159 @@ paths:
         "200":
           description: Stopped
 
+  # ── Custom MCP Servers ──
+  /api/mcp-servers:
+    get:
+      operationId: listCustomMcpServers
+      summary: List custom MCP servers (or get single by id query param)
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+          description: If provided, returns single server
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Servers list or single server
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      servers:
+                        type: array
+                        items:
+                          type: object
+                  - type: object
+                    description: Single server object
+        "404":
+          description: Server not found (when id is provided)
+    post:
+      operationId: createCustomMcpServer
+      summary: Create a new custom MCP server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, name, type]
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+                description:
+                  type: string
+                type:
+                  type: string
+                  enum: [stdio, http, sse]
+                command:
+                  type: string
+                args:
+                  type: array
+                  items:
+                    type: string
+                url:
+                  type: string
+                headers:
+                  type: object
+                env:
+                  type: object
+                enabled:
+                  type: boolean
+                  default: true
+                workspaceId:
+                  type: string
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server:
+                    type: object
+                  message:
+                    type: string
+    put:
+      operationId: updateCustomMcpServer
+      summary: Update an existing custom MCP server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+                description:
+                  type: string
+                type:
+                  type: string
+                  enum: [stdio, http, sse]
+                command:
+                  type: string
+                args:
+                  type: array
+                  items:
+                    type: string
+                url:
+                  type: string
+                headers:
+                  type: object
+                env:
+                  type: object
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server:
+                    type: object
+                  message:
+                    type: string
+        "404":
+          description: Server not found
+    delete:
+      operationId: deleteCustomMcpServer
+      summary: Delete a custom MCP server
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        "404":
+          description: Server not found
+
   /api/test-mcp:
     get:
       operationId: testMcp
