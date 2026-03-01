@@ -215,6 +215,7 @@ fn send_notification(title: &str, body: &str) {
             .summary(title)
             .body(body)
             .appname("Routa")
+            .sound_name("default")
             .show();
     }
 
