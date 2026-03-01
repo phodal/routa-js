@@ -34,7 +34,8 @@ test.describe("GitHub Webhook Trigger System (Issue #43)", () => {
 
     // Verify page header
     await expect(page.locator("h1").filter({ hasText: /GitHub Webhook Triggers/i })).toBeVisible();
-    await expect(page.locator("text=/api\/webhooks\/github/")).toBeVisible();
+    // Use getByText with exact match to avoid strict mode violation
+    await expect(page.getByText("/api/webhooks/github", { exact: true })).toBeVisible();
 
     console.log("✓ /settings/webhooks page loaded successfully");
   });
