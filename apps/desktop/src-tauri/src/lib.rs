@@ -731,7 +731,12 @@ pub fn run() {
                     // The Rust server handles SPA routing by returning the correct HTML
                     // for dynamic routes like /workspace/[id]/sessions/[sessionId].
                     //
-                    // We navigate the WebView to the HTTP server URL because:
+                    // In development mode (ROUTA_DESKTOP_DEV_FRONTEND=1 or auto-detected when
+                    // Next.js dev server is running on port 3000), we keep the webview on the
+                    // Next.js dev server for hot reload support. The Rust server still provides
+                    // the API on port 3210.
+                    //
+                    // In production mode, we navigate the WebView to the HTTP server URL because:
                     // 1. Tauri's built-in protocol doesn't support SPA fallback for dynamic routes
                     // 2. The Rust server can serve the correct placeholder HTML for each route
                     // 3. The `remote` capability allows IPC access from http://127.0.0.1:*
@@ -739,7 +744,20 @@ pub fn run() {
                         Ok(()) => {
                             // Wait for the Rust server to become ready
                             if wait_for_port(&api_host, port, 5) {
-                                if let Some(window) = app.get_webview_window("main") {
+                                // Check if we should keep using Next.js dev server for frontend
+                                let use_nextjs_frontend = std::env::var("ROUTA_DESKTOP_DEV_FRONTEND")
+                                    .map(|v| v == "1")
+                                    .unwrap_or_else(|_| {
+                                        // Auto-detect: if Next.js dev server is running on port 3000, use it
+                                        std::net::TcpStream::connect(("127.0.0.1", 3000_u16)).is_ok()
+                                    });
+
+                                if use_nextjs_frontend {
+                                    println!(
+                                        "[rust-server] Rust API server ready on {}. Keeping webview on Next.js dev server.",
+                                        api_url
+                                    );
+                                } else if let Some(window) = app.get_webview_window("main") {
                                     let js =
                                         format!("window.location.replace('{}');", api_url);
                                     let _ = window.eval(&js);
