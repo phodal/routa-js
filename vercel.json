@@ -1,4 +1,10 @@
 {
-  "buildCommand": "npm install --legacy-peer-deps && npm run build"
+  "buildCommand": "npm install --legacy-peer-deps && npm run build",
+  "crons": [
+    {
+      "path": "/api/schedules/tick",
+      "schedule": "* * * * *"
+    }
+  ]
 }
 

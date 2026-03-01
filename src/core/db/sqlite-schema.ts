@@ -286,6 +286,24 @@ export const githubWebhookConfigs = sqliteTable("github_webhook_configs", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
+// ─── Schedules (cron-based agent triggers) ───────────────────────────────────
+
+export const schedules = sqliteTable("schedules", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  cronExpr: text("cron_expr").notNull(),
+  taskPrompt: text("task_prompt").notNull(),
+  agentId: text("agent_id").notNull(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
+  nextRunAt: integer("next_run_at", { mode: "timestamp_ms" }),
+  lastTaskId: text("last_task_id"),
+  promptTemplate: text("prompt_template"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
 // ─── Webhook Trigger Logs ─────────────────────────────────────────────────
 
 export const webhookTriggerLogs = sqliteTable("webhook_trigger_logs", {

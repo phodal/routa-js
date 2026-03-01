@@ -1099,3 +1099,106 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
     };
   }
 }
+
+// ─── SQLite Schedule Store ─────────────────────────────────────────────────
+
+import { v4 as uuidv4 } from "uuid";
+import type { Schedule, CreateScheduleInput } from "../models/schedule";
+import type { ScheduleStore } from "../store/schedule-store";
+
+export class SqliteScheduleStore implements ScheduleStore {
+  constructor(private db: SqliteDb) {}
+
+  async create(input: CreateScheduleInput): Promise<Schedule> {
+    const now = new Date();
+    const id = input.id ?? uuidv4();
+    const row = {
+      id,
+      name: input.name,
+      cronExpr: input.cronExpr,
+      taskPrompt: input.taskPrompt,
+      agentId: input.agentId,
+      workspaceId: input.workspaceId,
+      enabled: input.enabled !== false,
+      lastRunAt: null as Date | null,
+      nextRunAt: null as Date | null,
+      lastTaskId: null as string | null,
+      promptTemplate: input.promptTemplate ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.db.insert(sqliteSchema.schedules).values(row);
+    return this.toModel({ ...row });
+  }
+
+  async get(scheduleId: string): Promise<Schedule | undefined> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.schedules)
+      .where(eq(sqliteSchema.schedules.id, scheduleId))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<Schedule[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.schedules)
+      .where(eq(sqliteSchema.schedules.workspaceId, workspaceId))
+      .orderBy(desc(sqliteSchema.schedules.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async listDue(): Promise<Schedule[]> {
+    const now = new Date();
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.schedules)
+      .where(
+        and(
+          eq(sqliteSchema.schedules.enabled, true),
+          lte(sqliteSchema.schedules.nextRunAt, now)
+        )
+      );
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async update(
+    scheduleId: string,
+    fields: Partial<Pick<Schedule, "name" | "cronExpr" | "taskPrompt" | "agentId" | "enabled" | "promptTemplate" | "lastRunAt" | "nextRunAt" | "lastTaskId">>
+  ): Promise<void> {
+    await this.db
+      .update(sqliteSchema.schedules)
+      .set({ ...fields, updatedAt: new Date() })
+      .where(eq(sqliteSchema.schedules.id, scheduleId));
+  }
+
+  async setEnabled(scheduleId: string, enabled: boolean): Promise<void> {
+    await this.db
+      .update(sqliteSchema.schedules)
+      .set({ enabled, updatedAt: new Date() })
+      .where(eq(sqliteSchema.schedules.id, scheduleId));
+  }
+
+  async delete(scheduleId: string): Promise<void> {
+    await this.db.delete(sqliteSchema.schedules).where(eq(sqliteSchema.schedules.id, scheduleId));
+  }
+
+  private toModel(row: typeof sqliteSchema.schedules.$inferSelect): Schedule {
+    return {
+      id: row.id,
+      name: row.name,
+      cronExpr: row.cronExpr,
+      taskPrompt: row.taskPrompt,
+      agentId: row.agentId,
+      workspaceId: row.workspaceId,
+      enabled: row.enabled,
+      lastRunAt: row.lastRunAt ?? undefined,
+      nextRunAt: row.nextRunAt ?? undefined,
+      lastTaskId: row.lastTaskId ?? undefined,
+      promptTemplate: row.promptTemplate ?? undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+}

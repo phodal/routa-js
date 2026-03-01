@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useId, useRef } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
 import type { SpecialistConfig, AgentRole, ModelTier } from "./specialist-manager";
 import { GitHubWebhookPanel } from "./github-webhook-panel";
+import { SchedulePanel } from "./schedule-panel";
 
 /**
  * Agent roles that can have default providers configured.
@@ -188,7 +189,7 @@ interface SettingsPanelProps {
   providers: ProviderOption[];
 }
 
-type SettingsTab = "providers" | "specialists" | "models" | "memory" | "mcp" | "webhooks";
+type SettingsTab = "providers" | "specialists" | "models" | "memory" | "mcp" | "webhooks" | "schedules";
 
 // ─── Shared style helpers ──────────────────────────────────────────────────
 const inputCls =
@@ -948,6 +949,14 @@ function WebhooksTab() {
   );
 }
 
+function SchedulesTab() {
+  return (
+    <div className="h-full flex flex-col min-h-0 overflow-hidden">
+      <SchedulePanel />
+    </div>
+  );
+}
+
 function McpServersTab() {
   const [servers, setServers] = useState<McpServerEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1300,6 +1309,7 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
     { key: "models", label: "Models" },
     { key: "mcp", label: "MCP Servers" },
     { key: "webhooks", label: "Webhooks" },
+    { key: "schedules", label: "Schedules" },
     { key: "memory", label: "Memory" },
   ];
 
@@ -1387,6 +1397,7 @@ export function SettingsPanel({ open, onClose, providers }: SettingsPanelProps) 
           {activeTab === "models" && <ModelsTab />}
           {activeTab === "mcp" && <McpServersTab />}
           {activeTab === "webhooks" && <WebhooksTab />}
+          {activeTab === "schedules" && <SchedulesTab />}
           {activeTab === "memory" && <MemoryStatsTab />}
         </div>
 

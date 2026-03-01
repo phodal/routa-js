@@ -324,6 +324,38 @@ export const githubWebhookConfigs = pgTable("github_webhook_configs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Schedules (cron-based agent triggers) ───────────────────────────────────
+
+/**
+ * Stores user-configured cron-based agent trigger rules.
+ * Each row describes: which workspace, which cron expression, which agent to trigger.
+ */
+export const schedules = pgTable("schedules", {
+  id: text("id").primaryKey(),
+  /** Human-readable name for this schedule */
+  name: text("name").notNull(),
+  /** Cron expression, e.g. "0 2 * * *" (daily at 02:00 UTC) */
+  cronExpr: text("cron_expr").notNull(),
+  /** Full prompt to send when the schedule fires */
+  taskPrompt: text("task_prompt").notNull(),
+  /** ACP agent/provider ID to use (e.g. "claude-code") */
+  agentId: text("agent_id").notNull(),
+  /** Workspace scope */
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  /** Whether this schedule is active */
+  enabled: boolean("enabled").notNull().default(true),
+  /** Timestamp of last successful trigger */
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  /** Computed next trigger time (updated after each run) */
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+  /** Background task ID from the most recent trigger */
+  lastTaskId: text("last_task_id"),
+  /** Optional prompt template; {timestamp}, {cronExpr} are substituted */
+  promptTemplate: text("prompt_template"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Webhook Trigger Logs ─────────────────────────────────────────────────
 
 /**

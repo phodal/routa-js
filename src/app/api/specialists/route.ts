@@ -119,6 +119,15 @@ export async function POST(request: NextRequest) {
     const store = new PostgresSpecialistStore(db);
     setSpecialistDatabaseEnabled(true);
 
+    // Check if specialist already exists
+    const existing = await store.get(id);
+    if (existing) {
+      return NextResponse.json(
+        { error: "Specialist already exists", id },
+        { status: 409 }
+      );
+    }
+
     const specialist = await store.create({
       id,
       name,

@@ -231,6 +231,24 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks(workspace_id);
                 CREATE INDEX IF NOT EXISTS idx_notes_workspace ON notes(workspace_id);
                 CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(agent_id);
+
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id              TEXT PRIMARY KEY,
+                    name            TEXT NOT NULL,
+                    cron_expr       TEXT NOT NULL,
+                    task_prompt     TEXT NOT NULL,
+                    agent_id        TEXT NOT NULL,
+                    workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    enabled         INTEGER NOT NULL DEFAULT 1,
+                    last_run_at     INTEGER,
+                    next_run_at     INTEGER,
+                    last_task_id    TEXT,
+                    prompt_template TEXT,
+                    created_at      INTEGER NOT NULL,
+                    updated_at      INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_schedules_workspace ON schedules(workspace_id);
+                CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON schedules(next_run_at) WHERE enabled = 1;
                 "
             )
         })?;

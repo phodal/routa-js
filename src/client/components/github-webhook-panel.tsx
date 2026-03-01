@@ -69,11 +69,11 @@ const SUPPORTED_EVENTS = [
   { value: "issue_comment", label: "Issue Comments", description: "Comments on issues/PRs" },
 ];
 
-const DEFAULT_AGENTS = [
-  { value: "claude-code", label: "Claude Code (Recommended)" },
-  { value: "opencode", label: "OpenCode" },
-  { value: "glm-4", label: "GLM-4 (BigModel)" },
-];
+interface SpecialistOption {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 const EMPTY_FORM: FormState = {
   name: "",
@@ -98,6 +98,7 @@ export function GitHubWebhookPanel() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [registering, setRegistering] = useState<string | null>(null);
+  const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
   const [serverUrl, setServerUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -117,10 +118,11 @@ export function GitHubWebhookPanel() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [cfgRes, logRes, pollRes] = await Promise.all([
+      const [cfgRes, logRes, pollRes, specRes] = await Promise.all([
         fetch("/api/webhooks/configs"),
         fetch("/api/webhooks/webhook-logs?limit=50"),
         fetch("/api/polling/config"),
+        fetch("/api/specialists"),
       ]);
       if (cfgRes.ok) {
         const data = await cfgRes.json();
@@ -129,6 +131,10 @@ export function GitHubWebhookPanel() {
       if (logRes.ok) {
         const data = await logRes.json();
         setLogs(data.logs ?? []);
+      }
+      if (specRes.ok) {
+        const data = await specRes.json();
+        setSpecialists((data.specialists ?? []).filter((s: SpecialistOption & { enabled: boolean }) => s.enabled !== false));
       }
       if (pollRes.ok) {
         const data = await pollRes.json();
@@ -472,6 +478,7 @@ export function GitHubWebhookPanel() {
                 setForm={setForm}
                 editId={editId}
                 saving={saving}
+                specialists={specialists}
                 onSubmit={handleSubmit}
                 onCancel={() => { setShowForm(false); setEditId(null); setError(null); }}
                 toggleEvent={toggleEvent}
@@ -544,12 +551,13 @@ interface WebhookConfigFormProps {
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
   editId: string | null;
   saving: boolean;
+  specialists: SpecialistOption[];
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
   toggleEvent: (ev: string) => void;
 }
 
-function WebhookConfigForm({ form, setForm, editId, saving, onSubmit, onCancel, toggleEvent }: WebhookConfigFormProps) {
+function WebhookConfigForm({ form, setForm, editId, saving, specialists, onSubmit, onCancel, toggleEvent }: WebhookConfigFormProps) {
   return (
     <form onSubmit={onSubmit} className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mt-2 space-y-4">
       <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -674,31 +682,26 @@ function WebhookConfigForm({ form, setForm, editId, saving, onSubmit, onCancel, 
         <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
           Trigger Agent <span className="text-red-500">*</span>
         </label>
-        <div className="flex gap-2">
-          <select
-            value={DEFAULT_AGENTS.some(a => a.value === form.triggerAgentId) ? form.triggerAgentId : "__custom__"}
-            onChange={(e) => {
-              if (e.target.value !== "__custom__") {
-                setForm((p) => ({ ...p, triggerAgentId: e.target.value }));
-              }
-            }}
-            className="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-100"
-          >
-            {DEFAULT_AGENTS.map((a) => (
-              <option key={a.value} value={a.value}>{a.label}</option>
-            ))}
-            <option value="__custom__">Custom…</option>
-          </select>
-          <input
-            data-testid="webhook-agent"
-            type="text"
-            value={form.triggerAgentId}
-            onChange={(e) => setForm((p) => ({ ...p, triggerAgentId: e.target.value }))}
-            placeholder="agent ID"
-            className="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-100"
-            required
-          />
-        </div>
+        <select
+          data-testid="webhook-agent"
+          value={form.triggerAgentId}
+          onChange={(e) => setForm((p) => ({ ...p, triggerAgentId: e.target.value }))}
+          className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-100"
+          required
+        >
+          <option value="">— Select an agent —</option>
+          {specialists.length > 0 ? (
+            specialists.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}{s.description ? ` — ${s.description}` : ""}</option>
+            ))
+          ) : (
+            <>
+              <option value="claude-code">Claude Code</option>
+              <option value="opencode">OpenCode</option>
+              <option value="developer">Developer</option>
+            </>
+          )}
+        </select>
       </div>
 
       {/* Prompt Template */}

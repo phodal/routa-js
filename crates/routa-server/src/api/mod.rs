@@ -17,6 +17,7 @@ pub mod polling;
 pub mod provider_models;
 pub mod providers;
 pub mod rpc;
+pub mod schedules;
 pub mod sessions;
 pub mod skills;
 pub mod skills_catalog;
@@ -60,6 +61,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/rpc", rpc::router())
         .nest("/api/a2a", a2a::router())
         .nest("/api/traces", traces::router())
+        .nest("/api/schedules", schedules::router())
         .nest("/api/specialists", specialists::router())
         .nest("/api/memory", memory::router())
         .nest("/api/debug", debug::router())

@@ -37,9 +37,8 @@ async function seedSpecialist(request: APIRequestContext) {
 }
 
 async function deleteSpecialist(request: APIRequestContext) {
-  await request.delete(`${BASE}/api/specialists`, {
-    data: { id: TEST_SPECIALIST.id },
-  });
+  // DELETE expects ?id= query parameter, not request body
+  await request.delete(`${BASE}/api/specialists?id=${TEST_SPECIALIST.id}`);
 }
 
 async function waitForHomeReady(page: Page) {
