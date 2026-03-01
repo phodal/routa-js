@@ -56,8 +56,14 @@ interface BackgroundTaskInfo {
   agentId: string;
   status: string;
   triggerSource?: string;
+  priority?: string;
   resultSessionId?: string;
+  attempts: number;
+  maxAttempts: number;
   createdAt: string;
+  lastActivity?: string;
+  currentActivity?: string;
+  toolCallCount?: number;
 }
 
 interface TraceInfo {
@@ -574,13 +580,35 @@ export function WorkspacePageClient() {
               ) : (
                 <div className="rounded-xl border border-gray-200/60 dark:border-[#191c28] bg-white dark:bg-[#0e1019] overflow-hidden divide-y divide-gray-100 dark:divide-[#191c28]">
                   {bgTasks.map((task) => (
-                    <div key={task.id} data-testid="bg-task-item" className="flex items-center gap-3 px-4 py-3">
+                    <div key={task.id} data-testid="bg-task-item" className="flex items-start gap-3 px-4 py-3">
                       <BgTaskStatusIcon status={task.status} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-medium text-gray-700 dark:text-gray-300 truncate">{task.title}</div>
-                        <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="text-[13px] font-medium text-gray-700 dark:text-gray-300 truncate">{task.title}</div>
+                          {/* Priority Badge */}
+                          {task.priority && task.priority !== "NORMAL" && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                              task.priority === "HIGH"
+                                ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                            }`}>
+                              {task.priority}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-2 flex-wrap">
                           <span className="font-mono">{task.agentId}</span>
                           {task.triggerSource && <><span>·</span><span className="capitalize">{task.triggerSource}</span></>}
+                          {/* Progress Info */}
+                          {task.status === "RUNNING" && task.toolCallCount !== undefined && task.toolCallCount > 0 && (
+                            <><span>·</span><span className="text-amber-600 dark:text-amber-400">{task.toolCallCount} tools</span></>
+                          )}
+                          {task.status === "RUNNING" && task.currentActivity && (
+                            <><span>·</span><span className="text-amber-600 dark:text-amber-400 truncate max-w-[200px]">{task.currentActivity}</span></>
+                          )}
+                          {task.status === "RUNNING" && task.lastActivity && (
+                            <><span>·</span><span className="text-amber-500 dark:text-amber-500">{formatRelativeTime(task.lastActivity)}</span></>
+                          )}
                           {task.resultSessionId && (
                             <><span>·</span>
                             <button
@@ -592,8 +620,27 @@ export function WorkspacePageClient() {
                           )}
                         </div>
                       </div>
-                      <span data-testid="bg-task-status" className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${bgTaskStatusClass(task.status)}`}>{task.status}</span>
-                      <span className="text-[10px] text-gray-400 dark:text-gray-600 font-mono shrink-0">{formatRelativeTime(task.createdAt)}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span data-testid="bg-task-status" className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${bgTaskStatusClass(task.status)}`}>{task.status}</span>
+                        {/* Retry Button for FAILED tasks */}
+                        {task.status === "FAILED" && task.attempts < task.maxAttempts && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await fetch(`/api/background-tasks/${task.id}/retry`, { method: "POST" });
+                                setRefreshKey((k) => k + 1); // Refresh task list
+                              } catch (err) {
+                                console.error("Retry failed:", err);
+                              }
+                            }}
+                            className="text-[10px] font-medium px-2 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                            title="Retry this task"
+                          >
+                            Retry
+                          </button>
+                        )}
+                        <span className="text-[10px] text-gray-400 dark:text-gray-600 font-mono">{formatRelativeTime(task.createdAt)}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
