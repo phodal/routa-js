@@ -726,4 +726,89 @@ test.describe("GitHub Webhook Trigger System (Issue #43)", () => {
     await request.delete(`${BASE_URL}/api/webhooks/configs?id=${config.id}`);
     console.log("✓ Cleaned up check_suite test config");
   });
+
+  // ─── Polling Adapter Tests (Issue #45) ────────────────────────────────────
+
+  test("16. Test polling config API endpoints (Issue #45)", async ({ request }) => {
+    // GET initial config
+    const getRes = await request.get(`${BASE_URL}/api/polling/config`);
+    expect(getRes.ok()).toBeTruthy();
+    const initialConfig = await getRes.json();
+    expect(initialConfig.ok).toBe(true);
+    expect(initialConfig.config).toBeDefined();
+    expect(initialConfig.config.enabled).toBe(false); // Default: disabled
+    console.log("✓ GET /api/polling/config works, polling disabled by default");
+
+    // POST to enable polling with custom interval
+    const updateRes = await request.post(`${BASE_URL}/api/polling/config`, {
+      headers: { "content-type": "application/json" },
+      data: { enabled: true, intervalSeconds: 60 },
+    });
+    expect(updateRes.ok()).toBeTruthy();
+    const updated = await updateRes.json();
+    expect(updated.ok).toBe(true);
+    expect(updated.config.enabled).toBe(true);
+    expect(updated.config.intervalSeconds).toBe(60);
+    console.log("✓ POST /api/polling/config - enabled polling with 60s interval");
+
+    // Disable polling again
+    const disableRes = await request.post(`${BASE_URL}/api/polling/config`, {
+      headers: { "content-type": "application/json" },
+      data: { enabled: false },
+    });
+    expect(disableRes.ok()).toBeTruthy();
+    const disabled = await disableRes.json();
+    expect(disabled.config.enabled).toBe(false);
+    console.log("✓ Polling disabled successfully");
+  });
+
+  test("17. Test polling check API endpoint (Issue #45)", async ({ request }) => {
+    // GET status
+    const statusRes = await request.get(`${BASE_URL}/api/polling/check`);
+    expect(statusRes.ok()).toBeTruthy();
+    const status = await statusRes.json();
+    expect(status.ok).toBe(true);
+    expect(typeof status.isRunning).toBe("boolean");
+    console.log("✓ GET /api/polling/check returns status");
+
+    // POST manual check (should work even with no configs)
+    const checkRes = await request.post(`${BASE_URL}/api/polling/check`);
+    expect(checkRes.ok()).toBeTruthy();
+    const checkResult = await checkRes.json();
+    expect(checkResult.ok).toBe(true);
+    expect(checkResult.checkedAt).toBeDefined();
+    expect(checkResult.summary).toBeDefined();
+    console.log(`✓ POST /api/polling/check - manual check completed, ${checkResult.summary.reposChecked} repos checked`);
+  });
+
+  test("18. Test polling UI controls visible on settings page (Issue #45)", async ({ page }) => {
+    await page.goto(`${BASE_URL}/settings/webhooks`);
+    await page.waitForLoadState("networkidle");
+
+    // Verify Polling Control Panel is visible
+    await expect(page.locator("text=Local Polling")).toBeVisible();
+    console.log("✓ 'Local Polling' label visible");
+
+    // Verify toggle button exists
+    const toggleBtn = page.locator("button").filter({ has: page.locator("span.rounded-full") }).first();
+    await expect(toggleBtn).toBeVisible();
+    console.log("✓ Polling toggle button visible");
+
+    // Verify Check Now button exists
+    await expect(page.locator("button").filter({ hasText: /Check Now/i })).toBeVisible();
+    console.log("✓ 'Check Now' button visible");
+
+    // Verify interval selector exists
+    await expect(page.locator("select")).toBeVisible();
+    console.log("✓ Interval selector visible");
+
+    // Verify helper text
+    await expect(page.locator("text=Alternative to webhooks for local development")).toBeVisible();
+    console.log("✓ Polling helper text visible");
+
+    await page.screenshot({
+      path: "test-results/webhook-16-polling-panel.png",
+      fullPage: true,
+    });
+  });
 });
