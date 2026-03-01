@@ -32,6 +32,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  const system = getRoutaSystem();
+
+  // Handle batch delete action
+  if (body.action === "deleteByStatus") {
+    const { status, workspaceId = "default" } = body;
+    if (!status) {
+      return NextResponse.json(
+        { error: "status is required for deleteByStatus action" },
+        { status: 400 }
+      );
+    }
+
+    const tasks = await system.backgroundTaskStore.listByStatus(
+      workspaceId,
+      status as never
+    );
+
+    let deleted = 0;
+    for (const task of tasks) {
+      await system.backgroundTaskStore.delete(task.id);
+      deleted++;
+    }
+
+    return NextResponse.json({
+      success: true,
+      deleted,
+      message: `Deleted ${deleted} ${status} tasks`,
+    });
+  }
+
   const {
     prompt,
     agentId,
@@ -48,8 +78,6 @@ export async function POST(request: NextRequest) {
   if (!agentId) {
     return NextResponse.json({ error: "agentId is required" }, { status: 400 });
   }
-
-  const system = getRoutaSystem();
 
   const task = createBackgroundTask({
     id: uuidv4(),
