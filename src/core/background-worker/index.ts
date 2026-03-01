@@ -232,6 +232,22 @@ export class BackgroundTaskWorker {
       // DB not ready or query failed — skip this cycle
       console.warn("[BGWorker] Failed to query running tasks:", err);
     }
+
+    // Strategy 3: Handle orphaned tasks (RUNNING but no session, stuck for > 5 min)
+    // These tasks were marked RUNNING but createAndSendPrompt failed silently
+    try {
+      const orphanedTasks = await system.backgroundTaskStore.listOrphaned(5);
+      for (const task of orphanedTasks) {
+        // Mark as FAILED so they can be retried or investigated
+        await system.backgroundTaskStore.updateStatus(task.id, "FAILED", {
+          completedAt: new Date(),
+          errorMessage: "Orphaned task: dispatch failed without creating a session",
+        });
+        console.log(`[BGWorker] Task ${task.id} marked FAILED (orphaned, no session after 5 min).`);
+      }
+    } catch {
+      // DB not ready — skip
+    }
   }
 }
 

@@ -23,6 +23,9 @@ export interface BackgroundTaskStore {
   /** List all RUNNING tasks with resultSessionId (for completion checking). */
   listRunning(): Promise<BackgroundTask[]>;
 
+  /** List orphaned tasks: RUNNING but no resultSessionId and startedAt > threshold. */
+  listOrphaned(thresholdMinutes?: number): Promise<BackgroundTask[]>;
+
   /** List tasks by status within a workspace. */
   listByStatus(
     workspaceId: string,
@@ -89,6 +92,18 @@ export class InMemoryBackgroundTaskStore implements BackgroundTaskStore {
   async listRunning(): Promise<BackgroundTask[]> {
     return [...this.tasks.values()]
       .filter((t) => t.status === "RUNNING" && t.resultSessionId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async listOrphaned(thresholdMinutes = 5): Promise<BackgroundTask[]> {
+    const thresholdMs = thresholdMinutes * 60 * 1000;
+    const now = Date.now();
+    return [...this.tasks.values()]
+      .filter((t) => {
+        if (t.status !== "RUNNING" || t.resultSessionId) return false;
+        const startedAt = t.startedAt?.getTime() ?? t.createdAt.getTime();
+        return now - startedAt > thresholdMs;
+      })
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 

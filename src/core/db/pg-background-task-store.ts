@@ -2,7 +2,7 @@
  * PgBackgroundTaskStore — Postgres-backed implementation of BackgroundTaskStore.
  */
 
-import { eq, and, asc, desc, isNotNull } from "drizzle-orm";
+import { eq, and, asc, desc, isNotNull, isNull, lt } from "drizzle-orm";
 import type { Database } from "./index";
 import { backgroundTasks } from "./schema";
 import type { BackgroundTask, BackgroundTaskStatus } from "../models/background-task";
@@ -98,6 +98,22 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
           eq(backgroundTasks.status, "RUNNING"),
           // Only tasks with a session assigned
           isNotNull(backgroundTasks.resultSessionId)
+        )
+      )
+      .orderBy(asc(backgroundTasks.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async listOrphaned(thresholdMinutes = 5): Promise<BackgroundTask[]> {
+    const threshold = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+    const rows = await this.db
+      .select()
+      .from(backgroundTasks)
+      .where(
+        and(
+          eq(backgroundTasks.status, "RUNNING"),
+          isNull(backgroundTasks.resultSessionId),
+          lt(backgroundTasks.startedAt, threshold)
         )
       )
       .orderBy(asc(backgroundTasks.createdAt));
