@@ -40,6 +40,9 @@ export interface GitHubWebhookPayload {
     state: string;
     user?: { login: string };
     head?: { ref: string; sha: string };
+    base?: { ref: string };
+    merged?: boolean;
+    draft?: boolean;
   };
   check_run?: {
     name: string;
@@ -47,6 +50,67 @@ export interface GitHubWebhookPayload {
     conclusion?: string;
     html_url: string;
   };
+  /** Check Suite event payload (check_suite event) */
+  check_suite?: {
+    id: number;
+    status: string;
+    conclusion?: string;
+    head_branch?: string;
+    head_sha?: string;
+    url: string;
+    pull_requests?: Array<{ number: number; url: string }>;
+  };
+  /** Workflow Run event payload (workflow_run event) */
+  workflow_run?: {
+    id: number;
+    name: string;
+    status: string;
+    conclusion?: string;
+    workflow_id: number;
+    html_url: string;
+    head_branch?: string;
+    head_sha?: string;
+    event: string;
+    run_number: number;
+    run_attempt: number;
+  };
+  /** Workflow Job event payload (workflow_job event) */
+  workflow_job?: {
+    id: number;
+    name: string;
+    status: string;
+    conclusion?: string;
+    html_url: string;
+    started_at?: string;
+    completed_at?: string;
+    workflow_name?: string;
+    runner_name?: string;
+    steps?: Array<{ name: string; status: string; conclusion?: string }>;
+  };
+  /** PR Review event payload (pull_request_review event) */
+  review?: {
+    id: number;
+    state: string; // "approved", "changes_requested", "commented", "dismissed"
+    body?: string;
+    html_url: string;
+    user?: { login: string };
+    commit_id?: string;
+  };
+  /** PR Review Comment event payload (pull_request_review_comment event) */
+  comment?: {
+    id: number;
+    body: string;
+    html_url: string;
+    user?: { login: string };
+    path?: string;
+    line?: number;
+    commit_id?: string;
+  };
+  /** Create/Delete event payload (create/delete events for tags and branches) */
+  ref?: string;
+  ref_type?: "branch" | "tag";
+  master_branch?: string;
+  pusher_type?: string;
   repository?: {
     full_name: string;
     html_url: string;
@@ -173,16 +237,32 @@ function buildContextSection(eventType: string, payload: GitHubWebhookPayload): 
       .join("\n");
   }
 
-  if ((eventType === "pull_request" || eventType === "pull_request_review") && payload.pull_request) {
+  if ((eventType === "pull_request" || eventType === "pull_request_review" || eventType === "pull_request_review_comment") && payload.pull_request) {
     const pr = payload.pull_request;
-    return [
+    const lines = [
       `PR #${pr.number}: ${pr.title}`,
       `URL: ${pr.html_url}`,
-      `Branch: ${pr.head?.ref ?? "unknown"}`,
+      `Branch: ${pr.head?.ref ?? "unknown"} → ${pr.base?.ref ?? "unknown"}`,
+      pr.draft ? `Status: Draft` : pr.merged ? `Status: Merged` : `Status: ${pr.state}`,
       pr.body ? `\nDescription:\n${pr.body}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ];
+
+    // Add review info for pull_request_review event
+    if (eventType === "pull_request_review" && payload.review) {
+      const review = payload.review;
+      lines.push(`\nReview by ${review.user?.login ?? "unknown"}: ${review.state}`);
+      if (review.body) lines.push(`Review comment:\n${review.body}`);
+    }
+
+    // Add comment info for pull_request_review_comment event
+    if (eventType === "pull_request_review_comment" && payload.comment) {
+      const comment = payload.comment;
+      lines.push(`\nComment by ${comment.user?.login ?? "unknown"}`);
+      if (comment.path) lines.push(`File: ${comment.path}${comment.line ? `:${comment.line}` : ""}`);
+      lines.push(`Comment:\n${comment.body}`);
+    }
+
+    return lines.filter(Boolean).join("\n");
   }
 
   if (eventType === "check_run" && payload.check_run) {
@@ -192,6 +272,76 @@ function buildContextSection(eventType: string, payload: GitHubWebhookPayload): 
       `Status: ${cr.status}, Conclusion: ${cr.conclusion ?? "pending"}`,
       `URL: ${cr.html_url}`,
     ].join("\n");
+  }
+
+  // Check Suite event
+  if (eventType === "check_suite" && payload.check_suite) {
+    const cs = payload.check_suite;
+    const lines = [
+      `Check Suite #${cs.id}`,
+      `Status: ${cs.status}, Conclusion: ${cs.conclusion ?? "pending"}`,
+      cs.head_branch ? `Branch: ${cs.head_branch}` : "",
+      cs.head_sha ? `Commit: ${cs.head_sha.slice(0, 7)}` : "",
+      cs.pull_requests?.length
+        ? `PRs: ${cs.pull_requests.map((pr) => `#${pr.number}`).join(", ")}`
+        : "",
+    ];
+    return lines.filter(Boolean).join("\n");
+  }
+
+  // Workflow Run event
+  if (eventType === "workflow_run" && payload.workflow_run) {
+    const wr = payload.workflow_run;
+    return [
+      `Workflow: ${wr.name} (#${wr.run_number})`,
+      `Status: ${wr.status}, Conclusion: ${wr.conclusion ?? "pending"}`,
+      `Triggered by: ${wr.event}`,
+      wr.head_branch ? `Branch: ${wr.head_branch}` : "",
+      wr.head_sha ? `Commit: ${wr.head_sha.slice(0, 7)}` : "",
+      `URL: ${wr.html_url}`,
+      `Attempt: ${wr.run_attempt}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  // Workflow Job event
+  if (eventType === "workflow_job" && payload.workflow_job) {
+    const wj = payload.workflow_job;
+    const lines = [
+      `Job: ${wj.name}${wj.workflow_name ? ` (${wj.workflow_name})` : ""}`,
+      `Status: ${wj.status}, Conclusion: ${wj.conclusion ?? "pending"}`,
+      `URL: ${wj.html_url}`,
+      wj.runner_name ? `Runner: ${wj.runner_name}` : "",
+    ];
+    if (wj.steps?.length) {
+      const failed = wj.steps.filter((s) => s.conclusion === "failure");
+      if (failed.length > 0) {
+        lines.push(`\nFailed steps: ${failed.map((s) => s.name).join(", ")}`);
+      }
+    }
+    return lines.filter(Boolean).join("\n");
+  }
+
+  // Create event (tags and branches)
+  if (eventType === "create" && payload.ref && payload.ref_type) {
+    return [
+      `Created ${payload.ref_type}: ${payload.ref}`,
+      payload.master_branch ? `Default branch: ${payload.master_branch}` : "",
+      payload.sender ? `By: ${payload.sender.login}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  // Delete event (tags and branches)
+  if (eventType === "delete" && payload.ref && payload.ref_type) {
+    return [
+      `Deleted ${payload.ref_type}: ${payload.ref}`,
+      payload.sender ? `By: ${payload.sender.login}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   return JSON.stringify(payload, null, 2).slice(0, 1000);

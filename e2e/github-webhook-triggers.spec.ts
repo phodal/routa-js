@@ -431,4 +431,298 @@ test.describe("GitHub Webhook Trigger System (Issue #43)", () => {
     expect(verifyRes.status()).toBe(404);
     console.log("✓ Config no longer exists after deletion");
   });
+
+  // ─── Phase 2: PR / CI / Tag Event Tests (Issue #44) ───────────────────────────
+
+  test("11. Test PR review event handling (Issue #44)", async ({ request }) => {
+    // Create a config for PR review events
+    const createRes = await request.post(`${BASE_URL}/api/webhooks/configs`, {
+      data: {
+        name: `PR Review Test ${Date.now()}`,
+        repo: TEST_REPO,
+        githubToken: GITHUB_TOKEN,
+        webhookSecret: "",
+        eventTypes: ["pull_request_review"],
+        labelFilter: [],
+        triggerAgentId: "claude-code",
+        enabled: true,
+      },
+    });
+
+    expect(createRes.status()).toBe(201);
+    const { config } = await createRes.json();
+    console.log(`✓ Created PR review config: ${config.id}`);
+
+    // Simulate a pull_request_review event
+    const payload = {
+      action: "submitted",
+      review: {
+        id: 12345,
+        state: "approved",
+        body: "LGTM! Great implementation.",
+        html_url: `https://github.com/${TEST_REPO}/pull/1#pullrequestreview-12345`,
+        user: { login: "reviewer" },
+        commit_id: "abc123def456",
+      },
+      pull_request: {
+        number: 1,
+        title: "E2E Test PR for PR Review",
+        body: "Testing PR review webhook handling",
+        html_url: `https://github.com/${TEST_REPO}/pull/1`,
+        state: "open",
+        user: { login: "phodal" },
+        head: { ref: "feature/test", sha: "abc123" },
+        base: { ref: "main" },
+        merged: false,
+        draft: false,
+      },
+      repository: {
+        full_name: TEST_REPO,
+        html_url: `https://github.com/${TEST_REPO}`,
+      },
+      sender: { login: "reviewer" },
+    };
+
+    const webhookRes = await request.post(`${BASE_URL}/api/webhooks/github`, {
+      headers: {
+        "x-github-event": "pull_request_review",
+        "x-github-delivery": `pr-review-test-${Date.now()}`,
+        "content-type": "application/json",
+      },
+      data: payload,
+    });
+
+    expect(webhookRes.ok()).toBeTruthy();
+    const result = await webhookRes.json();
+    expect(result.ok).toBe(true);
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+    console.log(`✓ PR review event processed: ${result.processed} triggered`);
+
+    // Cleanup
+    await request.delete(`${BASE_URL}/api/webhooks/configs?id=${config.id}`);
+    console.log("✓ Cleaned up PR review test config");
+  });
+
+  test("12. Test workflow_run event handling (Issue #44)", async ({ request }) => {
+    // Create a config for workflow_run events
+    const createRes = await request.post(`${BASE_URL}/api/webhooks/configs`, {
+      data: {
+        name: `Workflow Run Test ${Date.now()}`,
+        repo: TEST_REPO,
+        githubToken: GITHUB_TOKEN,
+        webhookSecret: "",
+        eventTypes: ["workflow_run"],
+        labelFilter: [],
+        triggerAgentId: "claude-code",
+        enabled: true,
+      },
+    });
+
+    expect(createRes.status()).toBe(201);
+    const { config } = await createRes.json();
+    console.log(`✓ Created workflow_run config: ${config.id}`);
+
+    // Simulate a workflow_run event
+    const payload = {
+      action: "completed",
+      workflow_run: {
+        id: 9876543210,
+        name: "CI Build",
+        status: "completed",
+        conclusion: "failure",
+        workflow_id: 12345,
+        html_url: `https://github.com/${TEST_REPO}/actions/runs/9876543210`,
+        head_branch: "feature/test",
+        head_sha: "abc123def456",
+        event: "push",
+        run_number: 42,
+        run_attempt: 1,
+      },
+      repository: {
+        full_name: TEST_REPO,
+        html_url: `https://github.com/${TEST_REPO}`,
+      },
+      sender: { login: "phodal" },
+    };
+
+    const webhookRes = await request.post(`${BASE_URL}/api/webhooks/github`, {
+      headers: {
+        "x-github-event": "workflow_run",
+        "x-github-delivery": `workflow-run-test-${Date.now()}`,
+        "content-type": "application/json",
+      },
+      data: payload,
+    });
+
+    expect(webhookRes.ok()).toBeTruthy();
+    const result = await webhookRes.json();
+    expect(result.ok).toBe(true);
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+    console.log(`✓ workflow_run event processed: ${result.processed} triggered`);
+
+    // Cleanup
+    await request.delete(`${BASE_URL}/api/webhooks/configs?id=${config.id}`);
+    console.log("✓ Cleaned up workflow_run test config");
+  });
+
+  test("13. Test create event (tag/branch) handling (Issue #44)", async ({ request }) => {
+    // Create a config for create events
+    const createRes = await request.post(`${BASE_URL}/api/webhooks/configs`, {
+      data: {
+        name: `Create Event Test ${Date.now()}`,
+        repo: TEST_REPO,
+        githubToken: GITHUB_TOKEN,
+        webhookSecret: "",
+        eventTypes: ["create"],
+        labelFilter: [],
+        triggerAgentId: "claude-code",
+        enabled: true,
+      },
+    });
+
+    expect(createRes.status()).toBe(201);
+    const { config } = await createRes.json();
+    console.log(`✓ Created 'create' event config: ${config.id}`);
+
+    // Simulate a create event for a new tag
+    const payload = {
+      ref: "v1.2.3",
+      ref_type: "tag",
+      master_branch: "main",
+      pusher_type: "user",
+      repository: {
+        full_name: TEST_REPO,
+        html_url: `https://github.com/${TEST_REPO}`,
+      },
+      sender: { login: "phodal" },
+    };
+
+    const webhookRes = await request.post(`${BASE_URL}/api/webhooks/github`, {
+      headers: {
+        "x-github-event": "create",
+        "x-github-delivery": `create-test-${Date.now()}`,
+        "content-type": "application/json",
+      },
+      data: payload,
+    });
+
+    expect(webhookRes.ok()).toBeTruthy();
+    const result = await webhookRes.json();
+    expect(result.ok).toBe(true);
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+    console.log(`✓ Create event (tag) processed: ${result.processed} triggered`);
+
+    // Cleanup
+    await request.delete(`${BASE_URL}/api/webhooks/configs?id=${config.id}`);
+    console.log("✓ Cleaned up create event test config");
+  });
+
+  test("14. Test delete event (tag/branch) handling (Issue #44)", async ({ request }) => {
+    // Create a config for delete events
+    const createRes = await request.post(`${BASE_URL}/api/webhooks/configs`, {
+      data: {
+        name: `Delete Event Test ${Date.now()}`,
+        repo: TEST_REPO,
+        githubToken: GITHUB_TOKEN,
+        webhookSecret: "",
+        eventTypes: ["delete"],
+        labelFilter: [],
+        triggerAgentId: "claude-code",
+        enabled: true,
+      },
+    });
+
+    expect(createRes.status()).toBe(201);
+    const { config } = await createRes.json();
+    console.log(`✓ Created 'delete' event config: ${config.id}`);
+
+    // Simulate a delete event for a branch
+    const payload = {
+      ref: "feature/old-branch",
+      ref_type: "branch",
+      pusher_type: "user",
+      repository: {
+        full_name: TEST_REPO,
+        html_url: `https://github.com/${TEST_REPO}`,
+      },
+      sender: { login: "phodal" },
+    };
+
+    const webhookRes = await request.post(`${BASE_URL}/api/webhooks/github`, {
+      headers: {
+        "x-github-event": "delete",
+        "x-github-delivery": `delete-test-${Date.now()}`,
+        "content-type": "application/json",
+      },
+      data: payload,
+    });
+
+    expect(webhookRes.ok()).toBeTruthy();
+    const result = await webhookRes.json();
+    expect(result.ok).toBe(true);
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+    console.log(`✓ Delete event (branch) processed: ${result.processed} triggered`);
+
+    // Cleanup
+    await request.delete(`${BASE_URL}/api/webhooks/configs?id=${config.id}`);
+    console.log("✓ Cleaned up delete event test config");
+  });
+
+  test("15. Test check_suite event handling (Issue #44)", async ({ request }) => {
+    // Create a config for check_suite events
+    const createRes = await request.post(`${BASE_URL}/api/webhooks/configs`, {
+      data: {
+        name: `Check Suite Test ${Date.now()}`,
+        repo: TEST_REPO,
+        githubToken: GITHUB_TOKEN,
+        webhookSecret: "",
+        eventTypes: ["check_suite"],
+        labelFilter: [],
+        triggerAgentId: "claude-code",
+        enabled: true,
+      },
+    });
+
+    expect(createRes.status()).toBe(201);
+    const { config } = await createRes.json();
+    console.log(`✓ Created check_suite config: ${config.id}`);
+
+    // Simulate a check_suite event
+    const payload = {
+      action: "completed",
+      check_suite: {
+        id: 123456789,
+        status: "completed",
+        conclusion: "success",
+        head_branch: "main",
+        head_sha: "abc123def456",
+        url: `https://api.github.com/repos/${TEST_REPO}/check-suites/123456789`,
+        pull_requests: [{ number: 42, url: `https://github.com/${TEST_REPO}/pull/42` }],
+      },
+      repository: {
+        full_name: TEST_REPO,
+        html_url: `https://github.com/${TEST_REPO}`,
+      },
+      sender: { login: "github-actions[bot]" },
+    };
+
+    const webhookRes = await request.post(`${BASE_URL}/api/webhooks/github`, {
+      headers: {
+        "x-github-event": "check_suite",
+        "x-github-delivery": `check-suite-test-${Date.now()}`,
+        "content-type": "application/json",
+      },
+      data: payload,
+    });
+
+    expect(webhookRes.ok()).toBeTruthy();
+    const result = await webhookRes.json();
+    expect(result.ok).toBe(true);
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+    console.log(`✓ check_suite event processed: ${result.processed} triggered`);
+
+    // Cleanup
+    await request.delete(`${BASE_URL}/api/webhooks/configs?id=${config.id}`);
+    console.log("✓ Cleaned up check_suite test config");
+  });
 });

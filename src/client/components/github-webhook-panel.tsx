@@ -57,8 +57,15 @@ interface FormState {
 const SUPPORTED_EVENTS = [
   { value: "issues", label: "Issues", description: "opened, labeled, closed, etc." },
   { value: "pull_request", label: "Pull Requests", description: "opened, synchronize, merged, etc." },
+  { value: "pull_request_review", label: "PR Reviews", description: "approved, changes_requested, commented" },
+  { value: "pull_request_review_comment", label: "PR Review Comments", description: "Comments on PR diffs" },
   { value: "check_run", label: "Check Runs", description: "Build success/failure events" },
+  { value: "check_suite", label: "Check Suites", description: "Suite of checks completed" },
+  { value: "workflow_run", label: "Workflow Runs", description: "GitHub Actions workflow events" },
+  { value: "workflow_job", label: "Workflow Jobs", description: "Individual job events" },
   { value: "push", label: "Push", description: "Code pushed to branches" },
+  { value: "create", label: "Create", description: "Branch or tag created" },
+  { value: "delete", label: "Delete", description: "Branch or tag deleted" },
   { value: "issue_comment", label: "Issue Comments", description: "Comments on issues/PRs" },
 ];
 
