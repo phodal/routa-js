@@ -21,13 +21,15 @@ export type BackgroundTaskStatus =
  * What triggered this background task.
  * - "manual"    — user dispatched it from the UI
  * - "schedule"  — fired by a cron schedule (future)
- * - "webhook"   — fired by an inbound webhook event (future)
+ * - "webhook"   — fired by an inbound webhook event
+ * - "polling"   — fired by GitHub polling adapter (local dev alternative to webhooks)
  * - "fleet"     — part of a multi-repo fleet dispatch (future)
  */
 export type BackgroundTaskTriggerSource =
   | "manual"
   | "schedule"
   | "webhook"
+  | "polling"
   | "fleet";
 
 export interface BackgroundTask {

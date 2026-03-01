@@ -102,6 +102,12 @@ export function GitHubWebhookPanel() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"configs" | "logs">("configs");
+  // Polling state
+  const [pollingEnabled, setPollingEnabled] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState(30);
+  const [pollingRunning, setPollingRunning] = useState(false);
+  const [pollingLastChecked, setPollingLastChecked] = useState<string | null>(null);
+  const [pollingChecking, setPollingChecking] = useState(false);
 
   // Detect server URL for webhook registration
   useEffect(() => {
@@ -111,9 +117,10 @@ export function GitHubWebhookPanel() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [cfgRes, logRes] = await Promise.all([
+      const [cfgRes, logRes, pollRes] = await Promise.all([
         fetch("/api/webhooks/configs"),
         fetch("/api/webhooks/webhook-logs?limit=50"),
+        fetch("/api/polling/config"),
       ]);
       if (cfgRes.ok) {
         const data = await cfgRes.json();
@@ -122,6 +129,13 @@ export function GitHubWebhookPanel() {
       if (logRes.ok) {
         const data = await logRes.json();
         setLogs(data.logs ?? []);
+      }
+      if (pollRes.ok) {
+        const data = await pollRes.json();
+        setPollingEnabled(data.config?.enabled ?? false);
+        setPollingInterval(data.config?.intervalSeconds ?? 30);
+        setPollingRunning(data.config?.isRunning ?? false);
+        setPollingLastChecked(data.config?.lastCheckedAt ?? null);
       }
     } catch (err) {
       console.error("Failed to load webhook data:", err);
@@ -277,6 +291,58 @@ export function GitHubWebhookPanel() {
     }
   }
 
+  // ─── Polling Controls ─────────────────────────────────────────────────────
+
+  async function handleTogglePolling() {
+    try {
+      const newEnabled = !pollingEnabled;
+      const res = await fetch("/api/polling/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: newEnabled, intervalSeconds: pollingInterval }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setPollingEnabled(data.config?.enabled ?? false);
+      setPollingRunning(data.config?.isRunning ?? false);
+      setSuccess(newEnabled ? "Polling enabled" : "Polling disabled");
+    } catch (err) {
+      setError(`Failed to toggle polling: ${err}`);
+    }
+  }
+
+  async function handleManualCheck() {
+    try {
+      setPollingChecking(true);
+      const res = await fetch("/api/polling/check", { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setPollingLastChecked(data.checkedAt);
+      const { totalEventsProcessed, totalEventsSkipped } = data.summary;
+      setSuccess(`Check complete: ${totalEventsProcessed} events processed, ${totalEventsSkipped} skipped`);
+      await loadData(); // Refresh logs
+    } catch (err) {
+      setError(`Manual check failed: ${err}`);
+    } finally {
+      setPollingChecking(false);
+    }
+  }
+
+  async function handleUpdatePollingInterval(newInterval: number) {
+    if (newInterval < 10) return;
+    try {
+      const res = await fetch("/api/polling/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intervalSeconds: newInterval }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setPollingInterval(newInterval);
+    } catch (err) {
+      setError(`Failed to update interval: ${err}`);
+    }
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -333,6 +399,73 @@ export function GitHubWebhookPanel() {
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {activeTab === "configs" && (
           <>
+            {/* Polling Control Panel */}
+            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Local Polling
+                    </span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                      pollingRunning
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
+                    }`}>
+                      {pollingRunning ? "Running" : "Stopped"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleTogglePolling}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      pollingEnabled ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
+                    }`}
+                    title={pollingEnabled ? "Disable polling" : "Enable polling (alternative to webhooks for local dev)"}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      pollingEnabled ? "translate-x-4.5" : "translate-x-1"
+                    }`} style={{ transform: pollingEnabled ? "translateX(18px)" : "translateX(4px)" }} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pollingInterval}
+                    onChange={(e) => handleUpdatePollingInterval(Number(e.target.value))}
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    disabled={!pollingEnabled}
+                  >
+                    <option value={10}>10s</option>
+                    <option value={30}>30s</option>
+                    <option value={60}>1min</option>
+                    <option value={300}>5min</option>
+                  </select>
+                  <button
+                    onClick={handleManualCheck}
+                    disabled={pollingChecking}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-300"
+                    title="Manually check for new events now"
+                  >
+                    {pollingChecking ? (
+                      <div className="w-3 h-3 border border-gray-400 border-t-blue-500 rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                    Check Now
+                  </button>
+                </div>
+              </div>
+              {pollingLastChecked && (
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Last checked: {new Date(pollingLastChecked).toLocaleString()}
+                </div>
+              )}
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Alternative to webhooks for local development. Polls GitHub API for events.
+              </p>
+            </div>
+
             {showForm && (
               <WebhookConfigForm
                 form={form}
