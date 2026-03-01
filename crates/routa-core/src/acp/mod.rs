@@ -441,6 +441,9 @@ impl AcpManager {
 /// ACP provider presets for known coding agents.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcpPreset {
+    /// Unique identifier (lowercase, e.g., "claude", "opencode")
+    pub id: String,
+    /// Human-readable display name (e.g., "Claude Code", "OpenCode")
     pub name: String,
     pub command: String,
     pub args: Vec<String>,
@@ -451,52 +454,62 @@ pub struct AcpPreset {
 pub fn get_presets() -> Vec<AcpPreset> {
     vec![
         AcpPreset {
-            name: "opencode".to_string(),
+            id: "opencode".to_string(),
+            name: "OpenCode".to_string(),
             command: "opencode".to_string(),
             args: vec!["acp".to_string()],
             description: "OpenCode AI coding agent".to_string(),
         },
         AcpPreset {
-            name: "gemini".to_string(),
+            id: "gemini".to_string(),
+            name: "Gemini".to_string(),
             command: "gemini".to_string(),
             args: vec!["--experimental-acp".to_string()],
             description: "Google Gemini CLI".to_string(),
         },
         AcpPreset {
-            name: "codex-acp".to_string(),
+            id: "codex-acp".to_string(),
+            name: "Codex".to_string(),
             command: "codex-acp".to_string(),
             args: vec![],
             description: "OpenAI Codex CLI (codex-acp wrapper)".to_string(),
         },
         AcpPreset {
-            name: "copilot".to_string(),
+            id: "copilot".to_string(),
+            name: "GitHub Copilot".to_string(),
             command: "copilot".to_string(),
-            args: vec!["--acp".to_string()],
+            args: vec!["--acp".to_string(), "--allow-all-tools".to_string(), "--no-ask-user".to_string()],
             description: "GitHub Copilot CLI".to_string(),
         },
         AcpPreset {
-            name: "auggie".to_string(),
+            id: "auggie".to_string(),
+            name: "Auggie".to_string(),
             command: "auggie".to_string(),
             args: vec!["--acp".to_string()],
             description: "Augment Code's AI agent".to_string(),
         },
         AcpPreset {
-            name: "kimi".to_string(),
+            id: "kimi".to_string(),
+            name: "Kimi".to_string(),
             command: "kimi".to_string(),
             args: vec!["acp".to_string()],
             description: "Moonshot AI's Kimi CLI".to_string(),
         },
         AcpPreset {
-            name: "kiro".to_string(),
+            id: "kiro".to_string(),
+            name: "Kiro".to_string(),
             command: "kiro-cli".to_string(),
             args: vec!["acp".to_string()],
             description: "Amazon Kiro AI coding agent".to_string(),
         },
         AcpPreset {
-            name: "claude".to_string(),
+            id: "claude".to_string(),
+            name: "Claude Code".to_string(),
             command: "claude".to_string(),
-            args: vec!["--acp".to_string()],
-            description: "Anthropic Claude Code".to_string(),
+            // Claude Code uses stream-json protocol, not ACP flags
+            // Args are unused since we use ClaudeCodeProcess directly
+            args: vec![],
+            description: "Anthropic Claude Code (stream-json protocol)".to_string(),
         },
     ]
 }
@@ -517,12 +530,12 @@ pub async fn get_preset_by_id_with_registry(id: &str) -> Result<AcpPreset, Strin
         let base_id = &id[..id.len() - REGISTRY_SUFFIX.len()];
         let mut preset = get_registry_preset(base_id).await?;
         // Keep the suffixed ID in the returned preset for consistency
-        preset.name = id.to_string();
+        preset.id = id.to_string();
         return Ok(preset);
     }
 
-    // Check static presets first
-    if let Some(preset) = get_presets().into_iter().find(|p| p.name == id) {
+    // Check static presets first (match by id, not name)
+    if let Some(preset) = get_presets().into_iter().find(|p| p.id == id) {
         return Ok(preset);
     }
 
@@ -570,7 +583,8 @@ async fn get_registry_preset(id: &str) -> Result<AcpPreset, String> {
     };
 
     Ok(AcpPreset {
-        name: agent.id,
+        id: agent.id.clone(),
+        name: agent.name,
         command,
         args,
         description: agent.description,

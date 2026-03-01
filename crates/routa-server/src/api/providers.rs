@@ -128,7 +128,7 @@ async fn get_providers_without_checking() -> Vec<ProviderInfo> {
     let mut providers: Vec<ProviderInfo> = presets
         .iter()
         .map(|p| ProviderInfo {
-            id: p.name.clone(),
+            id: p.id.clone(),
             name: p.name.clone(),
             description: p.description.clone(),
             command: p.command.clone(),
@@ -183,7 +183,7 @@ async fn get_providers_with_checking() -> Vec<ProviderInfo> {
     for preset in &presets {
         let installed = shell_env::which(&preset.command).is_some();
         providers.push(ProviderInfo {
-            id: preset.name.clone(),
+            id: preset.id.clone(),
             name: preset.name.clone(),
             description: preset.description.clone(),
             command: preset.command.clone(),
