@@ -41,6 +41,21 @@ export interface BackgroundTaskStore {
     }
   ): Promise<void>;
 
+  /** Update progress fields from ACP session notifications. */
+  updateProgress(
+    taskId: string,
+    progress: {
+      lastActivity?: Date;
+      currentActivity?: string;
+      toolCallCount?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+    }
+  ): Promise<void>;
+
+  /** Find task by session ID. */
+  findBySessionId(sessionId: string): Promise<BackgroundTask | undefined>;
+
   /** Delete a task by ID (hard delete). */
   delete(taskId: string): Promise<void>;
 }
@@ -107,6 +122,36 @@ export class InMemoryBackgroundTaskStore implements BackgroundTaskStore {
       completedAt: opts?.completedAt ?? t.completedAt,
       updatedAt: new Date(),
     });
+  }
+
+  async updateProgress(
+    taskId: string,
+    progress: {
+      lastActivity?: Date;
+      currentActivity?: string;
+      toolCallCount?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+    }
+  ): Promise<void> {
+    const t = this.tasks.get(taskId);
+    if (!t) return;
+    this.tasks.set(taskId, {
+      ...t,
+      lastActivity: progress.lastActivity ?? t.lastActivity,
+      currentActivity: progress.currentActivity ?? t.currentActivity,
+      toolCallCount: progress.toolCallCount ?? t.toolCallCount,
+      inputTokens: progress.inputTokens ?? t.inputTokens,
+      outputTokens: progress.outputTokens ?? t.outputTokens,
+      updatedAt: new Date(),
+    });
+  }
+
+  async findBySessionId(sessionId: string): Promise<BackgroundTask | undefined> {
+    for (const t of this.tasks.values()) {
+      if (t.resultSessionId === sessionId) return { ...t };
+    }
+    return undefined;
   }
 
   async delete(taskId: string): Promise<void> {

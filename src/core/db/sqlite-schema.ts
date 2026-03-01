@@ -266,6 +266,17 @@ export const backgroundTasks = sqliteTable("background_tasks", {
   completedAt: integer("completed_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  // ─── Progress tracking fields ────────────────────────────────────────────
+  /** Most recent activity timestamp */
+  lastActivity: integer("last_activity", { mode: "timestamp_ms" }),
+  /** Current activity description */
+  currentActivity: text("current_activity"),
+  /** Number of tool calls executed */
+  toolCallCount: integer("tool_call_count").default(0),
+  /** Input tokens consumed */
+  inputTokens: integer("input_tokens").default(0),
+  /** Output tokens consumed */
+  outputTokens: integer("output_tokens").default(0),
 });
 
 // ─── GitHub Webhook Configs ───────────────────────────────────────────────

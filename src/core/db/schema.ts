@@ -290,6 +290,17 @@ export const backgroundTasks = pgTable("background_tasks", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  // ─── Progress tracking fields ────────────────────────────────────────────
+  /** Most recent activity timestamp */
+  lastActivity: timestamp("last_activity", { withTimezone: true }),
+  /** Current activity description */
+  currentActivity: text("current_activity"),
+  /** Number of tool calls executed */
+  toolCallCount: integer("tool_call_count").default(0),
+  /** Input tokens consumed */
+  inputTokens: integer("input_tokens").default(0),
+  /** Output tokens consumed */
+  outputTokens: integer("output_tokens").default(0),
 });
 
 // ─── GitHub Webhook Configs ───────────────────────────────────────────────

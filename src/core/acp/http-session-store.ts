@@ -17,6 +17,8 @@ import { TraceRecorder } from "./provider-adapter/trace-recorder";
 import { hydrateSessionsFromDb } from "./session-db-persister";
 import { AgentEventBridge, makeStartedEvent } from "./agent-event-bridge";
 import type { WorkspaceAgentEvent } from "./agent-event-bridge";
+import type { NormalizedSessionUpdate } from "./provider-adapter/types";
+import { getRoutaSystem } from "../routa-system";
 
 export interface RoutaSessionRecord {
   sessionId: string;
@@ -353,6 +355,8 @@ class HttpSessionStore {
           }
         }
       }
+      // Update BackgroundTask progress if this session is linked to one
+      void this.updateBackgroundTaskProgress(sessionId, updates);
     }
 
     // Skip SSE push while a prompt stream is actively delivering events via
@@ -615,6 +619,60 @@ class HttpSessionStore {
     }
     if (dbSessions.length > 0) {
       console.log(`[HttpSessionStore] Hydrated ${dbSessions.length} sessions from database`);
+    }
+  }
+
+  /**
+   * Update BackgroundTask progress from ACP session notifications.
+   * Called from pushNotification when normalized updates are available.
+   */
+  private async updateBackgroundTaskProgress(
+    sessionId: string,
+    updates: NormalizedSessionUpdate[]
+  ): Promise<void> {
+    try {
+      const system = getRoutaSystem();
+      const task = await system.backgroundTaskStore.findBySessionId(sessionId);
+      if (!task) return; // Not a background task session
+
+      let toolCallCount = task.toolCallCount ?? 0;
+      let inputTokens = task.inputTokens ?? 0;
+      let outputTokens = task.outputTokens ?? 0;
+      let currentActivity: string | undefined;
+
+      for (const update of updates) {
+        // Count tool calls
+        if (update.toolCall && update.eventType === "tool_call") {
+          toolCallCount++;
+          currentActivity = `Running: ${update.toolCall.title ?? update.toolCall.name}`;
+        }
+
+        // Update activity based on tool status
+        if (update.toolCall && update.eventType === "tool_call_update") {
+          if (update.toolCall.status === "running") {
+            currentActivity = `Running: ${update.toolCall.title ?? update.toolCall.name}`;
+          } else if (update.toolCall.status === "completed") {
+            currentActivity = `Completed: ${update.toolCall.title ?? update.toolCall.name}`;
+          }
+        }
+
+        // Extract token usage from turn_complete
+        if (update.turnComplete?.usage) {
+          inputTokens += update.turnComplete.usage.inputTokens ?? 0;
+          outputTokens += update.turnComplete.usage.outputTokens ?? 0;
+        }
+      }
+
+      // Update progress in the store
+      await system.backgroundTaskStore.updateProgress(task.id, {
+        lastActivity: new Date(),
+        currentActivity,
+        toolCallCount,
+        inputTokens,
+        outputTokens,
+      });
+    } catch {
+      // Ignore errors - progress tracking is best-effort
     }
   }
 }

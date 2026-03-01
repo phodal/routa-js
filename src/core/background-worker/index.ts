@@ -21,6 +21,8 @@ const DISPATCH_INTERVAL_MS = 5_000;
 const COMPLETION_INTERVAL_MS = 15_000;
 const WORKER_GLOBAL_KEY = "__routa_bg_worker__";
 const WORKER_STARTED_KEY = "__routa_bg_worker_started__";
+/** Maximum number of concurrent background tasks */
+const MAX_CONCURRENT_TASKS = 2;
 
 // ─── Internal URL helper ─────────────────────────────────────────────────────
 
@@ -54,15 +56,38 @@ export class BackgroundTaskWorker {
 
   // ─── Dispatch pending tasks ───────────────────────────────────────────────
 
+  /**
+   * Dispatch pending tasks with concurrency control.
+   * Only runs up to MAX_CONCURRENT_TASKS at a time.
+   */
   async dispatchPending(): Promise<void> {
     const system = getRoutaSystem();
+
+    // Check current running count
+    let running: BackgroundTask[];
+    try {
+      running = await system.backgroundTaskStore.listRunning();
+    } catch {
+      return; // DB not ready yet (cold start)
+    }
+
+    // Skip if already at max concurrency
+    if (running.length >= MAX_CONCURRENT_TASKS) {
+      return;
+    }
+
+    const slotsAvailable = MAX_CONCURRENT_TASKS - running.length;
+
     let pending: BackgroundTask[];
     try {
       pending = await system.backgroundTaskStore.listPending();
     } catch {
-      return; // DB not ready yet (cold start)
+      return;
     }
-    for (const task of pending) {
+
+    // Only dispatch as many as we have slots for
+    const toDispatch = pending.slice(0, slotsAvailable);
+    for (const task of toDispatch) {
       await this.dispatchTask(task);
     }
   }

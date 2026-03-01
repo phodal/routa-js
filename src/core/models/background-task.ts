@@ -63,6 +63,18 @@ export interface BackgroundTask {
   startedAt?: Date;
   completedAt?: Date;
   updatedAt: Date;
+
+  // ─── Progress tracking (updated from ACP session notifications) ──────────
+  /** Most recent activity timestamp (any notification received) */
+  lastActivity?: Date;
+  /** Current activity description (e.g., "Reading file...", "Calling gh...") */
+  currentActivity?: string;
+  /** Number of tool calls executed so far */
+  toolCallCount?: number;
+  /** Input tokens consumed */
+  inputTokens?: number;
+  /** Output tokens consumed */
+  outputTokens?: number;
 }
 
 /**

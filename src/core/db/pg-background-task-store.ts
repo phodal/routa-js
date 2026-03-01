@@ -31,6 +31,11 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
         completedAt: task.completedAt,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
+        lastActivity: task.lastActivity,
+        currentActivity: task.currentActivity,
+        toolCallCount: task.toolCallCount ?? 0,
+        inputTokens: task.inputTokens ?? 0,
+        outputTokens: task.outputTokens ?? 0,
       })
       .onConflictDoUpdate({
         target: backgroundTasks.id,
@@ -48,6 +53,11 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
           startedAt: task.startedAt,
           completedAt: task.completedAt,
           updatedAt: new Date(),
+          lastActivity: task.lastActivity,
+          currentActivity: task.currentActivity,
+          toolCallCount: task.toolCallCount ?? 0,
+          inputTokens: task.inputTokens ?? 0,
+          outputTokens: task.outputTokens ?? 0,
         },
       });
   }
@@ -134,6 +144,38 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
       .where(eq(backgroundTasks.id, taskId));
   }
 
+  async updateProgress(
+    taskId: string,
+    progress: {
+      lastActivity?: Date;
+      currentActivity?: string;
+      toolCallCount?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+    }
+  ): Promise<void> {
+    await this.db
+      .update(backgroundTasks)
+      .set({
+        lastActivity: progress.lastActivity,
+        currentActivity: progress.currentActivity,
+        toolCallCount: progress.toolCallCount,
+        inputTokens: progress.inputTokens,
+        outputTokens: progress.outputTokens,
+        updatedAt: new Date(),
+      })
+      .where(eq(backgroundTasks.id, taskId));
+  }
+
+  async findBySessionId(sessionId: string): Promise<BackgroundTask | undefined> {
+    const rows = await this.db
+      .select()
+      .from(backgroundTasks)
+      .where(eq(backgroundTasks.resultSessionId, sessionId))
+      .limit(1);
+    return rows[0] ? this.toModel(rows[0]) : undefined;
+  }
+
   async delete(taskId: string): Promise<void> {
     await this.db
       .delete(backgroundTasks)
@@ -158,6 +200,11 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
       completedAt: row.completedAt ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      lastActivity: row.lastActivity ?? undefined,
+      currentActivity: row.currentActivity ?? undefined,
+      toolCallCount: row.toolCallCount ?? undefined,
+      inputTokens: row.inputTokens ?? undefined,
+      outputTokens: row.outputTokens ?? undefined,
     };
   }
 }
