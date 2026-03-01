@@ -13,6 +13,7 @@ pub mod mcp_routes;
 pub mod mcp_server_mgmt;
 pub mod mcp_tools;
 pub mod notes;
+pub mod polling;
 pub mod provider_models;
 pub mod providers;
 pub mod rpc;
@@ -62,4 +63,5 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/specialists", specialists::router())
         .nest("/api/memory", memory::router())
         .nest("/api/debug", debug::router())
+        .nest("/api/polling", polling::router())
 }
