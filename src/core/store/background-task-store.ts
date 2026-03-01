@@ -84,9 +84,16 @@ export class InMemoryBackgroundTaskStore implements BackgroundTaskStore {
   }
 
   async listPending(): Promise<BackgroundTask[]> {
+    const priorityOrder = { HIGH: 0, NORMAL: 1, LOW: 2 };
     return [...this.tasks.values()]
       .filter((t) => t.status === "PENDING")
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      .sort((a, b) => {
+        // Sort by priority first (HIGH > NORMAL > LOW)
+        const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+        // Then by createdAt (oldest first)
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      });
   }
 
   async listRunning(): Promise<BackgroundTask[]> {

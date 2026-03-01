@@ -256,6 +256,8 @@ export const backgroundTasks = sqliteTable("background_tasks", {
   triggeredBy: text("triggered_by").notNull().default("user"),
   /** manual | schedule | webhook | fleet */
   triggerSource: text("trigger_source").notNull().default("manual"),
+  /** Task priority: HIGH | NORMAL | LOW */
+  priority: text("priority").notNull().default("NORMAL"),
   /** ACP session created when the task starts */
   resultSessionId: text("result_session_id"),
   /** Error message when status = FAILED */

@@ -974,6 +974,7 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
         status: task.status,
         triggeredBy: task.triggeredBy,
         triggerSource: task.triggerSource,
+        priority: task.priority,
         resultSessionId: task.resultSessionId,
         errorMessage: task.errorMessage,
         attempts: task.attempts,
@@ -1036,7 +1037,12 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
       .select()
       .from(sqliteSchema.backgroundTasks)
       .where(eq(sqliteSchema.backgroundTasks.status, "PENDING"))
-      .orderBy(asc(sqliteSchema.backgroundTasks.createdAt));
+      .orderBy(
+        // Sort by priority first (HIGH > NORMAL > LOW)
+        desc(sqliteSchema.backgroundTasks.priority),
+        // Then by createdAt (oldest first)
+        asc(sqliteSchema.backgroundTasks.createdAt)
+      );
     return rows.map(this.toModel.bind(this));
   }
 
@@ -1160,6 +1166,7 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
       status: row.status as BackgroundTaskStatus,
       triggeredBy: row.triggeredBy,
       triggerSource: row.triggerSource as BackgroundTask["triggerSource"],
+      priority: row.priority as BackgroundTask["priority"],
       resultSessionId: row.resultSessionId ?? undefined,
       errorMessage: row.errorMessage ?? undefined,
       attempts: row.attempts,

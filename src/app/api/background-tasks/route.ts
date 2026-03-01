@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
     title,
     triggerSource = "manual",
     triggeredBy,
+    priority = "NORMAL",
     maxAttempts = 3,
   } = body;
 
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
     title: title ?? prompt.slice(0, 80),
     triggerSource,
     triggeredBy,
+    priority,
     maxAttempts,
   });
 

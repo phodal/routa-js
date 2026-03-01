@@ -23,6 +23,7 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
         status: task.status,
         triggeredBy: task.triggeredBy,
         triggerSource: task.triggerSource,
+        priority: task.priority,
         resultSessionId: task.resultSessionId,
         errorMessage: task.errorMessage,
         attempts: task.attempts,
@@ -85,7 +86,12 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
       .select()
       .from(backgroundTasks)
       .where(eq(backgroundTasks.status, "PENDING"))
-      .orderBy(asc(backgroundTasks.createdAt));
+      .orderBy(
+        // Sort by priority first (HIGH > NORMAL > LOW)
+        desc(backgroundTasks.priority),
+        // Then by createdAt (oldest first)
+        asc(backgroundTasks.createdAt)
+      );
     return rows.map(this.toModel.bind(this));
   }
 
@@ -208,6 +214,7 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
       status: row.status as BackgroundTaskStatus,
       triggeredBy: row.triggeredBy,
       triggerSource: row.triggerSource as BackgroundTask["triggerSource"],
+      priority: row.priority as BackgroundTask["priority"],
       resultSessionId: row.resultSessionId ?? undefined,
       errorMessage: row.errorMessage ?? undefined,
       attempts: row.attempts,

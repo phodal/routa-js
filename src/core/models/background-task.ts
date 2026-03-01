@@ -32,6 +32,14 @@ export type BackgroundTaskTriggerSource =
   | "polling"
   | "fleet";
 
+/**
+ * Task priority for scheduling.
+ * - "HIGH"   — urgent tasks, dispatched first
+ * - "NORMAL" — default priority
+ * - "LOW"    — background tasks, dispatched last
+ */
+export type BackgroundTaskPriority = "HIGH" | "NORMAL" | "LOW";
+
 export interface BackgroundTask {
   id: string;
   /** Human-readable title derived from the first 60 chars of the prompt */
@@ -51,6 +59,8 @@ export interface BackgroundTask {
   triggeredBy: string;
   /** High-level source category */
   triggerSource: BackgroundTaskTriggerSource;
+  /** Task priority for scheduling (HIGH > NORMAL > LOW) */
+  priority: BackgroundTaskPriority;
   /** ACP session ID created when the task starts running */
   resultSessionId?: string;
   /** Error message when status === "FAILED" */
@@ -88,6 +98,7 @@ export interface CreateBackgroundTaskInput {
   workspaceId: string;
   triggeredBy?: string;
   triggerSource?: BackgroundTaskTriggerSource;
+  priority?: BackgroundTaskPriority;
   maxAttempts?: number;
 }
 
@@ -105,6 +116,7 @@ export function createBackgroundTask(
     status: "PENDING",
     triggeredBy: input.triggeredBy ?? "user",
     triggerSource: input.triggerSource ?? "manual",
+    priority: input.priority ?? "NORMAL",
     attempts: 0,
     maxAttempts: input.maxAttempts ?? 1,
     createdAt: now,
