@@ -739,20 +739,7 @@ pub fn run() {
                         Ok(()) => {
                             // Wait for the Rust server to become ready
                             if wait_for_port(&api_host, port, 5) {
-                                // Check if we should keep using Next.js dev server for frontend
-                                let use_nextjs_frontend = std::env::var("ROUTA_DESKTOP_DEV_FRONTEND")
-                                    .map(|v| v == "1")
-                                    .unwrap_or_else(|_| {
-                                        // Auto-detect: if Next.js dev server is running on port 3000, use it
-                                        std::net::TcpStream::connect(("127.0.0.1", 3000_u16)).is_ok()
-                                    });
-
-                                if use_nextjs_frontend {
-                                    println!(
-                                        "[rust-server] Rust API server ready on {}. Keeping webview on Next.js dev server.",
-                                        api_url
-                                    );
-                                } else if let Some(window) = app.get_webview_window("main") {
+                                if let Some(window) = app.get_webview_window("main") {
                                     let js =
                                         format!("window.location.replace('{}');", api_url);
                                     let _ = window.eval(&js);
