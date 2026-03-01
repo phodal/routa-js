@@ -20,6 +20,9 @@ export interface BackgroundTaskStore {
   /** List all PENDING tasks across all workspaces (used by the worker). */
   listPending(): Promise<BackgroundTask[]>;
 
+  /** List all RUNNING tasks with resultSessionId (for completion checking). */
+  listRunning(): Promise<BackgroundTask[]>;
+
   /** List tasks by status within a workspace. */
   listByStatus(
     workspaceId: string,
@@ -65,6 +68,12 @@ export class InMemoryBackgroundTaskStore implements BackgroundTaskStore {
   async listPending(): Promise<BackgroundTask[]> {
     return [...this.tasks.values()]
       .filter((t) => t.status === "PENDING")
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async listRunning(): Promise<BackgroundTask[]> {
+    return [...this.tasks.values()]
+      .filter((t) => t.status === "RUNNING" && t.resultSessionId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 

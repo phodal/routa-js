@@ -163,17 +163,22 @@ export class BackgroundTaskWorker {
 
   // ─── Check completed sessions ─────────────────────────────────────────────
 
+  /**
+   * Check for completed sessions and mark tasks as COMPLETED.
+   *
+   * Uses two strategies:
+   * 1. In-memory Map (fast path for tasks dispatched in this process)
+   * 2. Database query (robust path for tasks that survived HMR/restart)
+   */
   async checkCompletions(): Promise<void> {
-    if (this.sessionToTask.size === 0) return;
-
     const system = getRoutaSystem();
     const { getHttpSessionStore } = await import("../acp/http-session-store");
     const store = getHttpSessionStore();
-    const sessionIds = new Set(store.listSessions().map((s) => s.sessionId));
+    const activeSessions = new Set(store.listSessions().map((s) => s.sessionId));
 
+    // Strategy 1: Check in-memory Map (for tasks dispatched in this process)
     for (const [sessionId, taskId] of [...this.sessionToTask.entries()]) {
-      if (!sessionIds.has(sessionId)) {
-        // Session gone → completed
+      if (!activeSessions.has(sessionId)) {
         await system.backgroundTaskStore.updateStatus(taskId, "COMPLETED", {
           completedAt: new Date(),
           resultSessionId: sessionId,
@@ -181,6 +186,26 @@ export class BackgroundTaskWorker {
         this.sessionToTask.delete(sessionId);
         console.log(`[BGWorker] Task ${taskId} completed (session removed).`);
       }
+    }
+
+    // Strategy 2: Query database for RUNNING tasks with resultSessionId
+    // This handles tasks that survived HMR or server restart
+    try {
+      const runningTasks = await system.backgroundTaskStore.listRunning();
+      for (const task of runningTasks) {
+        if (!task.resultSessionId) continue;
+        // If session is no longer active, mark as completed
+        if (!activeSessions.has(task.resultSessionId)) {
+          await system.backgroundTaskStore.updateStatus(task.id, "COMPLETED", {
+            completedAt: new Date(),
+            resultSessionId: task.resultSessionId,
+          });
+          console.log(`[BGWorker] Task ${task.id} completed (DB recovery, session ${task.resultSessionId}).`);
+        }
+      }
+    } catch (err) {
+      // DB not ready or query failed — skip this cycle
+      console.warn("[BGWorker] Failed to query running tasks:", err);
     }
   }
 }

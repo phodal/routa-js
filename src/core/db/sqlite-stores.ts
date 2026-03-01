@@ -5,7 +5,7 @@
  * All stores implement the same interfaces as their Pg counterparts.
  */
 
-import { eq, and, gte, lte, desc, asc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, asc, sql, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as sqliteSchema from "./sqlite-schema";
 import type { Workspace, WorkspaceStatus } from "../models/workspace";
@@ -1026,6 +1026,20 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
       .select()
       .from(sqliteSchema.backgroundTasks)
       .where(eq(sqliteSchema.backgroundTasks.status, "PENDING"))
+      .orderBy(asc(sqliteSchema.backgroundTasks.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async listRunning(): Promise<BackgroundTask[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.backgroundTasks)
+      .where(
+        and(
+          eq(sqliteSchema.backgroundTasks.status, "RUNNING"),
+          isNotNull(sqliteSchema.backgroundTasks.resultSessionId)
+        )
+      )
       .orderBy(asc(sqliteSchema.backgroundTasks.createdAt));
     return rows.map(this.toModel.bind(this));
   }
