@@ -12,6 +12,12 @@ to keep a simple Markdown (issues/**.md) file in local fs to document errors, ob
 
 Both backends implement **identical REST APIs** for seamless frontend compatibility.
 
+## Testing
+
+- Use playwright tool (mcp) to test the web UI by youself if possible
+- Use playwright testing e2e
+- Test Tauri UI with `npm run tauri dev`, then use playwright to test the UI too.
+
 ## Commit
 
 - Follow the Baby-Step Commit principle — keep commits small, but not excessively granular.
