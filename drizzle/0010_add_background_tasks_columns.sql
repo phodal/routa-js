@@ -1,5 +1,6 @@
--- Migration: Add missing columns to background_tasks table
--- Adds: priority, progress tracking fields, and workflow orchestration fields
+-- Migration: Add missing columns to background_tasks and github_webhook_configs
+-- Adds to background_tasks: priority, progress tracking fields, workflow orchestration fields
+-- Adds to github_webhook_configs: workflow_id
 
 ALTER TABLE "background_tasks"
   ADD COLUMN IF NOT EXISTS "priority" text NOT NULL DEFAULT 'NORMAL',
@@ -12,3 +13,6 @@ ALTER TABLE "background_tasks"
   ADD COLUMN IF NOT EXISTS "workflow_step_name" text,
   ADD COLUMN IF NOT EXISTS "depends_on_task_ids" jsonb,
   ADD COLUMN IF NOT EXISTS "task_output" text;
+
+ALTER TABLE "github_webhook_configs"
+  ADD COLUMN IF NOT EXISTS "workflow_id" text;
