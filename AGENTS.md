@@ -21,4 +21,5 @@ Both backends implement **identical REST APIs** for seamless frontend compatibil
   for example:
   ```
   Co-authored-by: GitHub Copilot Agent <198982749+copilot@users.noreply.github.com>
+  Co-authored-by: Kiro <kiro@assistant.ai>
   ```
