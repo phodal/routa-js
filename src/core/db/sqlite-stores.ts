@@ -988,6 +988,11 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
         toolCallCount: task.toolCallCount ?? 0,
         inputTokens: task.inputTokens ?? 0,
         outputTokens: task.outputTokens ?? 0,
+        // Workflow orchestration fields
+        workflowRunId: task.workflowRunId,
+        workflowStepName: task.workflowStepName,
+        dependsOnTaskIds: task.dependsOnTaskIds,
+        taskOutput: task.taskOutput,
       })
       .onConflictDoUpdate({
         target: sqliteSchema.backgroundTasks.id,
@@ -1010,6 +1015,11 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
           toolCallCount: task.toolCallCount ?? 0,
           inputTokens: task.inputTokens ?? 0,
           outputTokens: task.outputTokens ?? 0,
+          // Workflow orchestration fields
+          workflowRunId: task.workflowRunId,
+          workflowStepName: task.workflowStepName,
+          dependsOnTaskIds: task.dependsOnTaskIds,
+          taskOutput: task.taskOutput,
         },
       });
   }
@@ -1165,6 +1175,59 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
       .where(eq(sqliteSchema.backgroundTasks.id, taskId));
   }
 
+  // ─── Workflow orchestration methods ────────────────────────────────────────
+
+  async listByWorkflowRunId(workflowRunId: string): Promise<BackgroundTask[]> {
+    const rows = await this.db
+      .select()
+      .from(sqliteSchema.backgroundTasks)
+      .where(eq(sqliteSchema.backgroundTasks.workflowRunId, workflowRunId))
+      .orderBy(asc(sqliteSchema.backgroundTasks.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async listReadyToRun(): Promise<BackgroundTask[]> {
+    // Get all PENDING tasks
+    const pending = await this.db
+      .select()
+      .from(sqliteSchema.backgroundTasks)
+      .where(eq(sqliteSchema.backgroundTasks.status, "PENDING"))
+      .orderBy(
+        asc(sql`CASE ${sqliteSchema.backgroundTasks.priority} WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END`),
+        asc(sqliteSchema.backgroundTasks.createdAt)
+      );
+
+    // Filter to tasks whose dependencies are all COMPLETED
+    const ready: BackgroundTask[] = [];
+    for (const row of pending) {
+      const task = this.toModel(row);
+      if (!task.dependsOnTaskIds || task.dependsOnTaskIds.length === 0) {
+        ready.push(task);
+        continue;
+      }
+      // Check all dependencies - SQLite doesn't have ANY(), use IN()
+      const deps = await this.db
+        .select()
+        .from(sqliteSchema.backgroundTasks)
+        .where(sql`${sqliteSchema.backgroundTasks.id} IN (${sql.join(task.dependsOnTaskIds.map(id => sql`${id}`), sql`, `)})`);
+      const allCompleted = deps.length === task.dependsOnTaskIds.length && deps.every((d) => d.status === "COMPLETED");
+      if (allCompleted) {
+        ready.push(task);
+      }
+    }
+    return ready;
+  }
+
+  async updateTaskOutput(taskId: string, output: string): Promise<void> {
+    await this.db
+      .update(sqliteSchema.backgroundTasks)
+      .set({
+        taskOutput: output,
+        updatedAt: new Date(),
+      })
+      .where(eq(sqliteSchema.backgroundTasks.id, taskId));
+  }
+
   private toModel(
     row: typeof sqliteSchema.backgroundTasks.$inferSelect
   ): BackgroundTask {
@@ -1191,6 +1254,11 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
       toolCallCount: row.toolCallCount ?? undefined,
       inputTokens: row.inputTokens ?? undefined,
       outputTokens: row.outputTokens ?? undefined,
+      // Workflow orchestration fields
+      workflowRunId: row.workflowRunId ?? undefined,
+      workflowStepName: row.workflowStepName ?? undefined,
+      dependsOnTaskIds: row.dependsOnTaskIds ?? undefined,
+      taskOutput: row.taskOutput ?? undefined,
     };
   }
 }

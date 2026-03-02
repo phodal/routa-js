@@ -78,15 +78,17 @@ export class BackgroundTaskWorker {
 
     const slotsAvailable = MAX_CONCURRENT_TASKS - running.length;
 
-    let pending: BackgroundTask[];
+    // Use listReadyToRun() to support workflow task dependencies
+    // This returns PENDING tasks whose dependencies (if any) are all COMPLETED
+    let readyTasks: BackgroundTask[];
     try {
-      pending = await system.backgroundTaskStore.listPending();
+      readyTasks = await system.backgroundTaskStore.listReadyToRun();
     } catch {
       return;
     }
 
     // Only dispatch as many as we have slots for
-    const toDispatch = pending.slice(0, slotsAvailable);
+    const toDispatch = readyTasks.slice(0, slotsAvailable);
     for (const task of toDispatch) {
       await this.dispatchTask(task);
     }

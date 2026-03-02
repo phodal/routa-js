@@ -263,6 +263,30 @@ export const customMcpServers = pgTable("custom_mcp_servers", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Workflow Runs (multi-step workflow execution) ─────────────────────────
+
+export const workflowRuns = pgTable("workflow_runs", {
+  id: text("id").primaryKey(),
+  /** Workflow ID (references YAML file name, e.g., "pr-verify") */
+  workflowId: text("workflow_id").notNull(),
+  /** PENDING | RUNNING | COMPLETED | FAILED | CANCELLED */
+  status: text("status").notNull().default("PENDING"),
+  /** JSON payload that triggered the workflow */
+  triggerPayload: jsonb("trigger_payload").$type<Record<string, unknown>>(),
+  /** Resolved workflow variables (JSON) */
+  variables: jsonb("variables").$type<Record<string, unknown>>(),
+  /** Current step index (0-based) */
+  currentStepIndex: integer("current_step_index").notNull().default(0),
+  /** Total number of steps in the workflow */
+  totalSteps: integer("total_steps").notNull().default(0),
+  /** Optional workspace scope */
+  workspaceId: text("workspace_id"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Background Tasks (async agent job queue) ─────────────────────────────
 
 export const backgroundTasks = pgTable("background_tasks", {
@@ -278,7 +302,7 @@ export const backgroundTasks = pgTable("background_tasks", {
   status: text("status").notNull().default("PENDING"),
   /** Who triggered it (user ID or system) */
   triggeredBy: text("triggered_by").notNull().default("user"),
-  /** manual | schedule | webhook | fleet */
+  /** manual | schedule | webhook | fleet | workflow */
   triggerSource: text("trigger_source").notNull().default("manual"),
   /** Task priority: HIGH | NORMAL | LOW */
   priority: text("priority").notNull().default("NORMAL"),
@@ -303,6 +327,15 @@ export const backgroundTasks = pgTable("background_tasks", {
   inputTokens: integer("input_tokens").default(0),
   /** Output tokens consumed */
   outputTokens: integer("output_tokens").default(0),
+  // ─── Workflow orchestration fields ───────────────────────────────────────
+  /** FK to workflow_runs.id */
+  workflowRunId: text("workflow_run_id"),
+  /** Name of the workflow step this task represents */
+  workflowStepName: text("workflow_step_name"),
+  /** JSON array of task IDs that must complete before this task can run */
+  dependsOnTaskIds: jsonb("depends_on_task_ids").$type<string[]>(),
+  /** JSON output from this task (for chaining to dependent tasks) */
+  taskOutput: text("task_output"),
 });
 
 // ─── GitHub Webhook Configs ───────────────────────────────────────────────
@@ -325,8 +358,10 @@ export const githubWebhookConfigs = pgTable("github_webhook_configs", {
   eventTypes: jsonb("event_types").$type<string[]>().notNull().default([]),
   /** Optional label filter for issues.opened events */
   labelFilter: jsonb("label_filter").$type<string[]>().default([]),
-  /** ACP agent/provider ID to trigger when event fires */
+  /** ACP agent/provider ID to trigger when event fires (mutually exclusive with workflowId) */
   triggerAgentId: text("trigger_agent_id").notNull(),
+  /** Workflow ID to trigger instead of single agent (e.g., "pr-verify") */
+  workflowId: text("workflow_id"),
   /** Workspace scope */
   workspaceId: text("workspace_id"),
   /** Whether this config is active */

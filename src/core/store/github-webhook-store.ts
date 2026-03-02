@@ -24,8 +24,10 @@ export interface GitHubWebhookConfig {
   eventTypes: string[];
   /** Optional: only trigger for issues with these labels */
   labelFilter: string[];
-  /** ACP agent/provider ID to trigger */
+  /** ACP agent/provider ID to trigger (mutually exclusive with workflowId) */
   triggerAgentId: string;
+  /** Workflow ID to trigger instead of single agent (e.g., "pr-verify") */
+  workflowId?: string | null;
   workspaceId?: string | null;
   enabled: boolean;
   /** Prompt template with {event}, {action}, {payload} placeholders */
@@ -55,6 +57,8 @@ export interface CreateWebhookConfigInput {
   eventTypes: string[];
   labelFilter?: string[];
   triggerAgentId: string;
+  /** Workflow ID to trigger instead of single agent */
+  workflowId?: string;
   workspaceId?: string;
   enabled?: boolean;
   promptTemplate?: string;
@@ -90,6 +94,7 @@ export class InMemoryGitHubWebhookStore {
       eventTypes: input.eventTypes,
       labelFilter: input.labelFilter ?? [],
       triggerAgentId: input.triggerAgentId,
+      workflowId: input.workflowId,
       workspaceId: input.workspaceId,
       enabled: input.enabled ?? true,
       promptTemplate: input.promptTemplate,
@@ -169,6 +174,7 @@ export class PgGitHubWebhookStore {
       eventTypes: input.eventTypes,
       labelFilter: input.labelFilter ?? [],
       triggerAgentId: input.triggerAgentId,
+      workflowId: input.workflowId,
       workspaceId: input.workspaceId,
       enabled: input.enabled ?? true,
       promptTemplate: input.promptTemplate,
@@ -188,6 +194,7 @@ export class PgGitHubWebhookStore {
     if (input.eventTypes !== undefined) updateData["eventTypes"] = input.eventTypes;
     if (input.labelFilter !== undefined) updateData["labelFilter"] = input.labelFilter;
     if (input.triggerAgentId !== undefined) updateData["triggerAgentId"] = input.triggerAgentId;
+    if (input.workflowId !== undefined) updateData["workflowId"] = input.workflowId;
     if (input.workspaceId !== undefined) updateData["workspaceId"] = input.workspaceId;
     if (input.enabled !== undefined) updateData["enabled"] = input.enabled;
     if (input.promptTemplate !== undefined) updateData["promptTemplate"] = input.promptTemplate;
@@ -253,6 +260,7 @@ export class PgGitHubWebhookStore {
       eventTypes: (row.eventTypes as string[]) ?? [],
       labelFilter: (row.labelFilter as string[]) ?? [],
       triggerAgentId: row.triggerAgentId as string,
+      workflowId: row.workflowId as string | undefined,
       workspaceId: row.workspaceId as string | undefined,
       enabled: Boolean(row.enabled),
       promptTemplate: row.promptTemplate as string | undefined,
@@ -313,6 +321,7 @@ export class SqliteGitHubWebhookStore {
       eventTypes: input.eventTypes,
       labelFilter: input.labelFilter ?? [],
       triggerAgentId: input.triggerAgentId,
+      workflowId: input.workflowId,
       workspaceId: input.workspaceId,
       enabled: input.enabled ?? true,
       promptTemplate: input.promptTemplate,
@@ -332,6 +341,7 @@ export class SqliteGitHubWebhookStore {
     if (input.eventTypes !== undefined) updateData.eventTypes = input.eventTypes;
     if (input.labelFilter !== undefined) updateData.labelFilter = input.labelFilter;
     if (input.triggerAgentId !== undefined) updateData.triggerAgentId = input.triggerAgentId;
+    if (input.workflowId !== undefined) updateData.workflowId = input.workflowId;
     if (input.workspaceId !== undefined) updateData.workspaceId = input.workspaceId;
     if (input.enabled !== undefined) updateData.enabled = input.enabled;
     if (input.promptTemplate !== undefined) updateData.promptTemplate = input.promptTemplate;
@@ -400,6 +410,7 @@ export class SqliteGitHubWebhookStore {
       eventTypes: Array.isArray(row.eventTypes) ? (row.eventTypes as string[]) : JSON.parse((row.eventTypes as string) ?? "[]"),
       labelFilter: Array.isArray(row.labelFilter) ? (row.labelFilter as string[]) : JSON.parse((row.labelFilter as string) ?? "[]"),
       triggerAgentId: row.triggerAgentId as string,
+      workflowId: row.workflowId as string | undefined,
       workspaceId: row.workspaceId as string | undefined,
       enabled: Boolean(row.enabled),
       promptTemplate: row.promptTemplate as string | undefined,

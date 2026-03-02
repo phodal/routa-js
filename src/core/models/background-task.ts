@@ -24,13 +24,15 @@ export type BackgroundTaskStatus =
  * - "webhook"   — fired by an inbound webhook event
  * - "polling"   — fired by GitHub polling adapter (local dev alternative to webhooks)
  * - "fleet"     — part of a multi-repo fleet dispatch (future)
+ * - "workflow"  — fired as part of a workflow execution
  */
 export type BackgroundTaskTriggerSource =
   | "manual"
   | "schedule"
   | "webhook"
   | "polling"
-  | "fleet";
+  | "fleet"
+  | "workflow";
 
 /**
  * Task priority for scheduling.
@@ -85,6 +87,16 @@ export interface BackgroundTask {
   inputTokens?: number;
   /** Output tokens consumed */
   outputTokens?: number;
+
+  // ─── Workflow orchestration ──────────────────────────────────────────────
+  /** ID of the workflow run this task belongs to */
+  workflowRunId?: string;
+  /** Name of the workflow step this task represents */
+  workflowStepName?: string;
+  /** IDs of tasks that must complete before this task can run */
+  dependsOnTaskIds?: string[];
+  /** JSON output from this task (for chaining to dependent tasks) */
+  taskOutput?: string;
 }
 
 /**
@@ -100,6 +112,10 @@ export interface CreateBackgroundTaskInput {
   triggerSource?: BackgroundTaskTriggerSource;
   priority?: BackgroundTaskPriority;
   maxAttempts?: number;
+  // Workflow orchestration
+  workflowRunId?: string;
+  workflowStepName?: string;
+  dependsOnTaskIds?: string[];
 }
 
 export function createBackgroundTask(
@@ -121,5 +137,9 @@ export function createBackgroundTask(
     maxAttempts: input.maxAttempts ?? 1,
     createdAt: now,
     updatedAt: now,
+    // Workflow orchestration
+    workflowRunId: input.workflowRunId,
+    workflowStepName: input.workflowStepName,
+    dependsOnTaskIds: input.dependsOnTaskIds,
   };
 }

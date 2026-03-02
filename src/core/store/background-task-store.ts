@@ -61,6 +61,20 @@ export interface BackgroundTaskStore {
 
   /** Delete a task by ID (hard delete). */
   delete(taskId: string): Promise<void>;
+
+  // ─── Workflow orchestration methods ────────────────────────────────────────
+
+  /** List all tasks belonging to a workflow run. */
+  listByWorkflowRunId(workflowRunId: string): Promise<BackgroundTask[]>;
+
+  /**
+   * List PENDING tasks whose dependencies are all COMPLETED.
+   * These tasks are ready to be dispatched by the worker.
+   */
+  listReadyToRun(): Promise<BackgroundTask[]>;
+
+  /** Update task output (for chaining to dependent tasks). */
+  updateTaskOutput(taskId: string, output: string): Promise<void>;
 }
 
 // ─── In-Memory Implementation (tests / no-DB mode) ──────────────────────
@@ -191,5 +205,43 @@ export class InMemoryBackgroundTaskStore implements BackgroundTaskStore {
 
   async delete(taskId: string): Promise<void> {
     this.tasks.delete(taskId);
+  }
+
+  // ─── Workflow orchestration methods ────────────────────────────────────────
+
+  async listByWorkflowRunId(workflowRunId: string): Promise<BackgroundTask[]> {
+    return Array.from(this.tasks.values())
+      .filter((t) => t.workflowRunId === workflowRunId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async listReadyToRun(): Promise<BackgroundTask[]> {
+    const priorityOrder = { HIGH: 0, NORMAL: 1, LOW: 2 };
+    return Array.from(this.tasks.values())
+      .filter((t) => {
+        if (t.status !== "PENDING") return false;
+        // No dependencies = ready
+        if (!t.dependsOnTaskIds || t.dependsOnTaskIds.length === 0) return true;
+        // All dependencies must be COMPLETED
+        return t.dependsOnTaskIds.every((depId) => {
+          const dep = this.tasks.get(depId);
+          return dep && dep.status === "COMPLETED";
+        });
+      })
+      .sort((a, b) => {
+        const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      });
+  }
+
+  async updateTaskOutput(taskId: string, output: string): Promise<void> {
+    const t = this.tasks.get(taskId);
+    if (!t) return;
+    this.tasks.set(taskId, {
+      ...t,
+      taskOutput: output,
+      updatedAt: new Date(),
+    });
   }
 }

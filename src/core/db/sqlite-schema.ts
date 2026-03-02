@@ -239,6 +239,30 @@ export const customMcpServers = sqliteTable("custom_mcp_servers", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
+// ─── Workflow Runs (multi-step workflow execution) ─────────────────────────
+
+export const workflowRuns = sqliteTable("workflow_runs", {
+  id: text("id").primaryKey(),
+  /** Workflow ID (references YAML file name, e.g., "pr-verify") */
+  workflowId: text("workflow_id").notNull(),
+  /** PENDING | RUNNING | COMPLETED | FAILED | CANCELLED */
+  status: text("status").notNull().default("PENDING"),
+  /** JSON payload that triggered the workflow */
+  triggerPayload: text("trigger_payload", { mode: "json" }).$type<Record<string, unknown>>(),
+  /** Resolved workflow variables (JSON) */
+  variables: text("variables", { mode: "json" }).$type<Record<string, unknown>>(),
+  /** Current step index (0-based) */
+  currentStepIndex: integer("current_step_index").notNull().default(0),
+  /** Total number of steps in the workflow */
+  totalSteps: integer("total_steps").notNull().default(0),
+  /** Optional workspace scope */
+  workspaceId: text("workspace_id"),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
 // ─── Background Tasks (async agent job queue) ─────────────────────────────
 
 export const backgroundTasks = sqliteTable("background_tasks", {
@@ -254,7 +278,7 @@ export const backgroundTasks = sqliteTable("background_tasks", {
   status: text("status").notNull().default("PENDING"),
   /** Who triggered it (user ID or system) */
   triggeredBy: text("triggered_by").notNull().default("user"),
-  /** manual | schedule | webhook | fleet */
+  /** manual | schedule | webhook | fleet | workflow */
   triggerSource: text("trigger_source").notNull().default("manual"),
   /** Task priority: HIGH | NORMAL | LOW */
   priority: text("priority").notNull().default("NORMAL"),
@@ -279,6 +303,15 @@ export const backgroundTasks = sqliteTable("background_tasks", {
   inputTokens: integer("input_tokens").default(0),
   /** Output tokens consumed */
   outputTokens: integer("output_tokens").default(0),
+  // ─── Workflow orchestration fields ───────────────────────────────────────
+  /** FK to workflow_runs.id */
+  workflowRunId: text("workflow_run_id"),
+  /** Name of the workflow step this task represents */
+  workflowStepName: text("workflow_step_name"),
+  /** JSON array of task IDs that must complete before this task can run */
+  dependsOnTaskIds: text("depends_on_task_ids", { mode: "json" }).$type<string[]>(),
+  /** JSON output from this task (for chaining to dependent tasks) */
+  taskOutput: text("task_output"),
 });
 
 // ─── GitHub Webhook Configs ───────────────────────────────────────────────
@@ -291,7 +324,10 @@ export const githubWebhookConfigs = sqliteTable("github_webhook_configs", {
   webhookSecret: text("webhook_secret").notNull().default(""),
   eventTypes: text("event_types", { mode: "json" }).$type<string[]>().notNull().default([]),
   labelFilter: text("label_filter", { mode: "json" }).$type<string[]>().default([]),
+  /** ACP agent/provider ID to trigger when event fires (mutually exclusive with workflowId) */
   triggerAgentId: text("trigger_agent_id").notNull(),
+  /** Workflow ID to trigger instead of single agent (e.g., "pr-verify") */
+  workflowId: text("workflow_id"),
   workspaceId: text("workspace_id"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   promptTemplate: text("prompt_template"),

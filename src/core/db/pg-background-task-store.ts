@@ -37,6 +37,11 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
         toolCallCount: task.toolCallCount ?? 0,
         inputTokens: task.inputTokens ?? 0,
         outputTokens: task.outputTokens ?? 0,
+        // Workflow orchestration fields
+        workflowRunId: task.workflowRunId,
+        workflowStepName: task.workflowStepName,
+        dependsOnTaskIds: task.dependsOnTaskIds,
+        taskOutput: task.taskOutput,
       })
       .onConflictDoUpdate({
         target: backgroundTasks.id,
@@ -59,6 +64,11 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
           toolCallCount: task.toolCallCount ?? 0,
           inputTokens: task.inputTokens ?? 0,
           outputTokens: task.outputTokens ?? 0,
+          // Workflow orchestration fields
+          workflowRunId: task.workflowRunId,
+          workflowStepName: task.workflowStepName,
+          dependsOnTaskIds: task.dependsOnTaskIds,
+          taskOutput: task.taskOutput,
         },
       });
   }
@@ -215,6 +225,59 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
       .where(eq(backgroundTasks.id, taskId));
   }
 
+  // ─── Workflow orchestration methods ────────────────────────────────────────
+
+  async listByWorkflowRunId(workflowRunId: string): Promise<BackgroundTask[]> {
+    const rows = await this.db
+      .select()
+      .from(backgroundTasks)
+      .where(eq(backgroundTasks.workflowRunId, workflowRunId))
+      .orderBy(asc(backgroundTasks.createdAt));
+    return rows.map(this.toModel.bind(this));
+  }
+
+  async listReadyToRun(): Promise<BackgroundTask[]> {
+    // Get all PENDING tasks
+    const pending = await this.db
+      .select()
+      .from(backgroundTasks)
+      .where(eq(backgroundTasks.status, "PENDING"))
+      .orderBy(
+        asc(sql`CASE ${backgroundTasks.priority} WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END`),
+        asc(backgroundTasks.createdAt)
+      );
+
+    // Filter to tasks whose dependencies are all COMPLETED
+    const ready: BackgroundTask[] = [];
+    for (const row of pending) {
+      const task = this.toModel(row);
+      if (!task.dependsOnTaskIds || task.dependsOnTaskIds.length === 0) {
+        ready.push(task);
+        continue;
+      }
+      // Check all dependencies
+      const deps = await this.db
+        .select()
+        .from(backgroundTasks)
+        .where(sql`${backgroundTasks.id} = ANY(${task.dependsOnTaskIds})`);
+      const allCompleted = deps.every((d) => d.status === "COMPLETED");
+      if (allCompleted) {
+        ready.push(task);
+      }
+    }
+    return ready;
+  }
+
+  async updateTaskOutput(taskId: string, output: string): Promise<void> {
+    await this.db
+      .update(backgroundTasks)
+      .set({
+        taskOutput: output,
+        updatedAt: new Date(),
+      })
+      .where(eq(backgroundTasks.id, taskId));
+  }
+
   private toModel(row: typeof backgroundTasks.$inferSelect): BackgroundTask {
     return {
       id: row.id,
@@ -239,6 +302,11 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
       toolCallCount: row.toolCallCount ?? undefined,
       inputTokens: row.inputTokens ?? undefined,
       outputTokens: row.outputTokens ?? undefined,
+      // Workflow orchestration fields
+      workflowRunId: row.workflowRunId ?? undefined,
+      workflowStepName: row.workflowStepName ?? undefined,
+      dependsOnTaskIds: row.dependsOnTaskIds ?? undefined,
+      taskOutput: row.taskOutput ?? undefined,
     };
   }
 }
