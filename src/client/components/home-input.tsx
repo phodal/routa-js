@@ -217,7 +217,7 @@ export function HomeInput({
         {/* Glow effect */}
         <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-amber-500/20 opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500 pointer-events-none" />
 
-        <div className="relative bg-white dark:bg-[#12141c] rounded-2xl border border-gray-200 dark:border-[#1c1f2e] shadow-sm dark:shadow-none overflow-hidden transition-colors group-focus-within:border-amber-400/50 dark:group-focus-within:border-amber-500/30">
+        <div className="relative bg-white dark:bg-[#12141c] rounded-2xl border border-gray-200 dark:border-[#1c1f2e] shadow-sm dark:shadow-none transition-colors group-focus-within:border-amber-400/50 dark:group-focus-within:border-amber-500/30">
           {/* TiptapInput */}
           <TiptapInput
             onSend={handleSend}
@@ -238,7 +238,7 @@ export function HomeInput({
           />
 
           {/* ─── Bottom Control Bar ─────────────────────────────────── */}
-          <div className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 dark:border-[#1c1f2e]">
+          <div className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 dark:border-[#1c1f2e] overflow-visible">
             {selectedSpecialistId ? (
               /* ── Specialist mode: show specialist pill as primary selector ── */
               <div className="flex items-center gap-1.5">
@@ -438,38 +438,6 @@ export function HomeInput({
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Repo / Branch Pill */}
-            {repoSelection && (
-              <button
-                type="button"
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c1f2e] border border-transparent hover:border-gray-200 dark:hover:border-[#2a2d3d] transition-all"
-                title={repoSelection.path}
-              >
-                <svg
-                  className="w-3.5 h-3.5 opacity-50"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"
-                  />
-                </svg>
-                <span className="max-w-[100px] truncate">{repoSelection.name}</span>
-                {repoSelection.branch && (
-                  <>
-                    <span className="text-gray-300 dark:text-gray-600">/</span>
-                    <span className="max-w-[80px] truncate font-mono text-[11px]">
-                      {repoSelection.branch}
-                    </span>
-                  </>
-                )}
-              </button>
             )}
 
             {/* Spacer */}
