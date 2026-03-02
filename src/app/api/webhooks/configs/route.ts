@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { name, repo, githubToken, webhookSecret, eventTypes, labelFilter, triggerAgentId, workspaceId, enabled, promptTemplate } = body;
+    const { name, repo, githubToken, webhookSecret, eventTypes, labelFilter, triggerAgentId, workflowId, workspaceId, enabled, promptTemplate } = body;
 
     if (!name || !repo || !githubToken || !triggerAgentId || !Array.isArray(eventTypes) || eventTypes.length === 0) {
       return NextResponse.json(
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
       eventTypes,
       labelFilter: labelFilter ?? [],
       triggerAgentId,
+      workflowId,
       workspaceId,
       enabled: enabled !== false,
       promptTemplate,
