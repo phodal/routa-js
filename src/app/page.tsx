@@ -142,17 +142,20 @@ export default function HomePage() {
             {!workspacesHook.loading && workspacesHook.workspaces.length === 0 ? (
               <OnboardingCard onCreateWorkspace={handleWorkspaceCreate} />
             ) : (
-              <HomeInput
-                workspaceId={activeWorkspaceId ?? undefined}
-                onWorkspaceChange={(wsId) => {
-                  setActiveWorkspaceId(wsId);
-                  setRefreshKey((k) => k + 1);
-                }}
-                onSessionCreated={() => {
-                  setRefreshKey((k) => k + 1);
-                }}
-                displaySkills={skillsHook.allSkills}
-              />
+              <div className="w-full flex flex-col items-center">
+                <RoutaHeroLogo />
+                <HomeInput
+                  workspaceId={activeWorkspaceId ?? undefined}
+                  onWorkspaceChange={(wsId) => {
+                    setActiveWorkspaceId(wsId);
+                    setRefreshKey((k) => k + 1);
+                  }}
+                  onSessionCreated={() => {
+                    setRefreshKey((k) => k + 1);
+                  }}
+                  displaySkills={skillsHook.allSkills}
+                />
+              </div>
             )}
           </div>
 
@@ -182,6 +185,112 @@ export default function HomePage() {
       />
     </div>
     </NotificationProvider>
+  );
+}
+
+// ─── Routa Hero Logo with Agent Flow Animation ────────────────────────
+
+function RoutaHeroLogo() {
+  return (
+    <div className="mb-6 flex flex-col items-center gap-3 select-none">
+      {/* Animated agent-flow diagram */}
+      <div className="relative w-[200px] h-[72px]">
+        <svg
+          viewBox="0 0 200 72"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="w-full h-full"
+        >
+          <defs>
+            <linearGradient id="hero-blue" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#60A5FA" />
+              <stop offset="100%" stopColor="#3B82F6" />
+            </linearGradient>
+            <linearGradient id="hero-orange" x1="0" y1="0" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#FCD34D" />
+              <stop offset="100%" stopColor="#F59E0B" />
+            </linearGradient>
+            <linearGradient id="hero-green" x1="0" y1="0" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#34D399" />
+              <stop offset="100%" stopColor="#10B981" />
+            </linearGradient>
+          </defs>
+
+          {/* Routes: Routa → Tasks */}
+          <path d="M 40 36 C 60 36, 70 16, 90 16" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+          <path d="M 40 36 L 90 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+          <path d="M 40 36 C 60 36, 70 56, 90 56" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+
+          {/* Routes: Tasks → Gate */}
+          <path d="M 90 16 C 110 16, 130 36, 160 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+          <path d="M 90 36 L 160 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+          <path d="M 90 56 C 110 56, 130 36, 160 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+
+          {/* Flowing dots on top route */}
+          <circle r="2" fill="#60A5FA" opacity="0.9">
+            <animateMotion dur="2.4s" repeatCount="indefinite" path="M 40 36 C 60 36, 70 16, 90 16" />
+            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.4s" repeatCount="indefinite" />
+          </circle>
+          <circle r="2" fill="#F59E0B" opacity="0.9">
+            <animateMotion dur="2.4s" repeatCount="indefinite" path="M 90 16 C 110 16, 130 36, 160 36" begin="1.2s" />
+            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.4s" repeatCount="indefinite" begin="1.2s" />
+          </circle>
+
+          {/* Flowing dots on middle route */}
+          <circle r="2" fill="#60A5FA" opacity="0.9">
+            <animateMotion dur="2s" repeatCount="indefinite" path="M 40 36 L 90 36" />
+            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2s" repeatCount="indefinite" />
+          </circle>
+          <circle r="2" fill="#F59E0B" opacity="0.9">
+            <animateMotion dur="2s" repeatCount="indefinite" path="M 90 36 L 160 36" begin="1s" />
+            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2s" repeatCount="indefinite" begin="1s" />
+          </circle>
+
+          {/* Flowing dots on bottom route */}
+          <circle r="2" fill="#60A5FA" opacity="0.9">
+            <animateMotion dur="2.8s" repeatCount="indefinite" path="M 40 36 C 60 36, 70 56, 90 56" begin="0.4s" />
+            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.8s" repeatCount="indefinite" begin="0.4s" />
+          </circle>
+          <circle r="2" fill="#10B981" opacity="0.9">
+            <animateMotion dur="2.8s" repeatCount="indefinite" path="M 90 56 C 110 56, 130 36, 160 36" begin="1.8s" />
+            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.8s" repeatCount="indefinite" begin="1.8s" />
+          </circle>
+
+          {/* Routa node (blue) — coordinator */}
+          <circle cx="40" cy="36" r="14" fill="url(#hero-blue)">
+            <animate attributeName="r" values="14;15;14" dur="3s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="40" cy="36" r="7" fill="#0f172a" />
+          <circle cx="40" cy="36" r="4.5" fill="#60A5FA" opacity="0.35">
+            <animate attributeName="opacity" values="0.2;0.5;0.2" dur="3s" repeatCount="indefinite" />
+          </circle>
+
+          {/* Task nodes (orange) */}
+          <circle cx="90" cy="16" r="7" fill="url(#hero-orange)" />
+          <circle cx="90" cy="16" r="3.5" fill="#0f172a" />
+
+          <circle cx="90" cy="36" r="7" fill="url(#hero-orange)" />
+          <circle cx="90" cy="36" r="3.5" fill="#0f172a" />
+
+          <circle cx="90" cy="56" r="7" fill="url(#hero-orange)" />
+          <circle cx="90" cy="56" r="3.5" fill="#0f172a" />
+
+          {/* Gate node (green) — verification */}
+          <circle cx="160" cy="36" r="11" fill="url(#hero-green)">
+            <animate attributeName="r" values="11;12;11" dur="3s" repeatCount="indefinite" begin="1.5s" />
+          </circle>
+          <circle cx="160" cy="36" r="5.5" fill="#0f172a" />
+          <circle cx="160" cy="36" r="3.5" fill="#10B981" opacity="0.4">
+            <animate attributeName="opacity" values="0.2;0.6;0.2" dur="3s" repeatCount="indefinite" begin="1.5s" />
+          </circle>
+        </svg>
+      </div>
+
+      {/* Brand text */}
+      <span className="text-[15px] font-semibold tracking-tight text-gray-800 dark:text-gray-200">
+        Routa
+      </span>
+    </div>
   );
 }
 
