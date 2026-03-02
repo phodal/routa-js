@@ -18,6 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "db:push:ci": "drizzle-kit push --strict=false",
     "db:studio": "drizzle-kit studio",
     "db:sqlite:generate": "drizzle-kit generate --config=drizzle-sqlite.config.ts",
     "db:sqlite:migrate": "drizzle-kit migrate --config=drizzle-sqlite.config.ts",

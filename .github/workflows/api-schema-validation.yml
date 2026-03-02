@@ -104,7 +104,7 @@ jobs:
       - name: Sync database schema
         env:
           DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
-        run: npm run db:push
+        run: npm run db:push:ci
 
       - name: Start Next.js server
         env:
