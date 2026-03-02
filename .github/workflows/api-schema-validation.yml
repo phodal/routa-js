@@ -9,6 +9,8 @@ on:
       - 'scripts/check-api-parity.ts'
       - 'scripts/validate-openapi-schema.ts'
       - 'tests/api-contract/**'
+      - '.github/workflows/api-schema-validation.yml'
+      - 'Cargo.toml'
   push:
     branches:
       - main
@@ -19,6 +21,8 @@ on:
       - 'scripts/check-api-parity.ts'
       - 'scripts/validate-openapi-schema.ts'
       - 'tests/api-contract/**'
+      - '.github/workflows/api-schema-validation.yml'
+      - 'Cargo.toml'
   workflow_dispatch:
     inputs:
       run_runtime_tests:
