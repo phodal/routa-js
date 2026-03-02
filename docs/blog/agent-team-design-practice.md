@@ -285,101 +285,67 @@ Routa 的设计允许每个 Specialist 在运行时选择和切换模型：
 > **把简单任务交给便宜模型，把复杂任务交给强模型，把重复任务交给自动化 Specialist。**
 > **模型可配置 + 任务驱动 Specialist + 事件调度，让有限资源发挥最大价值。**
 
-## 四、工具与基础设施
+## 通信分离原则 — 能力与权限的边界
 
-### 4.1 通信分离原则 — Service 负责协作，Tool 负责执行
+在多 Agent 协作中，工具不仅仅是一个个函数，而是 Agent 与外部世界交互的接口。每个 Specialist 需要不同的能力，也需要不同的权限边界
+—— ROUTA 不应该能直接修改文件，GATE 不应该能执行命令，CRAFTER 需要完整的编辑权限。
 
-* **Service**：任务、Agent、状态、Trace 一致性。
-* **Tool**：提供可执行能力给任意 Provider。
+但工具本身是中立的，它不关心谁在调用它。真正关心的是：**谁来调用、能做什么、应该被限制什么。**
+
+> 协作是逻辑，执行是能力，两者不应该混在一起。
+
+在 Routa 的架构中，我们将通信层与执行层明确分离：
+
+* **Service 层**：处理任务调度、Agent 协作、状态管理、Trace 记录。
+* **Tool 层**：提供可执行能力，可以被任意 Provider 调用。
+
+这种分离带来的好处是：
+
+1. **协作逻辑独立**：Service 可以独立演化，不需要关心底层实现。
+2. **工具可复用**：同一个 Tool 可以被不同的 Provider 调用。
+3. **职责清晰**：Service 关注"谁做什么"，Tool 关注"怎么做"。
+
+**要点：** 协作是逻辑，执行是能力，两者不应该混在一起。
 
 核心 MCP 工具示例：
 
-| 工具                      | 用途          | 调用者              |
-|-------------------------|-------------|------------------|
-| delegate_task_to_agent  | 委派任务        | ROUTA            |
-| send_message_to_agent   | 消息通信        | 所有               |
-| report_to_parent        | 向父 Agent 报告 | CRAFTER, GATE    |
-| list_agents             | 查看状态        | ROUTA            |
-| read_agent_conversation | 读取历史        | ROUTA, GATE      |
-| set_note_content        | 创建/更新 Note  | ROUTA, DEVELOPER |
-| subscribe_to_events     | 订阅事件        | ROUTA            |
+| 工具                      | 用途              | 调用者              |
+|-------------------------|-----------------|------------------|
+| delegate_task_to_agent  | 委派任务给子 Agent    | ROUTA            |
+| send_message_to_agent   | 跨 Agent 消息通信    | 所有               |
+| report_to_parent        | 向父 Agent 报告执行结果 | CRAFTER, GATE    |
+| list_agents             | 查看当前 Agent 状态   | ROUTA            |
+| read_agent_conversation | 读取 Agent 对话历史   | ROUTA, GATE      |
+| set_note_content        | 创建/更新任务 Note    | ROUTA, DEVELOPER |
+| subscribe_to_events     | 订阅系统事件          | ROUTA            |
 
----
+## 示例：Issue Enricher
 
-### 4.2 动态工具原则 — 按任务和模型选择
+我不想做一个“自动回复机器人”。 当一个 GitHub Issue 出现时，我希望它真的被理解，而不是被总结。
 
-不同 Provider 和模型能力不对称，需要动态选择工具集：
+于是我把它接入 Routa 的事件系统：GitHub Webhook 进入 BackgroundTask，启动 ACP Process，由一个 DEVELOPER Specialist 执行完整流程。
 
-#### 工具权限分组
+这个 Specialist 不只是调用模型，而是按固定步骤工作：
 
-```typescript
-// 工具按权限级别分组
-const TOOL_PERMISSION_GROUPS = [
-  {
-    id: "readonly",
-    label: "Read-only tools",
-    tools: ["Read", "Glob", "Grep", "WebFetch"],
-  },
-  {
-    id: "edit",
-    label: "Edit tools",
-    tools: ["Edit", "Write", "NotebookEdit"],
-  },
-  {
-    id: "execution",
-    label: "Execution tools",
-    tools: ["Bash"],
-  },
-  {
-    id: "mcp",
-    label: "MCP tools",
-    tools: [], // 动态注册
-  },
-];
-```
+> **Understand → Analyze（检索代码库）→ Explore（推导多种方案）→ Output（结构化写回）。**
 
-#### 模型感知的工具选择
+它可以是单 Agent，也可以拆成多个 Specialist 组成 Workflow。分析用 smart 模型即可，复杂推导再升级——资源是可调度的，而不是固定的。
 
-不同模型接收不同的工具集，基于模型能力动态调整：
+这个例子对我来说验证了一件事：
 
-```typescript
-// 弱模型（如 Haiku）— 只提供核心工具
-if (modelTier === "FAST") {
-  allowedTools = [
-    "Read", "Edit", "Write", "Bash", "Glob", "Grep",
-    "delegate_task_to_agent", "report_to_parent"
-  ];
-}
-// 强模型（如 Opus）— 提供完整能力
-else if (modelTier === "SMART") {
-  allowedTools = ALL_TOOLS; // 34 个工具
-}
-```
+> 多 Agent 协作不是堆模型，而是把“触发、角色、流程、资源”工程化。
 
-#### Provider 能力映射
+当 Issue 被创建时，它不是被丢给一个模型，而是进入一个可以演进的团队系统。
 
-| Provider        | 适用角色              | 工具集特点              |
-|-----------------|-------------------|--------------------|
-| **Claude Code** | ROUTA/GATE        | 完整 MCP 工具，支持 Skill |
-| **OpenCode**    | CRAFTER/DEVELOPER | 代码生成优化，快速编辑        |
-| **Codex**       | CRAFTER（简单任务）     | 基础工具集，成本低          |
-| **Gemini**      | 多模态任务             | 图像理解 + 代码          |
+## 总结
 
-#### 运行时工具过滤
+写这篇文章，其实是因为我在一个很现实的环境里做选择：模型有成本，工具会变化，供应商会绑定，而个人开发者不可能无限制地为 token
+买单。在这种约束下，我更关心的不是“哪个模型最强”，而是系统能不能演进。
 
-```typescript
-// 声明时过滤
-const sessionOptions = {
-  allowedTools: ["Read", "Edit", "Bash"],  // 白名单
-  disallowedTools: ["WebSearch"],           // 黑名单
-};
+Routa 的这些设计——事件驱动、Specialist
+角色化、状态外置、模型分层、协议解耦——本质上都在回答同一个问题：如何把不稳定的模型能力，组织成一个稳定的工程系统。与其依赖某一个强模型，不如把规划、执行、验证拆分成不同角色；与其写一次性
+Prompt，不如把流程固化为可复用的能力；与其把状态塞进上下文，不如让它成为可以回放和审计的事实记录。
 
-// 运行时权限回调
-canUseTool: async (toolName, toolInput) => {
-  return this.toolPermissionService.canUseTool(toolName, toolInput, {
-    permissionMode: this._currentPermissionMode,
-  });
-}
-```
+多 Agent 协作如果只是堆模型，那它只是成本放大器。但如果它是可组合、可替换、可调度的结构，它就变成了一种新的开发组织方式。对我来说，这件事的意义不在于“更智能”，而在于“更可控、更可持续”。
 
-## 案例：Issue 分析
+在约束之下构建系统，反而更有确定性。这也是我做 Routa 的真正动机。
