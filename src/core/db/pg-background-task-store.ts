@@ -2,7 +2,7 @@
  * PgBackgroundTaskStore — Postgres-backed implementation of BackgroundTaskStore.
  */
 
-import { eq, and, asc, desc, isNotNull, isNull, lt } from "drizzle-orm";
+import { eq, and, asc, desc, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Database } from "./index";
 import { backgroundTasks } from "./schema";
 import type { BackgroundTask, BackgroundTaskStatus } from "../models/background-task";
@@ -87,8 +87,8 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
       .from(backgroundTasks)
       .where(eq(backgroundTasks.status, "PENDING"))
       .orderBy(
-        // Sort by priority first (HIGH > NORMAL > LOW)
-        desc(backgroundTasks.priority),
+        // Sort by priority first (HIGH=0, NORMAL=1, LOW=2) - ascending order
+        asc(sql`CASE ${backgroundTasks.priority} WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END`),
         // Then by createdAt (oldest first)
         asc(backgroundTasks.createdAt)
       );
@@ -130,7 +130,7 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
     workspaceId: string,
     status: BackgroundTaskStatus
   ): Promise<BackgroundTask[]> {
-    const rows = await this.db
+    const query = this.db
       .select()
       .from(backgroundTasks)
       .where(
@@ -138,8 +138,19 @@ export class PgBackgroundTaskStore implements BackgroundTaskStore {
           eq(backgroundTasks.workspaceId, workspaceId),
           eq(backgroundTasks.status, status)
         )
-      )
-      .orderBy(desc(backgroundTasks.createdAt));
+      );
+
+    // For PENDING tasks, sort by priority first, then by createdAt
+    if (status === "PENDING") {
+      const rows = await query.orderBy(
+        asc(sql`CASE ${backgroundTasks.priority} WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END`),
+        asc(backgroundTasks.createdAt)
+      );
+      return rows.map(this.toModel.bind(this));
+    }
+
+    // For other statuses, sort by createdAt (newest first)
+    const rows = await query.orderBy(desc(backgroundTasks.createdAt));
     return rows.map(this.toModel.bind(this));
   }
 

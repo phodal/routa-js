@@ -1038,8 +1038,8 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
       .from(sqliteSchema.backgroundTasks)
       .where(eq(sqliteSchema.backgroundTasks.status, "PENDING"))
       .orderBy(
-        // Sort by priority first (HIGH > NORMAL > LOW)
-        desc(sqliteSchema.backgroundTasks.priority),
+        // Sort by priority first (HIGH=0, NORMAL=1, LOW=2) - ascending order
+        asc(sql`CASE ${sqliteSchema.backgroundTasks.priority} WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END`),
         // Then by createdAt (oldest first)
         asc(sqliteSchema.backgroundTasks.createdAt)
       );
@@ -1080,7 +1080,7 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
     workspaceId: string,
     status: BackgroundTaskStatus
   ): Promise<BackgroundTask[]> {
-    const rows = await this.db
+    const query = this.db
       .select()
       .from(sqliteSchema.backgroundTasks)
       .where(
@@ -1088,8 +1088,19 @@ export class SqliteBackgroundTaskStore implements BackgroundTaskStore {
           eq(sqliteSchema.backgroundTasks.workspaceId, workspaceId),
           eq(sqliteSchema.backgroundTasks.status, status)
         )
-      )
-      .orderBy(desc(sqliteSchema.backgroundTasks.createdAt));
+      );
+
+    // For PENDING tasks, sort by priority first, then by createdAt
+    if (status === "PENDING") {
+      const rows = await query.orderBy(
+        asc(sql`CASE ${sqliteSchema.backgroundTasks.priority} WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END`),
+        asc(sqliteSchema.backgroundTasks.createdAt)
+      );
+      return rows.map(this.toModel.bind(this));
+    }
+
+    // For other statuses, sort by createdAt (newest first)
+    const rows = await query.orderBy(desc(sqliteSchema.backgroundTasks.createdAt));
     return rows.map(this.toModel.bind(this));
   }
 
