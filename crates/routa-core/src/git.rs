@@ -48,6 +48,11 @@ pub fn parse_github_url(url: &str) -> Option<ParsedGitHubUrl> {
 /// Base directory for cloned repos.
 pub fn get_clone_base_dir() -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    if cwd.parent().is_none() {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(".routa").join("repos");
+        }
+    }
     cwd.join(".routa").join("repos")
 }
 
