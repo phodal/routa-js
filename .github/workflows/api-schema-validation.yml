@@ -119,11 +119,13 @@ jobs:
       - name: Run schema validation tests against Next.js
         env:
           BASE_URL: http://localhost:3000
+          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
         run: npm run api:test:schema:nextjs
 
       - name: Run full API contract tests against Next.js
         env:
           BASE_URL: http://localhost:3000
+          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
         run: npm run api:test:nextjs
 
   # ── Runtime schema validation (Rust backend) ──────────────────────

@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/routa-core",
+    "crates/routa-server",
+    "crates/routa-cli",
+    "crates/routa-rpc",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["phodal"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+

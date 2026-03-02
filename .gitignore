@@ -25,6 +25,10 @@ apps/desktop/src-tauri/bundled/
 apps/desktop/src-tauri/frontend/
 **/gen/**
 
+# Rust
+Cargo.lock
+target/
+
 # Misc
 .DS_Store
 *.pem
