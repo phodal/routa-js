@@ -10,7 +10,7 @@ use crate::error::ServerError;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/", get(list_tools).post(execute_tool))
+    Router::new().route("/", get(list_tools).post(execute_tool).patch(update_tools_config))
 }
 
 async fn list_tools(State(_state): State<AppState>) -> Json<serde_json::Value> {
@@ -55,4 +55,20 @@ async fn execute_tool(
 
     let result = super::mcp_routes::execute_tool_public(&state, name, &args).await;
     Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateToolsConfigRequest {
+    enabled: Option<Vec<String>>,
+    disabled: Option<Vec<String>>,
+}
+
+/// PATCH /api/mcp/tools — Update tool enable/disable config (no-op stub; config not persisted)
+async fn update_tools_config(
+    Json(_body): Json<UpdateToolsConfigRequest>,
+) -> Json<serde_json::Value> {
+    // Tool configuration is stateless in the embedded Rust backend.
+    // This endpoint exists for API parity; changes take effect transiently.
+    Json(serde_json::json!({ "updated": true }))
 }

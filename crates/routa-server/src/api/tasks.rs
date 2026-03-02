@@ -11,7 +11,7 @@ use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/", get(list_tasks).post(create_task))
+        .route("/", get(list_tasks).post(create_task).delete(delete_all_tasks))
         .route("/{id}", get(get_task).delete(delete_task))
         .route("/{id}/status", axum::routing::post(update_task_status))
         .route("/ready", get(find_ready_tasks))
@@ -131,4 +131,18 @@ async fn find_ready_tasks(
     let workspace_id = query.workspace_id.as_deref().unwrap_or("default");
     let tasks = state.task_store.find_ready_tasks(workspace_id).await?;
     Ok(Json(serde_json::json!({ "tasks": tasks })))
+}
+
+/// DELETE /api/tasks — Bulk delete all tasks for a workspace
+async fn delete_all_tasks(
+    State(state): State<AppState>,
+    Query(query): Query<ListTasksQuery>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let workspace_id = query.workspace_id.as_deref().unwrap_or("default");
+    let tasks = state.task_store.list_by_workspace(workspace_id).await?;
+    let count = tasks.len();
+    for task in &tasks {
+        state.task_store.delete(&task.id).await?;
+    }
+    Ok(Json(serde_json::json!({ "deleted": count })))
 }

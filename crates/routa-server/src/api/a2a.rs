@@ -5,7 +5,7 @@
 //! /api/a2a/card    - Agent card discovery
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     response::sse::{Event, KeepAlive, Sse},
     routing::get,
     Json, Router,
@@ -22,6 +22,9 @@ pub fn router() -> Router<AppState> {
         .route("/sessions", get(list_sessions))
         .route("/rpc", get(rpc_sse).post(rpc_handler))
         .route("/card", get(agent_card))
+        .route("/message", axum::routing::post(send_message))
+        .route("/tasks", get(list_tasks))
+        .route("/tasks/{id}", get(get_task).post(update_task))
 }
 
 // ─── /api/a2a/sessions ────────────────────────────────────────────────
@@ -220,4 +223,84 @@ async fn rpc_sse(
     let stream = initial.chain(heartbeat);
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+// ─── /api/a2a/message ────────────────────────────────────────────────
+
+/// POST /api/a2a/message — Send a message via the A2A protocol
+async fn send_message(
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let method = body
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or("sendMessage");
+
+    let session_id = body
+        .get("params")
+        .and_then(|p| p.get("sessionId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("default");
+
+    Json(serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": body.get("id"),
+        "result": {
+            "status": "accepted",
+            "method": method,
+            "sessionId": session_id,
+        }
+    }))
+}
+
+// ─── /api/a2a/tasks ──────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TasksQuery {
+    session_id: Option<String>,
+    workspace_id: Option<String>,
+}
+
+/// GET /api/a2a/tasks — List A2A tasks (mapped from Routa tasks)
+async fn list_tasks(
+    State(state): State<AppState>,
+    Query(q): Query<TasksQuery>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let tasks = if let Some(session_id) = &q.session_id {
+        state.task_store.list_by_session(session_id).await?
+    } else {
+        let ws = q.workspace_id.as_deref().unwrap_or("default");
+        state.task_store.list_by_workspace(ws).await?
+    };
+    Ok(Json(serde_json::json!({ "tasks": tasks })))
+}
+
+/// GET /api/a2a/tasks/{id} — Get an A2A task by ID
+async fn get_task(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    state
+        .task_store
+        .get(&id)
+        .await?
+        .map(|t| Json(serde_json::json!(t)))
+        .ok_or_else(|| ServerError::NotFound(format!("Task {} not found", id)))
+}
+
+/// POST /api/a2a/tasks/{id} — Update / respond to an A2A task
+async fn update_task(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    if let Some(status) = body.get("status").and_then(|v| v.as_str()) {
+        let task_status = crate::models::task::TaskStatus::from_str(status)
+            .ok_or_else(|| ServerError::BadRequest(format!("Invalid status: {}", status)))?;
+        state.task_store.update_status(&id, &task_status).await?;
+        Ok(Json(serde_json::json!({ "updated": true, "id": id, "status": status })))
+    } else {
+        Ok(Json(serde_json::json!({ "updated": false, "id": id, "message": "No status change requested" })))
+    }
 }

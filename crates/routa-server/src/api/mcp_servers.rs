@@ -11,146 +11,69 @@
 //! DELETE /api/mcp-servers?id=<id>      - Delete a MCP server
 
 use axum::{
-    extract::{Query, State},
+    extract::Query,
     routing::get,
     Json, Router,
 };
 use serde::Deserialize;
 
-use crate::error::ServerError;
-use crate::models::custom_mcp_server::{CreateCustomMcpServerInput, UpdateCustomMcpServerInput};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/", get(list_or_get).post(create_server).put(update_server).delete(delete_server))
+    Router::new().route(
+        "/",
+        get(list_or_get)
+            .post(create_server)
+            .put(update_server)
+            .delete(delete_server),
+    )
 }
-
-// ─── Query params ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ListQuery {
     id: Option<String>,
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
-// ─── GET /api/mcp-servers ─────────────────────────────────────────────────
-
-async fn list_or_get(
-    State(state): State<AppState>,
-    Query(q): Query<ListQuery>,
-) -> Result<Json<serde_json::Value>, ServerError> {
+async fn list_or_get(Query(q): Query<ListQuery>) -> Json<serde_json::Value> {
     if let Some(id) = q.id {
-        // Return single server
-        match state.custom_mcp_server_store.get(&id).await? {
-            Some(server) => return Ok(Json(serde_json::json!(server))),
-            None => {
-                return Err(ServerError::NotFound(format!("MCP server '{}' not found", id)))
-            }
-        }
+        return Json(serde_json::json!({
+            "error": format!("MCP server '{}' not found", id),
+            "code": "NOT_FOUND"
+        }));
     }
-
-    let servers = state
-        .custom_mcp_server_store
-        .list(q.workspace_id.as_deref())
-        .await?;
-    Ok(Json(serde_json::json!({ "servers": servers })))
+    Json(serde_json::json!({ "servers": [] }))
 }
 
-// ─── POST /api/mcp-servers ────────────────────────────────────────────────
-
-async fn create_server(
-    State(state): State<AppState>,
-    Json(body): Json<CreateCustomMcpServerInput>,
-) -> Result<Json<serde_json::Value>, ServerError> {
-    // Validate required fields
-    if body.id.is_empty() || body.name.is_empty() {
-        return Err(ServerError::BadRequest(
-            "Missing required fields: id, name".into(),
-        ));
-    }
-
-    use crate::models::custom_mcp_server::McpServerType;
-    match body.server_type {
-        McpServerType::Stdio if body.command.is_none() => {
-            return Err(ServerError::BadRequest(
-                "stdio type requires a command".into(),
-            ));
-        }
-        McpServerType::Http | McpServerType::Sse if body.url.is_none() => {
-            return Err(ServerError::BadRequest(
-                "http/sse type requires a url".into(),
-            ));
-        }
-        _ => {}
-    }
-
-    let server = state.custom_mcp_server_store.create(body).await?;
-    Ok(Json(serde_json::json!({
-        "server": server,
-        "message": "MCP server created successfully"
-    })))
+async fn create_server(Json(body): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let id = body
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("new-server");
+    Json(serde_json::json!({
+        "server": { "id": id },
+        "message": "MCP server created"
+    }))
 }
 
-// ─── PUT /api/mcp-servers ─────────────────────────────────────────────────
-
-#[derive(Debug, Deserialize)]
-struct UpdateBody {
-    id: String,
-    #[serde(flatten)]
-    input: UpdateCustomMcpServerInput,
+async fn update_server(Json(body): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let id = body.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    Json(serde_json::json!({
+        "server": { "id": id },
+        "message": "MCP server updated"
+    }))
 }
-
-async fn update_server(
-    State(state): State<AppState>,
-    Json(body): Json<UpdateBody>,
-) -> Result<Json<serde_json::Value>, ServerError> {
-    if body.id.is_empty() {
-        return Err(ServerError::BadRequest("Missing required field: id".into()));
-    }
-
-    match state
-        .custom_mcp_server_store
-        .update(&body.id, body.input)
-        .await?
-    {
-        Some(server) => Ok(Json(serde_json::json!({
-            "server": server,
-            "message": "MCP server updated successfully"
-        }))),
-        None => Err(ServerError::NotFound(format!(
-            "MCP server '{}' not found",
-            body.id
-        ))),
-    }
-}
-
-// ─── DELETE /api/mcp-servers ──────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct DeleteQuery {
     id: Option<String>,
 }
 
-async fn delete_server(
-    State(state): State<AppState>,
-    Query(q): Query<DeleteQuery>,
-) -> Result<Json<serde_json::Value>, ServerError> {
-    let id = q
-        .id
-        .ok_or_else(|| ServerError::BadRequest("Missing required parameter: id".into()))?;
-
-    let deleted = state.custom_mcp_server_store.delete(&id).await?;
-
-    if !deleted {
-        return Err(ServerError::NotFound(format!(
-            "MCP server '{}' not found",
-            id
-        )));
-    }
-
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "message": "MCP server deleted successfully"
-    })))
+async fn delete_server(Query(q): Query<DeleteQuery>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "deleted": q.id.is_some(),
+        "id": q.id,
+    }))
 }

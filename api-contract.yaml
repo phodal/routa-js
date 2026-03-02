@@ -2700,3 +2700,12 @@ paths:
                     type: array
                     items:
                       type: string
+
+  # ── Debug (Rust desktop only) ──
+  /api/debug/path:
+    get:
+      operationId: debugPath
+      summary: Debug endpoint — returns resolved binary paths (desktop only)
+      responses:
+        "200":
+          description: Debug path info
