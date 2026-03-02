@@ -480,6 +480,24 @@ paths:
                 properties:
                   task:
                     $ref: "#/components/schemas/Task"
+    delete:
+      operationId: deleteAllTasks
+      summary: Delete all tasks for a workspace
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
 
   /api/tasks/{id}:
     get:
@@ -806,6 +824,44 @@ paths:
                 $ref: "#/components/schemas/Workspace"
         "404":
           description: Workspace not found
+    patch:
+      operationId: updateWorkspace
+      summary: Update workspace (title, repoPath, branch, status, metadata)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                repoPath:
+                  type: string
+                branch:
+                  type: string
+                status:
+                  $ref: "#/components/schemas/WorkspaceStatus"
+                metadata:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        "200":
+          description: Updated workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspace:
+                    $ref: "#/components/schemas/Workspace"
     delete:
       operationId: deleteWorkspace
       summary: Delete workspace
@@ -1025,6 +1081,17 @@ paths:
       responses:
         "200":
           description: Tool result
+    patch:
+      operationId: updateMcpToolsConfig
+      summary: Update MCP tool configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated config
 
   /api/mcp-server:
     get:
@@ -1617,3 +1684,1019 @@ paths:
                     type: integer
                   query:
                     type: string
+
+  # ── Workspace sub-resources ──
+  /api/workspaces/{id}/archive:
+    post:
+      operationId: archiveWorkspace
+      summary: Archive or unarchive a workspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                archive:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspace:
+                    $ref: "#/components/schemas/Workspace"
+
+  /api/workspaces/{id}/codebases:
+    get:
+      operationId: listWorkspaceCodebases
+      summary: List codebases in a workspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Codebase list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  codebases:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: addWorkspaceCodebase
+      summary: Add a codebase to a workspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                path:
+                  type: string
+                sourceType:
+                  $ref: "#/components/schemas/CodebaseSourceType"
+      responses:
+        "200":
+          description: Created codebase
+
+  # ── Codebases ──
+  /api/codebases/{id}:
+    patch:
+      operationId: updateCodebase
+      summary: Update codebase metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated
+    delete:
+      operationId: deleteCodebase
+      summary: Delete a codebase
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  /api/codebases/{id}/default:
+    post:
+      operationId: setDefaultCodebase
+      summary: Set a codebase as the default
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated
+
+  # ── Skills catalog ──
+  /api/skills/catalog:
+    get:
+      operationId: listSkillCatalog
+      summary: List available skills in the registry
+      responses:
+        "200":
+          description: Skill catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: refreshSkillCatalog
+      summary: Refresh the local skill catalog from registry
+      responses:
+        "200":
+          description: Refreshed catalog
+
+  # ── Providers ──
+  /api/providers:
+    get:
+      operationId: listProviders
+      summary: List configured LLM providers
+      responses:
+        "200":
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: object
+
+  /api/providers/models:
+    get:
+      operationId: listProviderModels
+      summary: List available models for configured providers
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Model list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+
+  # ── ACP sub-routes ──
+  /api/acp/registry:
+    get:
+      operationId: listAcpRegistry
+      summary: List agents in the ACP registry
+      responses:
+        "200":
+          description: Registry entries
+    post:
+      operationId: registerAcpAgent
+      summary: Register an agent in the ACP registry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Registered
+
+  /api/acp/install:
+    post:
+      operationId: installAcpAgent
+      summary: Install an ACP agent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Installed
+    delete:
+      operationId: uninstallAcpAgent
+      summary: Uninstall an ACP agent
+      responses:
+        "200":
+          description: Uninstalled
+
+  /api/acp/runtime:
+    get:
+      operationId: getAcpRuntime
+      summary: Get ACP runtime status
+      responses:
+        "200":
+          description: Runtime status
+    post:
+      operationId: startAcpRuntime
+      summary: Start ACP runtime
+      responses:
+        "200":
+          description: Started
+
+  /api/acp/warmup:
+    get:
+      operationId: getAcpWarmupStatus
+      summary: Get ACP warmup status
+      responses:
+        "200":
+          description: Warmup status
+    post:
+      operationId: triggerAcpWarmup
+      summary: Trigger ACP warmup
+      responses:
+        "200":
+          description: Warmup triggered
+
+  # ── Files ──
+  /api/files/search:
+    get:
+      operationId: searchFiles
+      summary: Search files in a codebase
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+        - name: codebaseId
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File search results
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ── RPC ──
+  /api/rpc:
+    post:
+      operationId: rpcCall
+      summary: Generic JSON-RPC endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method:
+                  type: string
+                params:
+                  type: object
+      responses:
+        "200":
+          description: RPC result
+
+  # ── Traces ──
+  /api/traces:
+    get:
+      operationId: listTraces
+      summary: List agent execution traces
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+        - name: agentId
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trace list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traces:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: createTrace
+      summary: Create a new trace record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Created trace
+
+  /api/traces/stats:
+    get:
+      operationId: getTraceStats
+      summary: Get aggregated trace statistics
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trace statistics
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/traces/{id}:
+    get:
+      operationId: getTrace
+      summary: Get a single trace by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trace detail
+
+  # ── Schedules ──
+  /api/schedules:
+    get:
+      operationId: listSchedules
+      summary: List scheduled tasks
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Schedule list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedules:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: createSchedule
+      summary: Create a new schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, cron]
+              properties:
+                name:
+                  type: string
+                cron:
+                  type: string
+                workspaceId:
+                  type: string
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Created schedule
+
+  /api/schedules/{id}:
+    get:
+      operationId: getSchedule
+      summary: Get a schedule by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Schedule detail
+    patch:
+      operationId: updateSchedule
+      summary: Update a schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated schedule
+    delete:
+      operationId: deleteSchedule
+      summary: Delete a schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  # ── Specialists ──
+  /api/specialists:
+    get:
+      operationId: listSpecialists
+      summary: List configured specialist agents
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Specialist list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  specialists:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: createSpecialist
+      summary: Create a specialist configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Created specialist
+    put:
+      operationId: updateSpecialist
+      summary: Update an existing specialist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated specialist
+    delete:
+      operationId: deleteSpecialist
+      summary: Delete a specialist
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  # ── Memory ──
+  /api/memory:
+    get:
+      operationId: listMemory
+      summary: List memory entries for a workspace
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Memory entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: createMemoryEntry
+      summary: Create a memory entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Created entry
+    delete:
+      operationId: deleteMemoryEntry
+      summary: Delete memory entries
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+        - name: id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  # ── Polling ──
+  /api/polling/config:
+    get:
+      operationId: getPollingConfig
+      summary: Get polling configuration
+      responses:
+        "200":
+          description: Polling config
+    post:
+      operationId: updatePollingConfig
+      summary: Update polling configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated config
+
+  /api/polling/check:
+    get:
+      operationId: pollCheck
+      summary: Run a polling check (GET)
+      responses:
+        "200":
+          description: Poll result
+    post:
+      operationId: pollCheckPost
+      summary: Run a polling check (POST)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Poll result
+
+  # ── Sessions (by ID) ──
+  /api/sessions/{id}:
+    get:
+      operationId: getSession
+      summary: Get session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session detail
+    patch:
+      operationId: updateSession
+      summary: Update session metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated session
+    delete:
+      operationId: deleteSession
+      summary: Delete a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  /api/sessions/{id}/history:
+    get:
+      operationId: getSessionHistory
+      summary: Get message history for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+
+  # ── Background Tasks ──
+  /api/background-tasks:
+    get:
+      operationId: listBackgroundTasks
+      summary: List background tasks
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Background task list
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      operationId: createBackgroundTask
+      summary: Create a background task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Created task
+
+  /api/background-tasks/process:
+    post:
+      operationId: processBackgroundTasks
+      summary: Process the next pending background task
+      responses:
+        "200":
+          description: Processing result
+
+  /api/background-tasks/{id}:
+    get:
+      operationId: getBackgroundTask
+      summary: Get a background task by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task detail
+    delete:
+      operationId: cancelBackgroundTask
+      summary: Cancel a background task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  /api/background-tasks/{id}/retry:
+    post:
+      operationId: retryBackgroundTask
+      summary: Retry a failed background task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Retry queued
+
+  # ── Schedules sub-operations ──
+  /api/schedules/{id}/run:
+    post:
+      operationId: runScheduleNow
+      summary: Trigger a schedule to run immediately
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Triggered
+
+  /api/schedules/tick:
+    get:
+      operationId: getScheduleTick
+      summary: Get tick status for scheduled tasks
+      responses:
+        "200":
+          description: Tick status
+    post:
+      operationId: triggerScheduleTick
+      summary: Manually trigger the schedule tick
+      responses:
+        "200":
+          description: Tick triggered
+
+  # ── Webhooks ──
+  /api/webhooks/configs:
+    get:
+      operationId: listWebhookConfigs
+      summary: List webhook configurations
+      responses:
+        "200":
+          description: Webhook config list
+    post:
+      operationId: createWebhookConfig
+      summary: Create a webhook configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Created config
+    put:
+      operationId: updateWebhookConfig
+      summary: Update a webhook configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated config
+    delete:
+      operationId: deleteWebhookConfig
+      summary: Delete a webhook configuration
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+
+  /api/webhooks/github:
+    get:
+      operationId: listGithubWebhooks
+      summary: List registered GitHub webhooks
+      responses:
+        "200":
+          description: Webhook list
+    post:
+      operationId: handleGithubWebhook
+      summary: Handle an incoming GitHub webhook event
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Processed
+
+  /api/webhooks/register:
+    get:
+      operationId: listWebhookRegistrations
+      summary: List webhook registrations
+      responses:
+        "200":
+          description: Registration list
+    post:
+      operationId: registerWebhook
+      summary: Register a new webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Registered
+    delete:
+      operationId: unregisterWebhook
+      summary: Unregister a webhook
+      responses:
+        "200":
+          description: Unregistered
+
+  /api/webhooks/webhook-logs:
+    get:
+      operationId: listWebhookLogs
+      summary: List webhook delivery logs
+      parameters:
+        - name: workspaceId
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Webhook logs
+
+  # ── GitHub utility ──
+  /api/github/pr-comment:
+    post:
+      operationId: postGithubPrComment
+      summary: Post a comment on a GitHub pull request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [owner, repo, prNumber, body]
+              properties:
+                owner:
+                  type: string
+                repo:
+                  type: string
+                prNumber:
+                  type: integer
+                body:
+                  type: string
+      responses:
+        "200":
+          description: Comment posted
+
+  # ── A2A Protocol ──
+  /api/a2a/message:
+    post:
+      operationId: sendA2AMessage
+      summary: Send a message via the A2A protocol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Message sent
+
+  /api/a2a/tasks:
+    get:
+      operationId: listA2ATasks
+      summary: List A2A tasks
+      responses:
+        "200":
+          description: Task list
+
+  /api/a2a/tasks/{id}:
+    get:
+      operationId: getA2ATask
+      summary: Get an A2A task by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task detail
+    post:
+      operationId: updateA2ATask
+      summary: Update / respond to an A2A task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Updated
+
+  # ── RPC discovery (Rust) ──
+  /api/rpc/methods:
+    get:
+      operationId: listRpcMethods
+      summary: List available RPC methods
+      responses:
+        "200":
+          description: RPC method list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  methods:
+                    type: array
+                    items:
+                      type: string

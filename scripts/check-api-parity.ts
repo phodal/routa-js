@@ -108,9 +108,9 @@ function parseNextjsRoutes(): RouteEndpoint[] {
 
         const content = fs.readFileSync(fullPath, "utf-8");
 
-        // Detect exported HTTP methods
+        // Detect exported HTTP methods (exclude OPTIONS/HEAD — CORS preflight, not API endpoints)
         const exportedMethods = [
-          "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD",
+          "GET", "POST", "PUT", "DELETE", "PATCH",
         ];
         for (const method of exportedMethods) {
           // Match: export async function GET, export function GET, export { GET }
@@ -276,14 +276,23 @@ function snakeToCamel(s: string): string {
 }
 
 function normalizeEndpoint(e: RouteEndpoint): string {
-  // Normalize path params:
-  //   - [param] → {param}       (Next.js convention)
-  //   - {snake_case} → {camelCase}  (Rust convention)
+  // Normalize path params to a generic placeholder so that naming differences
+  // between backends don't cause false mismatches:
+  //   - Next.js [param], [taskId], [workspaceId] → {p}
+  //   - Contract / Rust {id}, {task_id}, {workspaceId} → {p}
+  // Multi-segment params like /notes/{workspaceId}/{noteId} → /notes/{p}/{p}
   const normalizedPath = e.path
-    .replace(/\[([^\]]+)\]/g, "{$1}")                    // Next.js [param] → {param}
-    .replace(/\{([^}]+)\}/g, (_, p) => `{${snakeToCamel(p)}}`)  // snake_case → camelCase
-    .replace(/\/+$/, "");                                 // Remove trailing slashes
+    .replace(/\[([^\]]+)\]/g, "{p}")      // Next.js [param] → {p}
+    .replace(/\{[^}]+\}/g, "{p}")         // Any {param} → {p}
+    .replace(/\/+$/, "");                  // Remove trailing slashes
   return `${e.method} ${normalizedPath}`;
+}
+
+// Methods that are infrastructure/CORS only and should not be compared
+const SKIP_METHODS = new Set(["OPTIONS", "HEAD"]);
+
+function filterEndpoints(endpoints: RouteEndpoint[]): RouteEndpoint[] {
+  return endpoints.filter((e) => !SKIP_METHODS.has(e.method.toUpperCase()));
 }
 
 function compareRoutes(
@@ -291,6 +300,11 @@ function compareRoutes(
   nextjs: RouteEndpoint[],
   rust: RouteEndpoint[]
 ): ParityReport {
+  // Strip CORS/infrastructure methods before comparison
+  contract = filterEndpoints(contract);
+  nextjs   = filterEndpoints(nextjs);
+  rust     = filterEndpoints(rust);
+
   const contractSet = new Set(contract.map(normalizeEndpoint));
   const nextjsSet = new Set(nextjs.map(normalizeEndpoint));
   const rustSet = new Set(rust.map(normalizeEndpoint));
