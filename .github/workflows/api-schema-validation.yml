@@ -103,12 +103,9 @@ jobs:
 
       - name: Run database migrations
         env:
+          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
           PGPASSWORD: routa_test
-        run: |
-          for f in $(ls drizzle/*.sql | sort); do
-            echo "Applying $f..."
-            psql -h localhost -U routa -d routa_test -f "$f"
-          done
+        run: npm run db:migrate
 
       - name: Start Next.js server
         env:
