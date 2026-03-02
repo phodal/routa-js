@@ -1,14 +1,10 @@
 <div align="center">
 
-<img src="public/logo.svg" alt="Routa Logo" width="160" />
+<img src="public/logo-animated.svg" alt="Routa - Multi-Agent Orchestration" width="360" />
 
 # Routa
 
 **Multi-Agent Coordination Platform for AI Development**
-
-<p align="center">
-  <img src="public/logo-stages.svg" alt="Routa Agent Pipeline" width="600" />
-</p>
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org/)

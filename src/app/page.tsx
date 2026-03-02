@@ -192,104 +192,135 @@ export default function HomePage() {
 
 function RoutaHeroLogo() {
   return (
-    <div className="mb-6 flex flex-col items-center gap-3 select-none">
+    <div className="mb-10 flex flex-col items-center gap-6 select-none">
       {/* Animated agent-flow diagram */}
-      <div className="relative w-[200px] h-[72px]">
+      <div className="relative w-[360px] h-[130px]">
+        {/* Glow effect behind the diagram */}
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-amber-500/10 to-emerald-500/10 blur-3xl opacity-60 animate-pulse" />
+        
         <svg
-          viewBox="0 0 200 72"
+          viewBox="0 0 360 130"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="w-full h-full"
+          className="w-full h-full relative z-10"
         >
           <defs>
-            <linearGradient id="hero-blue" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <linearGradient id="hero-blue" x1="0" y1="0" x2="60" y2="60" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#60A5FA" />
               <stop offset="100%" stopColor="#3B82F6" />
             </linearGradient>
-            <linearGradient id="hero-orange" x1="0" y1="0" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+            <linearGradient id="hero-orange" x1="0" y1="0" x2="30" y2="30" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#FCD34D" />
               <stop offset="100%" stopColor="#F59E0B" />
             </linearGradient>
-            <linearGradient id="hero-green" x1="0" y1="0" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+            <linearGradient id="hero-green" x1="0" y1="0" x2="50" y2="50" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#34D399" />
               <stop offset="100%" stopColor="#10B981" />
             </linearGradient>
+            
+            {/* Glow filters */}
+            <filter id="glow-blue">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="glow-orange">
+              <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="glow-green">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
           </defs>
 
           {/* Routes: Routa → Tasks */}
-          <path d="M 40 36 C 60 36, 70 16, 90 16" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
-          <path d="M 40 36 L 90 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
-          <path d="M 40 36 C 60 36, 70 56, 90 56" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+          <path d="M 72 65 C 108 65, 126 29, 162 29" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" fill="none" opacity="0.2" className="dark:opacity-30" />
+          <path d="M 72 65 L 162 65" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" fill="none" opacity="0.2" className="dark:opacity-30" />
+          <path d="M 72 65 C 108 65, 126 101, 162 101" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" fill="none" opacity="0.2" className="dark:opacity-30" />
 
           {/* Routes: Tasks → Gate */}
-          <path d="M 90 16 C 110 16, 130 36, 160 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
-          <path d="M 90 36 L 160 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
-          <path d="M 90 56 C 110 56, 130 36, 160 36" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.25" />
+          <path d="M 162 29 C 198 29, 234 65, 288 65" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" fill="none" opacity="0.2" className="dark:opacity-30" />
+          <path d="M 162 65 L 288 65" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" fill="none" opacity="0.2" className="dark:opacity-30" />
+          <path d="M 162 101 C 198 101, 234 65, 288 65" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" fill="none" opacity="0.2" className="dark:opacity-30" />
 
           {/* Flowing dots on top route */}
-          <circle r="2" fill="#60A5FA" opacity="0.9">
-            <animateMotion dur="2.4s" repeatCount="indefinite" path="M 40 36 C 60 36, 70 16, 90 16" />
-            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.4s" repeatCount="indefinite" />
+          <circle r="3.5" fill="#60A5FA" opacity="0.95" filter="url(#glow-blue)">
+            <animateMotion dur="2.4s" repeatCount="indefinite" path="M 72 65 C 108 65, 126 29, 162 29" />
+            <animate attributeName="opacity" values="0;0.95;0.95;0" dur="2.4s" repeatCount="indefinite" />
           </circle>
-          <circle r="2" fill="#F59E0B" opacity="0.9">
-            <animateMotion dur="2.4s" repeatCount="indefinite" path="M 90 16 C 110 16, 130 36, 160 36" begin="1.2s" />
-            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.4s" repeatCount="indefinite" begin="1.2s" />
+          <circle r="3.5" fill="#F59E0B" opacity="0.95" filter="url(#glow-orange)">
+            <animateMotion dur="2.4s" repeatCount="indefinite" path="M 162 29 C 198 29, 234 65, 288 65" begin="1.2s" />
+            <animate attributeName="opacity" values="0;0.95;0.95;0" dur="2.4s" repeatCount="indefinite" begin="1.2s" />
           </circle>
 
           {/* Flowing dots on middle route */}
-          <circle r="2" fill="#60A5FA" opacity="0.9">
-            <animateMotion dur="2s" repeatCount="indefinite" path="M 40 36 L 90 36" />
-            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2s" repeatCount="indefinite" />
+          <circle r="3.5" fill="#60A5FA" opacity="0.95" filter="url(#glow-blue)">
+            <animateMotion dur="2s" repeatCount="indefinite" path="M 72 65 L 162 65" />
+            <animate attributeName="opacity" values="0;0.95;0.95;0" dur="2s" repeatCount="indefinite" />
           </circle>
-          <circle r="2" fill="#F59E0B" opacity="0.9">
-            <animateMotion dur="2s" repeatCount="indefinite" path="M 90 36 L 160 36" begin="1s" />
-            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2s" repeatCount="indefinite" begin="1s" />
+          <circle r="3.5" fill="#F59E0B" opacity="0.95" filter="url(#glow-orange)">
+            <animateMotion dur="2s" repeatCount="indefinite" path="M 162 65 L 288 65" begin="1s" />
+            <animate attributeName="opacity" values="0;0.95;0.95;0" dur="2s" repeatCount="indefinite" begin="1s" />
           </circle>
 
           {/* Flowing dots on bottom route */}
-          <circle r="2" fill="#60A5FA" opacity="0.9">
-            <animateMotion dur="2.8s" repeatCount="indefinite" path="M 40 36 C 60 36, 70 56, 90 56" begin="0.4s" />
-            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.8s" repeatCount="indefinite" begin="0.4s" />
+          <circle r="3.5" fill="#60A5FA" opacity="0.95" filter="url(#glow-blue)">
+            <animateMotion dur="2.8s" repeatCount="indefinite" path="M 72 65 C 108 65, 126 101, 162 101" begin="0.4s" />
+            <animate attributeName="opacity" values="0;0.95;0.95;0" dur="2.8s" repeatCount="indefinite" begin="0.4s" />
           </circle>
-          <circle r="2" fill="#10B981" opacity="0.9">
-            <animateMotion dur="2.8s" repeatCount="indefinite" path="M 90 56 C 110 56, 130 36, 160 36" begin="1.8s" />
-            <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.8s" repeatCount="indefinite" begin="1.8s" />
+          <circle r="3.5" fill="#10B981" opacity="0.95" filter="url(#glow-green)">
+            <animateMotion dur="2.8s" repeatCount="indefinite" path="M 162 101 C 198 101, 234 65, 288 65" begin="1.8s" />
+            <animate attributeName="opacity" values="0;0.95;0.95;0" dur="2.8s" repeatCount="indefinite" begin="1.8s" />
           </circle>
 
           {/* Routa node (blue) — coordinator */}
-          <circle cx="40" cy="36" r="14" fill="url(#hero-blue)">
-            <animate attributeName="r" values="14;15;14" dur="3s" repeatCount="indefinite" />
+          <circle cx="72" cy="65" r="25" fill="url(#hero-blue)" filter="url(#glow-blue)">
+            <animate attributeName="r" values="25;27;25" dur="3s" repeatCount="indefinite" />
           </circle>
-          <circle cx="40" cy="36" r="7" fill="#0f172a" />
-          <circle cx="40" cy="36" r="4.5" fill="#60A5FA" opacity="0.35">
-            <animate attributeName="opacity" values="0.2;0.5;0.2" dur="3s" repeatCount="indefinite" />
+          <circle cx="72" cy="65" r="12.5" fill="#0f172a" className="dark:fill-[#0a0c12]" />
+          <circle cx="72" cy="65" r="8" fill="#60A5FA" opacity="0.4">
+            <animate attributeName="opacity" values="0.2;0.6;0.2" dur="3s" repeatCount="indefinite" />
           </circle>
 
           {/* Task nodes (orange) */}
-          <circle cx="90" cy="16" r="7" fill="url(#hero-orange)" />
-          <circle cx="90" cy="16" r="3.5" fill="#0f172a" />
+          <circle cx="162" cy="29" r="12" fill="url(#hero-orange)" filter="url(#glow-orange)" />
+          <circle cx="162" cy="29" r="6" fill="#0f172a" className="dark:fill-[#0a0c12]" />
 
-          <circle cx="90" cy="36" r="7" fill="url(#hero-orange)" />
-          <circle cx="90" cy="36" r="3.5" fill="#0f172a" />
+          <circle cx="162" cy="65" r="12" fill="url(#hero-orange)" filter="url(#glow-orange)" />
+          <circle cx="162" cy="65" r="6" fill="#0f172a" className="dark:fill-[#0a0c12]" />
 
-          <circle cx="90" cy="56" r="7" fill="url(#hero-orange)" />
-          <circle cx="90" cy="56" r="3.5" fill="#0f172a" />
+          <circle cx="162" cy="101" r="12" fill="url(#hero-orange)" filter="url(#glow-orange)" />
+          <circle cx="162" cy="101" r="6" fill="#0f172a" className="dark:fill-[#0a0c12]" />
 
           {/* Gate node (green) — verification */}
-          <circle cx="160" cy="36" r="11" fill="url(#hero-green)">
-            <animate attributeName="r" values="11;12;11" dur="3s" repeatCount="indefinite" begin="1.5s" />
+          <circle cx="288" cy="65" r="20" fill="url(#hero-green)" filter="url(#glow-green)">
+            <animate attributeName="r" values="20;22;20" dur="3s" repeatCount="indefinite" begin="1.5s" />
           </circle>
-          <circle cx="160" cy="36" r="5.5" fill="#0f172a" />
-          <circle cx="160" cy="36" r="3.5" fill="#10B981" opacity="0.4">
-            <animate attributeName="opacity" values="0.2;0.6;0.2" dur="3s" repeatCount="indefinite" begin="1.5s" />
+          <circle cx="288" cy="65" r="10" fill="#0f172a" className="dark:fill-[#0a0c12]" />
+          <circle cx="288" cy="65" r="6.5" fill="#10B981" opacity="0.45">
+            <animate attributeName="opacity" values="0.25;0.65;0.25" dur="3s" repeatCount="indefinite" begin="1.5s" />
           </circle>
         </svg>
       </div>
 
-      {/* Brand text */}
-      <span className="text-[15px] font-semibold tracking-tight text-gray-800 dark:text-gray-200">
-        Routa
-      </span>
+      {/* Brand text with gradient */}
+      <div className="flex flex-col items-center gap-1.5">
+        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-gray-100 dark:via-white dark:to-gray-100 bg-clip-text text-transparent">
+          Routa
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+          Multi-Agent Orchestration Platform
+        </p>
+      </div>
     </div>
   );
 }
