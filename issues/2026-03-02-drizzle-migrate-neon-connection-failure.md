@@ -98,3 +98,12 @@ The migration failure is likely a symptom of these underlying issues, specifical
 2. CI uses a workaround (manual `psql` execution) instead of fixing the root cause
 3. The error message doesn't guide users toward resolution (e.g., "DATABASE_URL must point to a Neon serverless instance")
 4. No documentation exists for running migrations in different environments
+
+## Resolution
+
+The issue was resolved by:
+1. Updating `drizzle.config.ts` to use the `postgres` driver (via drizzle-orm) which supports both local and remote connections
+2. Changing CI workflow to use `npm run db:push` instead of `npm run db:migrate`
+   - `db:push` is idempotent and syncs schema directly
+   - `db:migrate` executes migration files and fails if tables already exist
+3. For production deployments, continue using `db:migrate` to apply versioned migrations

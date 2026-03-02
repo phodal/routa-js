@@ -101,11 +101,10 @@ jobs:
           DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
         run: npm run build
 
-      - name: Run database migrations
+      - name: Sync database schema
         env:
           DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
-          PGPASSWORD: routa_test
-        run: npm run db:migrate
+        run: npm run db:push
 
       - name: Start Next.js server
         env:
