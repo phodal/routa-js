@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       payload: payload as any,
       webhookStore,
       backgroundTaskStore: system.backgroundTaskStore,
+      workflowRunStore: system.workflowRunStore,
     });
 
     console.log(

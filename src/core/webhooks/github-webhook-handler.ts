@@ -5,7 +5,8 @@
  * 1. Verifying HMAC-SHA256 webhook signatures from GitHub
  * 2. Matching incoming events to user-configured trigger rules
  * 3. Building prompt strings and dispatching background tasks to ACP agents
- * 4. Writing audit log entries
+ * 4. Triggering multi-step workflows when workflowId is configured
+ * 5. Writing audit log entries
  *
  * This module is framework-agnostic — the Next.js route adapter calls it.
  */
@@ -19,6 +20,9 @@ import type {
 } from "../store/github-webhook-store";
 import type { BackgroundTaskStore } from "../store/background-task-store";
 import { createBackgroundTask } from "../models/background-task";
+import type { WorkflowRunStore } from "../workflows/workflow-store";
+import { WorkflowExecutor } from "../workflows/workflow-executor";
+import { getWorkflowLoader } from "../workflows/workflow-loader";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -132,6 +136,8 @@ export interface HandleWebhookOptions {
   webhookStore: GitHubWebhookStore;
   /** Background task store (to dispatch tasks) */
   backgroundTaskStore: BackgroundTaskStore;
+  /** Workflow run store (for workflow execution) */
+  workflowRunStore?: WorkflowRunStore;
   /** Fixed workspace ID for background tasks */
   workspaceId?: string;
 }
@@ -359,6 +365,7 @@ export async function handleGitHubWebhook(
     payload,
     webhookStore,
     backgroundTaskStore,
+    workflowRunStore,
     workspaceId = "default",
   } = opts;
 
@@ -398,30 +405,51 @@ export async function handleGitHubWebhook(
       continue;
     }
 
-    // 3. Build prompt and dispatch background task
+    // 3. Dispatch: workflow trigger or single background task
     try {
-      const prompt = buildPrompt(config, eventType, payload);
-      const taskTitle = `[GitHub ${eventType}] ${payload.repository?.full_name ?? config.repo} — ${payload.action ?? "event"}`;
+      const configWorkspaceId = config.workspaceId ?? workspaceId;
+      let taskId: string | undefined;
+      let workflowRunId: string | undefined;
 
-      const task = createBackgroundTask({
-        id: uuidv4(),
-        prompt,
-        agentId: config.triggerAgentId,
-        workspaceId: config.workspaceId ?? workspaceId,
-        title: taskTitle,
-        triggerSource: "webhook",
-        triggeredBy: `github:${eventType}`,
-        maxAttempts: 1,
-      });
+      // If workflowId is configured and workflowRunStore is available, trigger workflow
+      if (config.workflowId && workflowRunStore) {
+        const result = await triggerWorkflowForWebhook({
+          workflowId: config.workflowId,
+          workspaceId: configWorkspaceId,
+          eventType,
+          payload,
+          backgroundTaskStore,
+          workflowRunStore,
+        });
+        workflowRunId = result.workflowRunId;
+        taskId = result.taskIds[0]; // First task for logging
+      } else {
+        // Fallback to single background task
+        const prompt = buildPrompt(config, eventType, payload);
+        const taskTitle = `[GitHub ${eventType}] ${payload.repository?.full_name ?? config.repo} — ${payload.action ?? "event"}`;
 
-      await backgroundTaskStore.save(task);
+        const task = createBackgroundTask({
+          id: uuidv4(),
+          prompt,
+          agentId: config.triggerAgentId,
+          workspaceId: configWorkspaceId,
+          title: taskTitle,
+          triggerSource: "webhook",
+          triggeredBy: `github:${eventType}`,
+          maxAttempts: 1,
+        });
+
+        await backgroundTaskStore.save(task);
+        taskId = task.id;
+      }
 
       const log = await webhookStore.appendLog({
         configId: config.id,
         eventType,
         eventAction: payload.action,
         payload,
-        backgroundTaskId: task.id,
+        backgroundTaskId: taskId,
+        workflowRunId,
         signatureValid: true,
         outcome: "triggered",
       });
@@ -443,6 +471,69 @@ export async function handleGitHubWebhook(
   }
 
   return { processed, skipped, logs };
+}
+
+// ─── Workflow Trigger Helper ─────────────────────────────────────────────────
+
+interface TriggerWorkflowForWebhookInput {
+  workflowId: string;
+  workspaceId: string;
+  eventType: string;
+  payload: GitHubWebhookPayload;
+  backgroundTaskStore: BackgroundTaskStore;
+  workflowRunStore: WorkflowRunStore;
+}
+
+async function triggerWorkflowForWebhook(
+  input: TriggerWorkflowForWebhookInput
+): Promise<{ workflowRunId: string; taskIds: string[] }> {
+  const { workflowId, workspaceId, eventType, payload, backgroundTaskStore, workflowRunStore } = input;
+
+  // Load workflow definition
+  const loader = getWorkflowLoader();
+  const definition = await loader.load(workflowId);
+
+  // Build trigger payload as JSON string
+  const triggerPayload = JSON.stringify({
+    event: eventType,
+    action: payload.action,
+    repository: payload.repository?.full_name,
+    pull_request: payload.pull_request ? {
+      number: payload.pull_request.number,
+      title: payload.pull_request.title,
+      body: payload.pull_request.body,
+      html_url: payload.pull_request.html_url,
+      user: payload.pull_request.user?.login,
+      head: payload.pull_request.head?.ref,
+      base: payload.pull_request.base?.ref,
+    } : undefined,
+    issue: payload.issue ? {
+      number: payload.issue.number,
+      title: payload.issue.title,
+      body: payload.issue.body,
+      html_url: payload.issue.html_url,
+      labels: payload.issue.labels?.map(l => l.name),
+    } : undefined,
+    sender: payload.sender?.login,
+  }, null, 2);
+
+  // Create workflow executor and trigger
+  const executor = new WorkflowExecutor({
+    workflowRunStore,
+    backgroundTaskStore,
+  });
+
+  const result = await executor.trigger({
+    workflowId,
+    definition,
+    workspaceId,
+    triggerPayload,
+    triggerSource: "webhook",
+  });
+
+  console.log(`[Webhook] Triggered workflow "${workflowId}" → run ${result.workflowRunId}, ${result.taskIds.length} tasks`);
+
+  return result;
 }
 
 // ─── GitHub Repository Hooks API ─────────────────────────────────────────────

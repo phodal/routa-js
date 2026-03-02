@@ -26,6 +26,7 @@ import { WorkspaceTools } from "./tools/workspace-tools";
 import { CRDTNoteStore } from "./notes/crdt-note-store";
 import { CRDTDocumentManager } from "./notes/crdt-document-manager";
 import { NoteEventBroadcaster, getNoteEventBroadcaster } from "./notes/note-event-broadcaster";
+import { WorkflowRunStore, InMemoryWorkflowRunStore } from "./workflows/workflow-store";
 
 export interface RoutaSystem {
   agentStore: AgentStore;
@@ -36,6 +37,8 @@ export interface RoutaSystem {
   codebaseStore: CodebaseStore;
   backgroundTaskStore: BackgroundTaskStore;
   scheduleStore: ScheduleStore;
+  /** Workflow run store for multi-step workflow execution */
+  workflowRunStore: WorkflowRunStore;
   eventBus: EventBus;
   tools: AgentTools;
   noteTools: NoteTools;
@@ -59,6 +62,7 @@ export function createInMemorySystem(): RoutaSystem {
   const codebaseStore = new InMemoryCodebaseStore();
   const backgroundTaskStore = new InMemoryBackgroundTaskStore();
   const scheduleStore = new InMemoryScheduleStore();
+  const workflowRunStore = new InMemoryWorkflowRunStore();
 
   // CRDT-backed note store with event broadcasting
   const noteBroadcaster = getNoteEventBroadcaster();
@@ -83,6 +87,7 @@ export function createInMemorySystem(): RoutaSystem {
     codebaseStore,
     backgroundTaskStore,
     scheduleStore,
+    workflowRunStore,
     eventBus,
     tools,
     noteTools,
@@ -117,6 +122,8 @@ export function createPgSystem(): RoutaSystem {
   const codebaseStore = new PgCodebaseStore(db);
   const backgroundTaskStore = new PgBackgroundTaskStore(db);
   const scheduleStore = new PgScheduleStore(db);
+  // TODO: Implement PgWorkflowRunStore for persistent workflow state
+  const workflowRunStore = new InMemoryWorkflowRunStore();
 
   // CRDT manager and broadcaster still used for real-time collab
   const noteBroadcaster = getNoteEventBroadcaster();
@@ -142,6 +149,7 @@ export function createPgSystem(): RoutaSystem {
     codebaseStore,
     backgroundTaskStore,
     scheduleStore,
+    workflowRunStore,
     eventBus,
     tools,
     noteTools,
@@ -172,6 +180,8 @@ export function createSqliteSystem(): RoutaSystem {
   let codebaseStore: CodebaseStore;
   let backgroundTaskStore: BackgroundTaskStore;
   let scheduleStore: ScheduleStore;
+  // TODO: Implement SqliteWorkflowRunStore for persistent workflow state
+  const workflowRunStore = new InMemoryWorkflowRunStore();
   // True when noteStore doesn't broadcast on save (SqliteNoteStore); NoteTools will broadcast.
   // False when CRDTNoteStore is used as fallback (it already broadcasts internally).
   let noteToolsBroadcast = false;
@@ -238,6 +248,7 @@ export function createSqliteSystem(): RoutaSystem {
     codebaseStore,
     backgroundTaskStore,
     scheduleStore,
+    workflowRunStore,
     eventBus,
     tools,
     noteTools,

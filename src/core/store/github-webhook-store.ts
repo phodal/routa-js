@@ -43,6 +43,8 @@ export interface WebhookTriggerLog {
   eventAction?: string | null;
   payload: Record<string, unknown>;
   backgroundTaskId?: string | null;
+  /** If a workflow was triggered, the workflow run ID */
+  workflowRunId?: string | null;
   signatureValid: boolean;
   outcome: "triggered" | "skipped" | "error";
   errorMessage?: string | null;
