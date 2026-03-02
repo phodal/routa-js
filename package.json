@@ -14,7 +14,7 @@
     "start": "next start",
     "start:desktop:server": "ROUTA_DESKTOP_SERVER_BUILD=1 next start -p 3210 -H 127.0.0.1",
     "start:desktop:bundle": "HOSTNAME=127.0.0.1 PORT=3210 node apps/desktop/src-tauri/bundled/desktop-server/server.js",
-    "lint": "next lint",
+    "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
