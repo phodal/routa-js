@@ -1,22 +1,31 @@
 # Routa.js Architecture Guide
 
-Building an agent is not trivial. During API calls or web interactions, unexpected issues often occur.
-Keep structured issue files in `issues/` to document errors, observations, and troubleshooting notes.
+## Project Overview
+
+**Routa.js** is a multi-agent coordination platform with a **dual-backend architecture**:
+- **Next.js Backend** (TypeScript) — Web deployment on Vercel with Postgres/SQLite
+- **Rust Backend** (Axum) — Desktop application with embedded server and SQLite
+- `crates/routa-server` — the same logic of Next.js backend, but implemented in Rust
+
+Both backends implement **identical REST APIs** for seamless frontend compatibility.
+
+## Testing
+
+- Use playwright tool (mcp) to test the web UI by youself if possible
+- Use playwright testing e2e
+- Test Tauri UI with `npm run tauri dev`, then use playwright to test the UI too.
+
 
 ## Issue Management
+
+Building an agent is complex, and API or web interactions may fail unexpectedly.  
+Log issues in `issues/` as structured Markdown files (with YAML front-matter) to document **WHAT happened** and **WHY it might happen** — not how to fix it.  
+These files serve as context handoff between agents and humans.
 
 Local issues live in `issues/` as Markdown files with YAML front-matter. They serve as
 context handoff between agents (and humans) — focus on **WHAT** and **WHY**, not HOW to resolve.
 
-### File Naming
-
-```
-issues/YYYY-MM-DD-short-description.md
-```
-
-Examples:
-- `issues/2026-03-02-background-task-stuck-running.md`
-- `issues/2026-03-02-polling-misses-new-events.md`
+- File Naming: `issues/YYYY-MM-DD-short-description.md`
 
 ### Format
 
@@ -38,21 +47,6 @@ Use `issues/_template.md` as the base. Key rules:
 - Observed behavior that deviates from the API contract or expected flow
 - Found a potential bug but it's not blocking your current work
 - Need to hand off an investigation to another agent or human
-
-## Project Overview
-
-**Routa.js** is a multi-agent coordination platform with a **dual-backend architecture**:
-- **Next.js Backend** (TypeScript) — Web deployment on Vercel with Postgres/SQLite
-- **Rust Backend** (Axum) — Desktop application with embedded server and SQLite
-- `crates/routa-server` — the same logic of Next.js backend, but implemented in Rust
-
-Both backends implement **identical REST APIs** for seamless frontend compatibility.
-
-## Testing
-
-- Use playwright tool (mcp) to test the web UI by youself if possible
-- Use playwright testing e2e
-- Test Tauri UI with `npm run tauri dev`, then use playwright to test the UI too.
 
 ## Commit
 
