@@ -6,4 +6,5 @@ export * from "./workflow-types";
 export * from "./workflow-loader";
 export * from "./workflow-store";
 export * from "./workflow-executor";
+export * from "./workflow-to-mermaid";
 
