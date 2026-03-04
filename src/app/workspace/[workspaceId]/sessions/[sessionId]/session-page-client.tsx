@@ -667,6 +667,20 @@ export function SessionPageClient() {
   const deleteEmptySession = useCallback(async (sid: string | null) => {
     if (!sid) return;
 
+    // Never delete child sessions (they belong to a parent orchestration)
+    try {
+      const resp = await fetch(`/api/sessions/${sid}`);
+      if (resp.ok) {
+        const sessionData = await resp.json();
+        if (sessionData?.session?.parentSessionId) {
+          console.log(`[deleteEmptySession] Skipping child session: ${sid} (parent: ${sessionData.session.parentSessionId})`);
+          return;
+        }
+      }
+    } catch {
+      // If we can't check, proceed with caution
+    }
+
     const isEmpty = await isSessionEmpty(sid);
     if (isEmpty) {
       console.log(`[deleteEmptySession] Deleting empty session: ${sid}`);

@@ -40,6 +40,7 @@ export async function GET(
       modeId: session.modeId,
       model: session.model,
       createdAt: session.createdAt,
+      parentSessionId: session.parentSessionId,
     },
   });
 }

@@ -67,6 +67,7 @@ export function CollaborativeTaskEditor({
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [specExpanded, setSpecExpanded] = useState(true);
   const [viewMode, setViewMode] = useState<CollabPanelView>("tasks");
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
 
   // Vertical split state for SPEC vs Tasks
   const [specHeight, setSpecHeight] = useState(350); // default height in px
@@ -137,6 +138,36 @@ export function CollaborativeTaskEditor({
   );
   const hasRunning = taskNotes.some((n) => n.metadata.taskStatus === "IN_PROGRESS");
 
+  const pendingNotes = taskNotes.filter(
+    (n) => !n.metadata.taskStatus || n.metadata.taskStatus === "PENDING"
+  );
+
+  const toggleNoteSelection = (noteId: string) => {
+    setSelectedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(noteId)) next.delete(noteId);
+      else next.add(noteId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedNoteIds.size === pendingNotes.length) {
+      setSelectedNoteIds(new Set());
+    } else {
+      setSelectedNoteIds(new Set(pendingNotes.map((n) => n.id)));
+    }
+  };
+
+  const handleExecuteSelected = async () => {
+    if (!onExecuteTask) return;
+    const ids = Array.from(selectedNoteIds);
+    setSelectedNoteIds(new Set());
+    for (const id of ids) {
+      await onExecuteTask(id);
+    }
+  };
+
   return (
     <div ref={containerRef} className="flex flex-col h-full">
       {/* Header */}
@@ -170,6 +201,22 @@ export function CollaborativeTaskEditor({
               <span className="text-xs font-medium text-amber-600 dark:text-amber-400 animate-pulse">
                 Executing...
               </span>
+            )}
+            {pendingNotes.length > 0 && !hasRunning && (
+              <button
+                onClick={toggleSelectAll}
+                className="text-xs font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                {selectedNoteIds.size === pendingNotes.length ? "Deselect All" : "Select All"}
+              </button>
+            )}
+            {selectedNoteIds.size > 0 && !hasRunning && onExecuteTask && (
+              <button
+                onClick={handleExecuteSelected}
+                className="text-xs font-medium px-2.5 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              >
+                Execute Selected ({selectedNoteIds.size})
+              </button>
             )}
             {hasPending && !hasRunning && onExecuteAll && (
               <button
@@ -345,6 +392,8 @@ export function CollaborativeTaskEditor({
                 index={index}
                 expanded={expandedNoteId === note.id}
                 editing={editingNoteId === note.id}
+                selected={selectedNoteIds.has(note.id)}
+                onToggleSelect={() => toggleNoteSelection(note.id)}
                 onToggleExpand={() =>
                   setExpandedNoteId((prev) =>
                     prev === note.id ? null : note.id
@@ -404,6 +453,8 @@ interface TaskNoteCardProps {
   index: number;
   expanded: boolean;
   editing: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onToggleExpand: () => void;
   onEdit: () => void;
   onCancelEdit: () => void;
@@ -562,6 +613,8 @@ function TaskNoteCard({
   index,
   expanded,
   editing,
+  selected,
+  onToggleSelect,
   onToggleExpand,
   onEdit,
   onCancelEdit,
@@ -638,6 +691,18 @@ function TaskNoteCard({
         className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
         onClick={onToggleExpand}
       >
+        {onToggleSelect && status === "PENDING" && (
+          <input
+            type="checkbox"
+            checked={!!selected}
+            onChange={(e) => {
+              e.stopPropagation();
+              onToggleSelect();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 shrink-0 cursor-pointer"
+          />
+        )}
         {statusIcon[status as keyof typeof statusIcon] ?? statusIcon.PENDING}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">

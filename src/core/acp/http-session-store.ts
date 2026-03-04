@@ -581,6 +581,15 @@ class HttpSessionStore {
 
       // Only remove if stale AND not actively used
       if (isStale && !hasActiveSse && !isStreaming) {
+        // Protect child sessions whose parent is still active
+        const session = this.sessions.get(sessionId);
+        const isChildSession = !!session?.parentSessionId;
+        const parentStillActive = isChildSession && this.sessions.has(session!.parentSessionId!);
+        if (parentStillActive) {
+          // Refresh access time so child stays alive while parent exists
+          this.lastAccessTime.set(sessionId, now);
+          continue;
+        }
         this.deleteSession(sessionId);
         this.lastAccessTime.delete(sessionId);
         removedCount++;
