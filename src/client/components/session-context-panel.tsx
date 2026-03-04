@@ -49,10 +49,17 @@ export function SessionContextPanel({
         `/api/sessions/${sessionId}/context`,
         { cache: "no-store" }
       );
+      
+      if (!res.ok) {
+        setContext(null);
+        return;
+      }
+      
       const data = await res.json();
       setContext(data);
     } catch (e) {
       console.error("Failed to fetch session context", e);
+      setContext(null);
     } finally {
       setLoading(false);
     }
@@ -68,10 +75,6 @@ export function SessionContextPanel({
         Loading...
       </div>
     );
-  }
-
-  if (!context) {
-    return null;
   }
 
   const formatTimeAgo = (dateStr: string) => {
@@ -97,6 +100,11 @@ export function SessionContextPanel({
     }
     return s.sessionId.slice(0, 8);
   };
+
+  // Return early if context is not available
+  if (!context) {
+    return null;
+  }
 
   const hasHierarchy = context.parent || context.children.length > 0;
 
