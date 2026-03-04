@@ -1,6 +1,8 @@
 pub mod a2a;
+pub mod a2ui;
 pub mod acp_registry;
 pub mod acp_routes;
+pub mod ag_ui;
 pub mod agents;
 pub mod background_tasks;
 pub mod clone;
@@ -68,6 +70,8 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/files", files::router())
         .nest("/api/rpc", rpc::router())
         .nest("/api/a2a", a2a::router())
+        .nest("/api/ag-ui", ag_ui::router())
+        .nest("/api/a2ui", a2ui::router())
         .nest("/api/traces", traces::router())
         .nest("/api/schedules", schedules::router())
         .nest("/api/specialists", specialists::router())
