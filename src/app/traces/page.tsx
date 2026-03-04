@@ -17,11 +17,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { TracePanel } from "@/client/components/trace-panel";
 import { EventBridgeTracePanel } from "@/client/components/event-bridge-trace-panel";
 import { AGUITracePanel } from "@/client/components/ag-ui-trace-panel";
-import { CostDashboard } from "@/client/components/analytics/cost-dashboard";
-import { ReliabilityMetrics } from "@/client/components/analytics/reliability-metrics";
 import type { TraceRecord } from "@/core/trace";
 
-type ViewTab = "chat" | "event-bridge" | "ag-ui" | "analytics";
+type ViewTab = "chat" | "event-bridge" | "ag-ui";
 
 interface Session {
   sessionId: string;
@@ -207,10 +205,9 @@ function TracePageContent() {
           {/* View tab switcher */}
           <div className="inline-flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-0.5">
             {([
-                          { key: "chat" as ViewTab, label: "Chat", color: "bg-blue-500" },
+              { key: "chat" as ViewTab, label: "Chat", color: "bg-blue-500" },
               { key: "event-bridge" as ViewTab, label: "Trace", color: "bg-purple-500" },
               { key: "ag-ui" as ViewTab, label: "Trace(AG-UI)", color: "bg-indigo-500" },
-              { key: "analytics" as ViewTab, label: "Analytics", color: "bg-emerald-500" },
             ]).map(({ key, label, color }) => (
               <button
                 key={key}
@@ -367,7 +364,7 @@ function TracePageContent() {
         <main className="flex-1 min-w-0">
           {selectedSessionId ? (
             <>
-                            {activeTab === "chat" && (
+              {activeTab === "chat" && (
                 <TracePanel sessionId={selectedSessionId} />
               )}
               {activeTab === "event-bridge" && (
@@ -375,12 +372,6 @@ function TracePageContent() {
               )}
               {activeTab === "ag-ui" && (
                 <AGUITracePanel sessionId={selectedSessionId} traces={sessionTraces} />
-              )}
-              {activeTab === "analytics" && (
-                <div className="h-full overflow-y-auto">
-                  <CostDashboard sessionId={selectedSessionId} />
-                  <ReliabilityMetrics sessionId={selectedSessionId} />
-                </div>
               )}
             </>
           ) : (
