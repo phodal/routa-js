@@ -84,6 +84,8 @@ export class RoutaMcpToolManager {
   registerTools(server: McpServer): void {
     if (this.toolMode === "essential") {
       // Essential mode: 12 core coordination tools
+      // Task tools (1) - needed so delegate_task_to_agent has a taskId to work with
+      this.registerCreateTask(server);
       // Agent tools (7)
       this.registerListAgents(server);
       this.registerReadAgentConversation(server);

@@ -251,7 +251,8 @@ export class ClaudeCodeProcess {
             stdio: ["pipe", "pipe", "pipe"],
             cwd,
             env: {
-                ...env,
+                ...process.env, // inherit parent PATH and other env vars
+                ...env,         // allow extra/override vars
                 PWD: cwd,
             },
             detached: false,

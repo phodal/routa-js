@@ -19,7 +19,7 @@ import {SkillPanel} from "@/client/components/skill-panel";
 import {ChatPanel} from "@/client/components/chat-panel";
 import {SessionPanel} from "@/client/components/session-panel";
 import {SpecialistManager} from "@/client/components/specialist-manager";
-import {type CrafterAgent, TaskPanel} from "@/client/components/task-panel";
+import {type CrafterAgent, type CrafterMessage, TaskPanel} from "@/client/components/task-panel";
 import {CollaborativeTaskEditor} from "@/client/components/collaborative-task-editor";
 import {AgentInstallPanel} from "@/client/components/agent-install-panel";
 import {WorkspaceSwitcher} from "@/client/components/workspace-switcher";
@@ -878,9 +878,13 @@ export function SessionPageClient() {
 
     let data = await doCall();
 
-    // If we got a "not initialized" error, re-initialize and retry once
-    if (data.error?.code === -32000 && data.error?.message?.includes("not initialized")) {
-      console.log(`[MCP] Session stale, re-initializing...`);
+    // If we got a "not initialized" error or "tool not found" (stale session),
+    // re-initialize and retry once
+    const isStaleSession =
+      (data.error?.code === -32000 && data.error?.message?.includes("not initialized")) ||
+      (data.error?.code === -32602 && data.error?.message?.includes("not found"));
+    if (isStaleSession) {
+      console.log(`[MCP] Session stale (${data.error?.code}: ${data.error?.message}), re-initializing...`);
       mcpSessionRef.current = null;
       await initMcpSession();
       data = await doCall();
@@ -947,14 +951,11 @@ export function SessionPageClient() {
 
       let agentId: string | undefined;
       let childSessionId: string | undefined;
+      let delegationError: string | undefined;
 
       if (!mcpTaskId) {
         console.warn("[TaskPanel] Could not extract taskId from create_task result:", resultText);
-        if (sessionId) {
-          await acp.prompt(
-            `Execute task: "${task.title}"\nObjective: ${task.objective}\nScope: ${task.scope}\nDone when: ${task.definitionOfDone}`
-          );
-        }
+        delegationError = `Failed to create task in MCP store. Raw: ${resultText.slice(0, 200)}`;
       } else {
         // 2. Delegate to a CRAFTER agent
         try {
@@ -971,30 +972,33 @@ export function SessionPageClient() {
             const parsed = JSON.parse(delegateText);
             agentId = parsed.agentId;
             childSessionId = parsed.sessionId;
+            if (parsed.error) delegationError = parsed.error;
           } catch {
             const agentMatch = delegateText.match(/"agentId"\s*:\s*"([^"]+)"/);
             const sessionMatch = delegateText.match(/"sessionId"\s*:\s*"([^"]+)"/);
+            const errorMatch = delegateText.match(/"error"\s*:\s*"([^"]+)"/);
             agentId = agentMatch?.[1];
             childSessionId = sessionMatch?.[1];
+            if (errorMatch) delegationError = errorMatch[1];
           }
         } catch (delegateErr) {
-          console.warn("[TaskPanel] delegate_task_to_agent failed, falling back to prompt:", delegateErr);
-          if (sessionId) {
-            await acp.prompt(
-              `Task "${task.title}" has been created (ID: ${mcpTaskId}). Please delegate it to a CRAFTER agent and execute it.`
-            );
-          }
+          delegationError = delegateErr instanceof Error ? delegateErr.message : String(delegateErr);
+          console.warn("[TaskPanel] delegate_task_to_agent failed:", delegateErr);
         }
       }
 
       // 3. Create CrafterAgent record
+      const initialStatus = delegationError ? "error" : "running";
+      const initialMessages: CrafterMessage[] = delegationError
+        ? [{ id: crypto.randomUUID(), role: "info", content: `Delegation failed: ${delegationError}`, timestamp: new Date() }]
+        : [];
       const crafterAgent: CrafterAgent = {
         id: agentId ?? `crafter-${taskId}`,
         sessionId: childSessionId ?? "",
         taskId,
         taskTitle: task.title,
-        status: "running",
-        messages: [],
+        status: initialStatus,
+        messages: initialMessages,
       };
 
       setCrafterAgents((prev) => [...prev, crafterAgent]);
@@ -1006,9 +1010,13 @@ export function SessionPageClient() {
         setActiveCrafterId(crafterAgent.id);
       }
 
-      // Mark completed (the orchestrator will handle the actual completion)
+      // Mark status based on delegation outcome
       setRoutaTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: "completed" as const } : t))
+        prev.map((t) =>
+          t.id === taskId
+            ? { ...t, status: delegationError ? ("confirmed" as const) : ("completed" as const) }
+            : t
+        )
       );
 
       return crafterAgent;
@@ -1019,7 +1027,7 @@ export function SessionPageClient() {
       );
       return null;
     }
-  }, [routaTasks, sessionId, acp, callMcpTool, concurrency, activeCrafterId]);
+  }, [routaTasks, sessionId, callMcpTool, concurrency, activeCrafterId]);
 
   /**
    * Execute all confirmed tasks with configurable concurrency.
@@ -1117,9 +1125,7 @@ export function SessionPageClient() {
 
       if (!mcpTaskId) {
         console.warn("[CollabEditor] Could not extract taskId for note:", noteId);
-        if (sessionId) {
-          await acp.prompt(`Execute task: "${note.title}"\n${note.content}`);
-        }
+        delegationError = `Failed to create task in MCP task store. Raw result: ${resultText.slice(0, 200)}`;
       } else {
         try {
           const delegateResult = await callMcpTool("delegate_task_to_agent", {
@@ -1189,7 +1195,7 @@ export function SessionPageClient() {
       });
       return null;
     }
-  }, [notesHook, workspaceId, sessionId, acp, callMcpTool, activeCrafterId, concurrency]);
+  }, [notesHook, workspaceId, sessionId, callMcpTool, activeCrafterId, concurrency]);
 
   /**
    * Execute all pending collaborative task notes with configurable concurrency.

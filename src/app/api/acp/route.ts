@@ -573,10 +573,12 @@ export async function POST(request: NextRequest) {
 
         // Use default settings for auto-created session
         const cwd = (p.cwd as string | undefined) ?? process.cwd();
+        const storedSession = store.getSession(sessionId);
         const defaultProvider = isServerlessEnvironment() ? "claude-code-sdk" : "opencode";
-        const provider = (p.provider as string | undefined) ?? defaultProvider;
-        const workspaceId = (p.workspaceId as string) || "default";
-        const role = "CRAFTER"; // Default role for auto-created sessions
+        // Prefer the provider stored in the session record (handles restarts for claude sessions)
+        const provider = (p.provider as string | undefined) ?? storedSession?.provider ?? defaultProvider;
+        const workspaceId = (p.workspaceId as string) || storedSession?.workspaceId || "default";
+        const role = storedSession?.role ?? "CRAFTER"; // Prefer stored role for restarts
 
         try {
           const preset = getPresetById(provider);
@@ -880,10 +882,57 @@ export async function POST(request: NextRequest) {
         }
 
         if (!claudeProc.alive) {
-          return jsonrpcResponse(id ?? null, null, {
-            code: -32000,
-            message: "Claude Code process is not running",
-          });
+          console.warn(`[ACP Route] Claude Code process for session ${sessionId} is dead — attempting restart`);
+          // Clean up the dead process registration and restart
+          manager.killSession(sessionId);
+          const sessionRecord = store.getSession(sessionId);
+          if (!sessionRecord) {
+            return jsonrpcResponse(id ?? null, null, {
+              code: -32000,
+              message: `Session ${sessionId} not found in store — cannot restart`,
+            });
+          }
+          const restartCwd = sessionRecord.cwd ?? process.cwd();
+          const restartWorkspaceId = sessionRecord.workspaceId ?? "default";
+          const restartRole = sessionRecord.role ?? "CRAFTER";
+          try {
+            const mcpConfigs = await buildMcpConfigForClaude(restartWorkspaceId, sessionId);
+            await manager.createClaudeSession(
+              sessionId,
+              restartCwd,
+              forwardSessionUpdate,
+              mcpConfigs,
+              undefined,
+              restartRole,
+            );
+            console.log(`[ACP Route] Restarted Claude Code process for session ${sessionId}`);
+          } catch (restartErr) {
+            return jsonrpcResponse(id ?? null, null, {
+              code: -32000,
+              message: `Failed to restart Claude Code process: ${restartErr instanceof Error ? restartErr.message : String(restartErr)}`,
+            });
+          }
+          // Replace reference with newly started process
+          const restarted = manager.getClaudeProcess(sessionId);
+          if (!restarted) {
+            return jsonrpcResponse(id ?? null, null, {
+              code: -32000,
+              message: "Claude Code process restart failed unexpectedly",
+            });
+          }
+          try {
+            const result = await restarted.prompt(sessionId, promptText);
+            store.flushAgentBuffer(sessionId);
+            void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
+            return jsonrpcResponse(id ?? null, result);
+          } catch (err) {
+            store.flushAgentBuffer(sessionId);
+            void saveHistoryToDb(sessionId, store.getConsolidatedHistory(sessionId));
+            return jsonrpcResponse(id ?? null, null, {
+              code: -32000,
+              message: err instanceof Error ? err.message : "Claude Code prompt failed after restart",
+            });
+          }
         }
 
         try {
