@@ -27,17 +27,27 @@ interface SessionContextPanelProps {
   sessionId: string;
   workspaceId: string;
   onSelectSession: (sessionId: string) => void;
+  notes?: Array<{
+    id: string;
+    title: string;
+    metadata: {
+      type: string;
+      taskStatus?: string;
+    };
+    sessionId?: string;
+  }>;
 }
 
 export function SessionContextPanel({
   sessionId,
   workspaceId,
   onSelectSession,
+  notes = [],
 }: SessionContextPanelProps) {
   const [context, setContext] = useState<SessionContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState({
-    hierarchy: true,
+    hierarchy: true, // 默认展开 hierarchy
     related: false,
   });
 
@@ -100,6 +110,18 @@ export function SessionContextPanel({
   const hasHierarchy = context.parent || context.children.length > 0;
   const hasRelated =
     context.siblings.length > 0 || context.recentInWorkspace.length > 0;
+
+  // Filter tasks related to this session or its parent
+  const relatedTasks = notes.filter((note) => {
+    if (note.metadata.type !== "task") return false;
+    // Show tasks from current session or parent session
+    return (
+      note.sessionId === sessionId ||
+      (context.parent && note.sessionId === context.parent.sessionId)
+    );
+  });
+
+  const hasTasks = relatedTasks.length > 0;
 
   return (
     <div className="border-b border-gray-100 dark:border-gray-800">
@@ -244,31 +266,126 @@ export function SessionContextPanel({
                       {context.children.length > 1 ? "s" : ""}
                     </span>
                   </div>
-                  {context.children.map((child) => (
-                    <div
-                      key={child.sessionId}
-                      onClick={() => onSelectSession(child.sessionId)}
-                      className="ml-5 flex items-start gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                    >
-                      <svg
-                        className="w-3 h-3 text-amber-500 shrink-0 mt-0.5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M13 10V3L4 14h7v7l9-11h-7z"
-                        />
-                      </svg>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[11px] font-medium text-gray-700 dark:text-gray-300 truncate">
-                          {child.name ?? getDefaultName(child)}
+                  {context.children.map((child) => {
+                    // Find task associated with this child session
+                    const childTask = relatedTasks.find(
+                      (task) => task.sessionId === child.sessionId
+                    );
+                    return (
+                      <div key={child.sessionId} className="ml-5">
+                        <div
+                          onClick={() => onSelectSession(child.sessionId)}
+                          className="flex items-start gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+                        >
+                          <svg
+                            className="w-3 h-3 text-amber-500 shrink-0 mt-0.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M13 10V3L4 14h7v7l9-11h-7z"
+                            />
+                          </svg>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11px] font-medium text-gray-700 dark:text-gray-300 truncate">
+                              {child.name ?? getDefaultName(child)}
+                            </div>
+                            <div className="text-[10px] text-gray-400 dark:text-gray-500">
+                              {child.role} • {formatTimeAgo(child.createdAt)}
+                            </div>
+                            {childTask && (
+                              <div className="mt-0.5 flex items-center gap-1">
+                                <svg
+                                  className="w-2.5 h-2.5 text-blue-500"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                  />
+                                </svg>
+                                <span className="text-[10px] text-blue-600 dark:text-blue-400 truncate">
+                                  {childTask.title}
+                                </span>
+                                {childTask.metadata.taskStatus && (
+                                  <span
+                                    className={`text-[9px] px-1 py-0.5 rounded ${
+                                      childTask.metadata.taskStatus ===
+                                      "COMPLETED"
+                                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                        : childTask.metadata.taskStatus ===
+                                          "IN_PROGRESS"
+                                        ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                                        : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                                    }`}
+                                  >
+                                    {childTask.metadata.taskStatus}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500">
-                          {child.role} • {formatTimeAgo(child.createdAt)}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Tasks from parent session (if current is a child) */}
+              {hasTasks && context.parent && (
+                <div className="mt-2 space-y-0.5">
+                  <div className="flex items-center gap-1.5 px-2 py-1">
+                    <svg
+                      className="w-3 h-3 text-blue-500 shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                      />
+                    </svg>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                      Related Tasks ({relatedTasks.length})
+                    </span>
+                  </div>
+                  {relatedTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="ml-5 px-2 py-1.5 rounded-md bg-blue-50 dark:bg-blue-900/10"
+                    >
+                      <div className="flex items-start gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] font-medium text-blue-700 dark:text-blue-300 truncate">
+                            {task.title}
+                          </div>
+                          {task.metadata.taskStatus && (
+                            <div className="mt-0.5">
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded ${
+                                  task.metadata.taskStatus === "COMPLETED"
+                                    ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                    : task.metadata.taskStatus === "IN_PROGRESS"
+                                    ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                                }`}
+                              >
+                                {task.metadata.taskStatus}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

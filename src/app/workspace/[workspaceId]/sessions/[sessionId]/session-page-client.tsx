@@ -1516,6 +1516,7 @@ export function SessionPageClient() {
             sessionId={sessionId}
             workspaceId={workspaceId}
             onSelectSession={handleSelectSession}
+            notes={sessionNotes}
           />
 
           {/* New Session Button */}
@@ -1535,12 +1536,27 @@ export function SessionPageClient() {
           {/* Divider */}
           <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800 shrink-0" />
 
-          {/* Skills - scrollable, takes remaining space */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <SkillPanel
-              skillsHook={skillsHook}
-            />
-          </div>
+          {/* Skills - scrollable, takes remaining space - collapsed by default */}
+          <details className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <summary className="px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors list-none">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Skills
+                  </span>
+                </div>
+                <svg className="w-3 h-3 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </summary>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <SkillPanel skillsHook={skillsHook} />
+            </div>
+          </details>
 
           {/* Bottom actions */}
           <div className="p-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
