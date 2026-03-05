@@ -118,6 +118,26 @@ export async function buildDefaultConfig(cwd: string): Promise<AcpProcessConfig>
   return buildConfigFromPreset("opencode", cwd);
 }
 
+/**
+ * Build an AcpProcessConfig from an inline command and args (custom provider).
+ * Used when the user defines a custom ACP provider with their own command/args.
+ */
+export function buildConfigFromInline(
+  command: string,
+  args: string[],
+  cwd: string,
+  displayName: string,
+  extraEnv?: Record<string, string>
+): AcpProcessConfig {
+  return {
+    command,
+    args: [...args],
+    cwd,
+    env: extraEnv && Object.keys(extraEnv).length > 0 ? extraEnv : undefined,
+    displayName,
+  };
+}
+
 // ─── Backward-compatible alias ─────────────────────────────────────────
 
 /**

@@ -225,6 +225,25 @@ export async function POST(request: NextRequest) {
       const apiKey = (p.apiKey as string | undefined);
       const workspaceId = (p.workspaceId as string) || "default";
       const idempotencyKey = p.idempotencyKey as string | undefined;
+      // Inline custom provider config (command + args passed directly from client)
+      const customCommand = (p.customCommand as string | undefined);
+      const customArgs = Array.isArray(p.customArgs) ? (p.customArgs as string[]) : undefined;
+
+      // ── Validate custom provider inputs ────────────────────────────────
+      // Security: Validate customCommand is a non-empty string
+      if (customCommand !== undefined && (typeof customCommand !== "string" || !customCommand.trim())) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32602,
+          message: "customCommand must be a non-empty string",
+        });
+      }
+      // Security: Validate customArgs is an array of strings (if provided)
+      if (customArgs !== undefined && !customArgs.every((arg) => typeof arg === "string")) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32602,
+          message: "customArgs must be an array of strings",
+        });
+      }
 
       // ── Idempotency check ──────────────────────────────────────────────
       // If client provides an idempotencyKey, check if we've already created
@@ -314,6 +333,18 @@ export async function POST(request: NextRequest) {
           mcpConfigs,
           modeId,
           role, // Pass role so ROUTA gets bypassPermissions
+        );
+      } else if (customCommand) {
+        // ── Custom ACP provider (inline command + args from client) ─────
+        // Security: Avoid logging full command/args as they may contain secrets
+        console.log(`[ACP Route] Using custom provider: ${provider}`);
+        acpSessionId = await manager.createSessionFromInline(
+          sessionId,
+          customCommand,
+          customArgs ?? [],
+          cwd,
+          provider, // use provider name as display name
+          forwardSessionUpdate,
         );
       } else {
         // ── Standard ACP agent ───────────────────────────────────────

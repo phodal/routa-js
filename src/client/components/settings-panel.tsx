@@ -6,6 +6,11 @@ import type { SpecialistConfig, AgentRole, ModelTier } from "./specialist-manage
 import { GitHubWebhookPanel } from "./github-webhook-panel";
 import { SchedulePanel } from "./schedule-panel";
 import { AgentInstallPanel } from "./agent-install-panel";
+import {
+  loadCustomAcpProviders,
+  saveCustomAcpProviders,
+  type CustomAcpProvider,
+} from "../utils/custom-acp-providers";
 
 /**
  * Agent roles that can have default providers configured.
@@ -826,6 +831,195 @@ function MemoryStatsTab() {
   );
 }
 
+// ─── Custom ACP Providers Section ────────────────────────────────────────────
+
+interface CustomProviderForm {
+  id: string;
+  name: string;
+  command: string;
+  args: string;
+  description: string;
+}
+
+const EMPTY_CUSTOM_PROVIDER_FORM: CustomProviderForm = {
+  id: "", name: "", command: "", args: "", description: "",
+};
+
+function CustomAcpProvidersSection() {
+  const [providers, setProviders] = useState<CustomAcpProvider[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<CustomProviderForm>(EMPTY_CUSTOM_PROVIDER_FORM);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setProviders(loadCustomAcpProviders());
+  }, []);
+
+  const handleSave = () => {
+    setError(null);
+    const name = form.name.trim();
+    const command = form.command.trim();
+    if (!name) { setError("Name is required"); return; }
+    if (!command) { setError("Command is required"); return; }
+
+    const args = form.args
+      .split(/\s+/)
+      .map((a) => a.trim())
+      .filter(Boolean);
+
+    const id = editingId ?? `custom-${crypto.randomUUID()}`;
+    const entry: CustomAcpProvider = {
+      id,
+      name,
+      command,
+      args,
+      description: form.description.trim() || undefined,
+    };
+
+    const next = editingId
+      ? providers.map((p) => (p.id === editingId ? entry : p))
+      : [...providers, entry];
+
+    saveCustomAcpProviders(next);
+    setProviders(next);
+    setShowForm(false);
+    setEditingId(null);
+    setForm(EMPTY_CUSTOM_PROVIDER_FORM);
+  };
+
+  const handleEdit = (p: CustomAcpProvider) => {
+    setEditingId(p.id);
+    setForm({
+      id: p.id,
+      name: p.name,
+      command: p.command,
+      args: p.args.join(" "),
+      description: p.description ?? "",
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = (id: string) => {
+    const next = providers.filter((p) => p.id !== id);
+    saveCustomAcpProviders(next);
+    setProviders(next);
+  };
+
+  return (
+    <div className="px-4 py-4 border-b border-gray-100 dark:border-gray-800">
+      <div className="flex items-center justify-between mb-2">
+        <p className={sectionHeadCls}>Custom Providers</p>
+        {!showForm && (
+          <button
+            onClick={() => { setShowForm(true); setEditingId(null); setForm(EMPTY_CUSTOM_PROVIDER_FORM); }}
+            className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+          >
+            + Add
+          </button>
+        )}
+      </div>
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3">
+        Define your own ACP-compliant agent with a custom command and args.
+      </p>
+
+      {error && (
+        <p className="text-xs text-red-500 mb-2">{error}</p>
+      )}
+
+      {showForm && (
+        <div className="mb-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 space-y-2">
+          <p className={sectionHeadCls}>{editingId ? "Edit Provider" : "New Provider"}</p>
+          <div>
+            <label className={labelCls}>Name *</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="My Agent"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Command *</label>
+            <input
+              value={form.command}
+              onChange={(e) => setForm({ ...form, command: e.target.value })}
+              placeholder="my-agent-cli"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Args (space-separated, no quoted spaces)</label>
+            <input
+              value={form.args}
+              onChange={(e) => setForm({ ...form, args: e.target.value })}
+              placeholder="--acp"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Description</label>
+            <input
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Optional description"
+              className={inputCls}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSave}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+            >
+              {editingId ? "Save" : "Add"}
+            </button>
+            <button
+              onClick={() => { setShowForm(false); setEditingId(null); setForm(EMPTY_CUSTOM_PROVIDER_FORM); setError(null); }}
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {providers.length === 0 && !showForm ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No custom providers yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {providers.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130]"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{p.name}</p>
+                <p className="text-[10px] text-gray-400 font-mono truncate">
+                  {p.command} {p.args.join(" ")}
+                </p>
+              </div>
+              <div className="flex gap-1 ml-2 shrink-0">
+                <button
+                  onClick={() => handleEdit(p)}
+                  className="px-2 py-1 text-[10px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-600 rounded"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(p.id)}
+                  className="px-2 py-1 text-[10px] text-red-500 hover:text-red-700 border border-red-200 dark:border-red-800 rounded"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MCP Servers Tab ─────────────────────────────────────────────────────────
 
 type McpServerType = "stdio" | "http" | "sse";
@@ -1399,6 +1593,7 @@ export function SettingsPanel({ open, onClose, providers, initialTab }: Settings
           )}
           {activeTab === "agents" && (
             <div className="h-full overflow-y-auto">
+              <CustomAcpProvidersSection />
               <AgentInstallPanel />
             </div>
           )}

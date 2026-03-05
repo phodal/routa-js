@@ -133,6 +133,10 @@ export class BrowserAcpClient {
     baseUrl?: string;
     /** API key override (overrides ANTHROPIC_AUTH_TOKEN env var) */
     apiKey?: string;
+    /** Custom provider command (for user-defined ACP providers) */
+    customCommand?: string;
+    /** Custom provider args (for user-defined ACP providers) */
+    customArgs?: string[];
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", {
       cwd: params.cwd,
@@ -149,6 +153,8 @@ export class BrowserAcpClient {
       specialistId: params.specialistId,
       baseUrl: params.baseUrl,
       apiKey: params.apiKey,
+      customCommand: params.customCommand,
+      customArgs: params.customArgs,
     });
     this._sessionId = result.sessionId;
 

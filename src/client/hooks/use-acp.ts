@@ -25,6 +25,19 @@ import {
   logRuntime,
   toErrorMessage,
 } from "../utils/diagnostics";
+import { loadCustomAcpProviders, type CustomAcpProvider } from "../utils/custom-acp-providers";
+
+/** Convert a custom ACP provider to AcpProviderInfo for the provider list. */
+function toAcpProviderInfo(cp: CustomAcpProvider): AcpProviderInfo {
+  return {
+    id: cp.id,
+    name: cp.name,
+    description: cp.description ?? `Custom: ${[cp.command, ...cp.args].join(" ")}`,
+    command: cp.command,
+    status: "available",
+    source: "static",
+  };
+}
 
 /**
  * Authentication error info for display in UI.
@@ -115,6 +128,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       // Fast path: Load only local providers (instant, < 10ms)
       const localProviders = await client.listProviders(false, false);
 
+      // Merge in user-defined custom ACP providers
+      const customProviders = loadCustomAcpProviders().map(toAcpProviderInfo);
+      const allLocalProviders = [...localProviders, ...customProviders];
+
       client.onUpdate((update) => {
         setState((s) => ({
           ...s,
@@ -125,12 +142,12 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       clientRef.current = client;
 
       // Auto-select first available provider (claude-code-sdk in serverless, or first available)
-      const firstAvailable = localProviders.find((p) => p.status === "available");
+      const firstAvailable = allLocalProviders.find((p) => p.status === "available");
 
       setState((s) => ({
         ...s,
         connected: true,
-        providers: localProviders,
+        providers: allLocalProviders,
         selectedProvider: firstAvailable?.id ?? s.selectedProvider,
         loading: false,
       }));
@@ -138,11 +155,13 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       // Background task 1: Check local provider status
       client.listProviders(true, false).then((checkedLocalProviders) => {
         // Only update local providers (source === 'static'), keep existing registry providers
+        // Re-merge custom providers (they are always "available")
+        const customProvs = loadCustomAcpProviders().map(toAcpProviderInfo);
         setState((s) => {
           const existingRegistry = s.providers.filter((p) => p.source === "registry");
           return {
             ...s,
-            providers: [...checkedLocalProviders, ...existingRegistry],
+            providers: [...checkedLocalProviders, ...customProvs, ...existingRegistry],
           };
         });
       }).catch((err) => {
@@ -221,6 +240,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       try {
         setState((s) => ({ ...s, loading: true, error: null, authError: null, updates: [] }));
         const activeProvider = provider ?? state.selectedProvider;
+
+        // Look up custom provider inline config if the selected provider is custom
+        const customProvider = loadCustomAcpProviders().find((cp) => cp.id === activeProvider);
+
         const result = await client.newSession({
           cwd,
           branch,
@@ -234,6 +257,8 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           specialistId,
           baseUrl,
           apiKey,
+          customCommand: customProvider?.command,
+          customArgs: customProvider?.args,
         });
         sessionIdRef.current = result.sessionId;
         setState((s) => ({

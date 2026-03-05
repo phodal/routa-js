@@ -1,5 +1,5 @@
 import {AcpProcess} from "@/core/acp/acp-process";
-import {buildConfigFromPreset, ManagedProcess, NotificationHandler} from "@/core/acp/processer";
+import {buildConfigFromPreset, buildConfigFromInline, ManagedProcess, NotificationHandler} from "@/core/acp/processer";
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
 import {ensureMcpForProvider, providerSupportsMcp} from "@/core/acp/mcp-setup";
 import {getDefaultRoutaMcpConfig} from "@/core/acp/mcp-config-generator";
@@ -123,6 +123,43 @@ export class AcpProcessManager {
             process: proc,
             acpSessionId,
             presetId,
+            createdAt: new Date(),
+        });
+
+        return acpSessionId;
+    }
+
+    /**
+     * Spawn a new ACP agent process from an inline command and args (custom provider).
+     * Used when the user defines a custom ACP provider not in the preset registry.
+     *
+     * @param sessionId - Our internal session ID
+     * @param command - The command to execute (e.g. "my-agent")
+     * @param args - Command-line arguments for ACP mode (e.g. ["--acp"])
+     * @param cwd - Working directory for the agent
+     * @param displayName - Human-readable name for logging
+     * @param onNotification - Handler for session/update notifications
+     * @returns The agent's ACP session ID
+     */
+    async createSessionFromInline(
+        sessionId: string,
+        command: string,
+        args: string[],
+        cwd: string,
+        displayName: string,
+        onNotification: NotificationHandler,
+    ): Promise<string> {
+        const config = buildConfigFromInline(command, args, cwd, displayName);
+        const proc = new AcpProcess(config, onNotification);
+
+        await proc.start();
+        await proc.initialize();
+        const acpSessionId = await proc.newSession(cwd);
+
+        this.processes.set(sessionId, {
+            process: proc,
+            acpSessionId,
+            presetId: `custom:${command}`,
             createdAt: new Date(),
         });
 
