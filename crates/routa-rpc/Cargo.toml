@@ -1,6 +1,6 @@
 [package]
 name = "routa-rpc"
-version = "0.1.0"
+version = "0.2.4"
 description = "Transport-agnostic JSON-RPC 2.0 layer for Routa.js — enables JS bindgen"
 authors = ["phodal"]
 edition = "2021"

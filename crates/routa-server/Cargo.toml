@@ -1,6 +1,6 @@
 [package]
 name = "routa-server"
-version = "0.1.0"
+version = "0.2.4"
 description = "Routa.js HTTP Server — axum adapter on top of routa-core"
 authors = ["phodal"]
 edition = "2021"
