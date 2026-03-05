@@ -68,49 +68,10 @@ export function CollaborativeTaskEditor({
 }: CollaborativeTaskEditorProps) {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const [specExpanded, setSpecExpanded] = useState(true);
   const [viewMode, setViewMode] = useState<CollabPanelView>("tasks");
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
 
-  // Vertical split state for SPEC vs Tasks
-  const [specHeight, setSpecHeight] = useState(350); // default height in px
-  const [isVerticalResizing, setIsVerticalResizing] = useState(false);
-  const verticalResizeStartYRef = useRef(0);
-  const verticalResizeStartHeightRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Vertical resize handlers
-  const handleVerticalResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsVerticalResizing(true);
-    verticalResizeStartYRef.current = e.clientY;
-    verticalResizeStartHeightRef.current = specHeight;
-  }, [specHeight]);
-
-  useEffect(() => {
-    if (!isVerticalResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const deltaY = e.clientY - verticalResizeStartYRef.current;
-      const containerHeight = containerRef.current?.clientHeight ?? 600;
-      const newHeight = Math.min(
-        Math.max(verticalResizeStartHeightRef.current + deltaY, 80), // min 80px
-        containerHeight - 150 // leave at least 150px for tasks
-      );
-      setSpecHeight(newHeight);
-    };
-
-    const handleMouseUp = () => {
-      setIsVerticalResizing(false);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isVerticalResizing]);
 
   // Auto-switch to crafters view only on the first agent spawn,
   // then let the user freely toggle between tabs.
@@ -122,17 +83,13 @@ export function CollaborativeTaskEditor({
     }
   }, [crafterAgents.length]);
 
-  // Filter task notes and spec note
+  // Filter task notes (spec is now shown in the dedicated Spec tab)
   const taskNotes = useMemo(
     () => notes.filter((n) => n.metadata.type === "task"),
     [notes]
   );
-  const specNote = useMemo(
-    () => notes.find((n) => n.metadata.type === "spec"),
-    [notes]
-  );
 
-  if (taskNotes.length === 0 && !specNote && crafterAgents.length === 0) {
+  if (taskNotes.length === 0 && crafterAgents.length === 0) {
     return null;
   }
 
@@ -284,90 +241,6 @@ export function CollaborativeTaskEditor({
         </div>
       </div>
 
-      {/* Spec Note (if exists) - resizable vertical split */}
-      {specNote && specNote.content && (
-        <div
-          className="shrink-0 flex flex-col bg-blue-50/50 dark:bg-blue-900/10 relative"
-          style={{ height: specExpanded ? `${specHeight}px` : "auto" }}
-        >
-          {/* Spec Header */}
-          <div
-            className="flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-blue-100/50 dark:hover:bg-blue-900/20 transition-colors shrink-0"
-            onClick={() => setSpecExpanded((prev) => !prev)}
-          >
-            <svg
-              className="w-3 h-3 text-blue-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex-1">
-              Spec
-            </span>
-            {onDeleteNote && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteNote(specNote.id);
-                }}
-                title="Delete spec"
-                className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-            <svg
-              className={`w-3.5 h-3.5 text-blue-400 transition-transform ${specExpanded ? "rotate-180" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-          {/* Spec Content */}
-          {specExpanded ? (
-            <div className="flex-1 overflow-y-auto px-3 pb-2">
-              <MarkdownViewer
-                content={specNote.content}
-                className="text-[11px] text-gray-600 dark:text-gray-400"
-              />
-            </div>
-          ) : (
-            <div className="px-3 pb-2">
-              <div className="text-[11px] text-gray-600 dark:text-gray-400 line-clamp-2">
-                <MarkdownViewer
-                  content={specNote.content.slice(0, 200) + (specNote.content.length > 200 ? "..." : "")}
-                  className="text-[11px]"
-                />
-              </div>
-            </div>
-          )}
-          {/* Vertical resize handle - only show when expanded */}
-          {specExpanded && (
-            <div
-              className="absolute left-0 right-0 bottom-0 h-1 cursor-row-resize z-20 hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors group"
-              onMouseDown={handleVerticalResizeStart}
-            >
-              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 w-8 h-1 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-indigo-400 group-active:bg-indigo-500 transition-colors" />
-            </div>
-          )}
-        </div>
-      )}
-      {/* Divider between SPEC and Tasks when SPEC exists and is expanded */}
-      {specNote && specNote.content && specExpanded && (
-        <div className="h-px bg-gray-200 dark:bg-gray-700 shrink-0" />
-      )}
 
       {/* Content */}
       {viewMode === "tasks" ? (

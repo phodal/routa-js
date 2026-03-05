@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import {SessionContextPanel} from "@/client/components/session-context-panel";
 import {type CrafterAgent, TaskPanel} from "@/client/components/task-panel";
 import {CollaborativeTaskEditor} from "@/client/components/collaborative-task-editor";
+import {MarkdownViewer} from "@/client/components/markdown/markdown-viewer";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
 import type {RepoSelection} from "@/client/components/repo-picker";
 import type {NoteData} from "@/client/hooks/use-notes";
@@ -89,9 +90,10 @@ function SpecViewer({ specNote, onDeleteNote }: {
       </div>
       {/* Spec content — full scrollable area */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-        <div className="prose prose-sm dark:prose-invert max-w-none text-[12px] leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-          {specNote.content || "No spec content yet."}
-        </div>
+        <MarkdownViewer
+          content={specNote.content || "No spec content yet."}
+          className="text-[12px] text-gray-700 dark:text-gray-300"
+        />
       </div>
     </div>
   );
@@ -243,6 +245,130 @@ function TasksDrawer({
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── Mini Task List (shown below sessions) ────────────────────────── */
+const STATUS_COLORS: Record<string, string> = {
+  pending:   "bg-gray-300 dark:bg-gray-600",
+  confirmed: "bg-blue-400 dark:bg-blue-500",
+  running:   "bg-amber-400 animate-pulse",
+  completed: "bg-emerald-500",
+  error:     "bg-red-500",
+  IN_PROGRESS: "bg-amber-400 animate-pulse",
+  COMPLETED:   "bg-emerald-500",
+  FAILED:      "bg-red-500",
+  PENDING:     "bg-gray-300 dark:bg-gray-600",
+};
+
+function MiniTaskList({
+  hasCollabNotes,
+  sessionNotes,
+  routaTasks,
+  onSwitchToTasks,
+}: {
+  hasCollabNotes: boolean;
+  sessionNotes: NoteData[];
+  routaTasks: ParsedTask[];
+  onSwitchToTasks: () => void;
+}) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const items = useMemo(() => {
+    if (hasCollabNotes) {
+      return sessionNotes
+        .filter((n) => n.metadata.type === "task")
+        .map((n) => ({
+          id: n.id,
+          title: n.title,
+          status: (n.metadata.taskStatus as string) || "PENDING",
+          detail: n.content,
+        }));
+    }
+    return routaTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      detail: [t.objective, t.scope, t.definitionOfDone].filter(Boolean).join("\n\n"),
+    }));
+  }, [hasCollabNotes, sessionNotes, routaTasks]);
+
+  if (items.length === 0) return null;
+
+  const handleMouseEnter = (id: string, e: React.MouseEvent<HTMLDivElement>) => {
+    setHoveredId(id);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (containerRect) {
+      setPopupPos({
+        top: rect.top - containerRect.top,
+        left: containerRect.width + 4,
+      });
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative border-t border-gray-100 dark:border-gray-800 shrink-0">
+      {/* Section header */}
+      <div className="px-3 py-1 flex items-center justify-between">
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+          Tasks ({items.length})
+        </span>
+        <button
+          onClick={onSwitchToTasks}
+          className="text-[9px] text-indigo-500 dark:text-indigo-400 hover:underline"
+        >
+          view all
+        </button>
+      </div>
+
+      {/* Task rows */}
+      <div className="px-2 pb-1.5 space-y-0.5">
+        {items.map((item) => {
+          const dotColor = STATUS_COLORS[item.status] ?? "bg-gray-300";
+          return (
+            <div
+              key={item.id}
+              className="group flex items-center gap-1.5 px-1.5 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-default transition-colors"
+              onMouseEnter={(e) => handleMouseEnter(item.id, e)}
+              onMouseLeave={() => { setHoveredId(null); setPopupPos(null); }}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+              <span className="text-[11px] text-gray-600 dark:text-gray-400 truncate flex-1">
+                {item.title}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Hover popup */}
+      {hoveredId && popupPos && (() => {
+        const item = items.find((i) => i.id === hoveredId);
+        if (!item) return null;
+        return (
+          <div
+            className="absolute z-50 w-64 bg-white dark:bg-[#1e2130] border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl p-3 pointer-events-none"
+            style={{ top: popupPos.top, left: popupPos.left }}
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_COLORS[item.status] ?? "bg-gray-300"}`} />
+              <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-tight">
+                {item.title}
+              </span>
+            </div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-6 whitespace-pre-wrap">
+              {item.detail || "No details."}
+            </div>
+            <div className="mt-1.5 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+              {item.status}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
   );
 }
 
@@ -530,12 +656,21 @@ export function LeftSidebar({
             {/* Tab content — full remaining height */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
               {activeTab === "sessions" && (
-                <div className="flex-1 min-h-0 overflow-y-auto">
-                  <SessionContextPanel
-                    sessionId={sessionId}
-                    workspaceId={workspaceId}
-                    onSelectSession={onSelectSession}
-                    refreshTrigger={refreshKey}
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    <SessionContextPanel
+                      sessionId={sessionId}
+                      workspaceId={workspaceId}
+                      onSelectSession={onSelectSession}
+                      refreshTrigger={refreshKey}
+                    />
+                  </div>
+                  {/* Mini task list pinned below sessions */}
+                  <MiniTaskList
+                    hasCollabNotes={hasCollabNotes}
+                    sessionNotes={sessionNotes}
+                    routaTasks={routaTasks}
+                    onSwitchToTasks={() => setActiveTab("tasks")}
                   />
                 </div>
               )}
