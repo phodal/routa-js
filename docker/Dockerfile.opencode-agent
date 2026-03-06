@@ -1,15 +1,22 @@
-FROM node:22-alpine
+FROM node:22-bookworm-slim
 
-RUN apk add --no-cache libc6-compat
+# System dependencies: git for code operations, curl for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g opencode-ai
+# Install opencode and Playwright MCP server
+RUN npm install -g opencode-ai @playwright/mcp
 
-# The opencode-ai postinstall may cache the wrong binary (.opencode).
-# Set OPENCODE_BIN_PATH so the bridge server always resolves the correct
-# musl binary that was installed as an optional dependency.
-# The bridge auto-detects the path from known locations; this env var
-# overrides the detection as a reliable fallback.
-ENV OPENCODE_BIN_PATH=/usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-arm64-musl/bin/opencode
+# Install Playwright Chromium browser with all system dependencies.
+# Enables the playwright MCP server for headless browser testing.
+RUN npx playwright install-deps chromium \
+    && npx playwright install chromium
+
+# Allow git to operate safely on the mounted /workspace volume
+RUN git config --global --add safe.directory '*'
 
 COPY docker/opencode-bridge/server.js /usr/local/bin/opencode-bridge.js
 

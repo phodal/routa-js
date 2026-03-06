@@ -1,5 +1,8 @@
 import { getServerBridge } from "@/core/platform";
 import type { NotificationHandler } from "@/core/acp/processer";
+import os from "os";
+import path from "path";
+import fsSync from "fs";
 import {
   DEFAULT_DOCKER_AGENT_IMAGE,
   findAvailablePort,
@@ -52,9 +55,38 @@ export class DockerProcessManager {
       "--rm",
       `--name ${shellEscape(containerName)}`,
       `-p ${hostPort}:${containerPort}`,
+      // Allow the container to reach the host machine (e.g. for MCP at localhost:PORT).
+      // On Docker Desktop (Mac/Windows) this resolves automatically; on Linux we
+      // need to explicitly map the host-gateway alias.
+      "--add-host=host.docker.internal:host-gateway",
       "-w /workspace",
       `-v ${shellEscape(`${config.workspacePath}:/workspace`)}`,
     ];
+
+    // Mount host SSH keys so git SSH operations (clone, push, pull) work inside
+    // the container. Mounted read-only to avoid accidental modification.
+    const sshDir = path.join(os.homedir(), ".ssh");
+    if (fsSync.existsSync(sshDir)) {
+      runParts.push(`-v ${shellEscape(`${sshDir}:/root/.ssh:ro`)}`);
+    }
+
+    // Mount host git config so commits carry the correct author identity and
+    // credential helpers are available for HTTPS operations.
+    const gitConfigFile = path.join(os.homedir(), ".gitconfig");
+    if (fsSync.existsSync(gitConfigFile)) {
+      runParts.push(`-v ${shellEscape(`${gitConfigFile}:/root/.gitconfig:ro`)}`);
+    }
+
+    // Derive the Routa MCP URL that is reachable from inside the container.
+    // host.docker.internal resolves to the host machine; PORT is the Next.js port.
+    const routaPort = process.env.PORT || "3000";
+    const routaMcpUrl = `http://host.docker.internal:${routaPort}/api/mcp`;
+    runParts.push(`-e ${shellEscape(`ROUTA_MCP_URL=${routaMcpUrl}`)}`);
+
+    // Forward GitHub token for HTTPS git authentication when available.
+    if (process.env.GITHUB_TOKEN) {
+      runParts.push(`-e GITHUB_TOKEN=${shellEscape(process.env.GITHUB_TOKEN)}`);
+    }
 
     for (const [key, value] of Object.entries(labels)) {
       runParts.push(`--label ${shellEscape(`${key}=${value}`)}`);
