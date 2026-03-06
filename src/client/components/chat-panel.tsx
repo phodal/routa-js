@@ -18,7 +18,7 @@ import type {SkillSummary} from "../skill-client";
 import {RepoPicker, type RepoSelection} from "./repo-picker";
 import {extractTaskBlocks, hasTaskBlocks, type ParsedTask,} from "../utils/task-block-parser";
 import {type TaskInfo, TaskProgressBar, type FileChangesSummary} from "./task-progress-bar";
-import {MessageBubble} from "@/client/components/message-bubble";
+import {MessageBubble, isAskUserQuestionMessage, AskUserQuestionBubble} from "@/client/components/message-bubble";
 import {TracePanel} from "@/client/components/trace-panel";
 import {type ChecklistItem, parseChecklist} from "../utils/checklist-parser";
 import type {WorkspaceData, CodebaseData} from "../hooks/use-workspaces";
@@ -208,6 +208,17 @@ export function ChatPanel({
     if (planTasks.length > 0) return planTasks;
     return delegatedTasks;
   }, [checklistItems, planTasks, delegatedTasks]);
+
+  // Pending AskUserQuestion messages — shown sticky above input, not in chat stream
+  const pendingAskUserQuestions = useMemo(() => {
+    return visibleMessages.filter(
+      (msg) =>
+        msg.role === "tool" &&
+        isAskUserQuestionMessage(msg) &&
+        msg.toolStatus !== "completed" &&
+        msg.toolStatus !== "failed",
+    );
+  }, [visibleMessages]);
 
   // File changes summary for TaskProgressBar
   const fileChangesSummary = useMemo<FileChangesSummary | undefined>(() => {
@@ -1024,7 +1035,28 @@ export function ChatPanel({
     response: Record<string, unknown>,
   ) => {
     await acp.respondToUserInput(toolCallId, response);
-  }, [acp]);
+    // Optimistically mark as completed so the sticky card disappears immediately
+    if (activeSessionId) {
+      setMessagesBySession((prev) => {
+        const msgs = prev[activeSessionId] ?? [];
+        return {
+          ...prev,
+          [activeSessionId]: msgs.map((msg) =>
+            msg.toolCallId === toolCallId
+              ? {
+                  ...msg,
+                  toolStatus: "completed",
+                  toolRawInput: {
+                    ...((msg.toolRawInput as Record<string, unknown>) ?? {}),
+                    ...response,
+                  },
+                }
+              : msg,
+          ),
+        };
+      });
+    }
+  }, [acp, activeSessionId]);
 
   const handleSend = useCallback(async (text: string, context: InputContext) => {
     if (!text.trim()) return;
@@ -1690,6 +1722,10 @@ export function ChatPanel({
                   if (msg.role === "tool" && msg.toolKind === "task") {
                     return false;
                   }
+                  // Hide pending AskUserQuestion from chat stream — shown sticky above input
+                  if (msg.role === "tool" && isAskUserQuestionMessage(msg) && msg.toolStatus !== "completed" && msg.toolStatus !== "failed") {
+                    return false;
+                  }
                   return true;
                 })
                 .map((msg, index) => (
@@ -1706,6 +1742,18 @@ export function ChatPanel({
           {/* Input */}
           <div className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1117]">
             <div className="max-w-3xl mx-auto px-5 py-3 space-y-2">
+              {/* AskUserQuestion sticky cards — displayed above input until user submits */}
+              {pendingAskUserQuestions.length > 0 && (
+                <div className="space-y-2">
+                  {pendingAskUserQuestions.map((msg) => (
+                    <AskUserQuestionBubble
+                      key={msg.id}
+                      message={msg}
+                      onSubmit={handleSubmitAskUserQuestion}
+                    />
+                  ))}
+                </div>
+              )}
               {/* Task Progress Bar - shows above input when tasks or file changes exist */}
               {(taskInfos.length > 0 || fileChangesSummary) && (
                 <TaskProgressBar tasks={taskInfos} fileChanges={fileChangesSummary} />

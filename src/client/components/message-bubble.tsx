@@ -106,7 +106,7 @@ function UserBubble({content}: { content: string }) {
     );
 }
 
-function isAskUserQuestionMessage(message: ChatMessage): boolean {
+export function isAskUserQuestionMessage(message: ChatMessage): boolean {
     if (message.toolKind === "ask-user-question") return true;
     if (message.toolName === "AskUserQuestion") return true;
     const payload = message.toolRawInput as AskUserQuestionPayload | undefined;
@@ -486,7 +486,7 @@ function ToolBubble({
     );
 }
 
-function AskUserQuestionBubble({
+export function AskUserQuestionBubble({
     message,
     onSubmit,
 }: {
