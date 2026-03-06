@@ -1,4 +1,5 @@
 import { getServerBridge } from "@/core/platform";
+import type { NotificationHandler } from "@/core/acp/processer";
 import {
   DEFAULT_DOCKER_AGENT_IMAGE,
   findAvailablePort,
@@ -100,21 +101,69 @@ export class DockerProcessManager {
     }
   }
 
-  async waitForHealthy(sessionId: string, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS): Promise<void> {
+  async waitForHealthy(
+    sessionId: string,
+    timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS,
+    onProgress?: NotificationHandler,
+  ): Promise<void> {
     const info = this.containers.get(sessionId);
     if (!info) {
       throw new Error(`No managed Docker container for session ${sessionId}`);
     }
 
+    const emitLog = (text: string) => {
+      if (!onProgress) return;
+      onProgress({
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId,
+          update: {
+            sessionUpdate: "process_output",
+            source: "docker",
+            data: text,
+            displayName: "Docker",
+          },
+        },
+      });
+    };
+
     const start = Date.now();
     const healthUrl = `http://127.0.0.1:${info.hostPort}/health`;
+    let lastTickSec = -1;
+
+    emitLog(`Starting container ${info.containerName} on port ${info.hostPort}...\r\n`);
 
     while (Date.now() - start < timeoutMs) {
       try {
         const res = await fetch(healthUrl, { cache: "no-store" });
-        if (res.ok) return;
+        if (res.ok) {
+          emitLog(`Container is healthy ✓\r\n`);
+          return;
+        }
       } catch {
         // Ignore transient startup failures while container is booting.
+      }
+
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      if (elapsed !== lastTickSec && elapsed % 3 === 0) {
+        lastTickSec = elapsed;
+        // Stream recent container logs every 3 seconds
+        try {
+          const bridge = getServerBridge();
+          const { stdout, stderr } = await bridge.process.exec(
+            `docker logs --tail 10 ${shellEscape(info.containerName)}`,
+            { timeout: 3_000 },
+          );
+          const combined = (stdout + stderr).trim();
+          if (combined) {
+            emitLog(combined + "\r\n");
+          } else {
+            emitLog(`Waiting for container health check... (${elapsed}s)\r\n`);
+          }
+        } catch {
+          emitLog(`Waiting for container health check... (${elapsed}s)\r\n`);
+        }
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1_000));

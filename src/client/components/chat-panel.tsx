@@ -349,6 +349,36 @@ export function ChatPanel({
             });
             break;
           }
+          case "process_output": {
+            const processData = update.data as string | undefined;
+            const processSource = update.source as string | undefined;
+            const processDisplayName = update.displayName as string | undefined;
+            if (processData) {
+              const processTermId = `process-${sessionId}`;
+              const idx = messages.findIndex(
+                (m) => m.role === "terminal" && m.terminalId === processTermId
+              );
+              if (idx >= 0) {
+                messages[idx] = {
+                  ...messages[idx],
+                  content: messages[idx].content + processData,
+                };
+              } else {
+                messages.push({
+                  id: processTermId,
+                  role: "terminal",
+                  content: processData,
+                  timestamp: new Date(),
+                  terminalId: processTermId,
+                  terminalCommand: processDisplayName ?? "Agent Process",
+                  terminalArgs: processSource ? [processSource] : undefined,
+                  terminalExited: false,
+                  terminalExitCode: null,
+                });
+              }
+            }
+            break;
+          }
         }
         lastKind = kind;
       }

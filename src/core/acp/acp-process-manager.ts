@@ -250,7 +250,7 @@ export class AcpProcessManager {
         });
 
         try {
-            await dockerManager.waitForHealthy(sessionId);
+            await dockerManager.waitForHealthy(sessionId, undefined, onNotification);
             const adapter = new DockerOpenCodeAdapter(
                 `http://127.0.0.1:${container.hostPort}`,
                 onNotification,

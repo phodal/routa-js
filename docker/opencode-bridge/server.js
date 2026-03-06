@@ -134,7 +134,7 @@ class OpenCodeSession {
       clientInfo: { name: 'routa-docker-bridge', version: '1.0.0' },
     })
 
-    const result = await this._request('session/new', { cwd: this.cwd })
+    const result = await this._request('session/new', { cwd: this.cwd, mcpServers: [] })
     this.opencodeSessionId = result.sessionId
     console.log(`[session] ACP session: ${this.opencodeSessionId}`)
     return this.opencodeSessionId
