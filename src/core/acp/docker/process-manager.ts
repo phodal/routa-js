@@ -12,6 +12,9 @@ import {
 } from "./utils";
 import type { DockerContainerConfig, DockerContainerInfo } from "./types";
 
+// Temporary directory for storing auth.json files
+const DOCKER_OPENCODE_TMP_DIR = path.join(os.tmpdir(), "routa-opencode-auth");
+
 const DEFAULT_CONTAINER_PORT = 4321;
 const DEFAULT_HEALTH_TIMEOUT_MS = 30_000;
 
@@ -119,6 +122,21 @@ export class DockerProcessManager {
 
     for (const [key, value] of envEntries) {
       runParts.push(`-e ${shellEscape(`${key}=${value}`)}`);
+    }
+
+    // Mount auth.json if provided — write to temp file and bind-mount into container
+    let authJsonTempFile: string | null = null;
+    if (config.authJson?.trim()) {
+      try {
+        fsSync.mkdirSync(DOCKER_OPENCODE_TMP_DIR, { recursive: true });
+        authJsonTempFile = path.join(DOCKER_OPENCODE_TMP_DIR, `auth-${config.sessionId}.json`);
+        fsSync.writeFileSync(authJsonTempFile, config.authJson, "utf-8");
+        // Opencode reads from ~/.local/share/opencode/auth.json
+        runParts.push(`-v ${shellEscape(`${authJsonTempFile}:/root/.local/share/opencode/auth.json:ro`)}`);
+        console.log(`[DockerProcessManager] Mounted auth.json from ${authJsonTempFile}`);
+      } catch (err) {
+        console.error(`[DockerProcessManager] Failed to write auth.json: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
 
     runParts.push(shellEscape(config.image || DEFAULT_DOCKER_AGENT_IMAGE));

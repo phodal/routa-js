@@ -257,6 +257,8 @@ export async function POST(request: NextRequest) {
       // Inline custom provider config (command + args passed directly from client)
       const customCommand = (p.customCommand as string | undefined);
       const customArgs = Array.isArray(p.customArgs) ? (p.customArgs as string[]) : undefined;
+      // Docker OpenCode: auth.json content to mount into container
+      const authJson = (p.authJson as string | undefined);
 
       // ── Validate custom provider inputs ────────────────────────────────
       // Security: Validate customCommand is a non-empty string
@@ -432,6 +434,7 @@ export async function POST(request: NextRequest) {
               forwardSessionUpdate,
               process.env.ROUTA_DOCKER_OPENCODE_IMAGE ?? DEFAULT_DOCKER_AGENT_IMAGE,
               Object.keys(dockerExtraEnv).length > 0 ? dockerExtraEnv : undefined,
+              authJson,
             );
           } else if (isClaudeCodeSdk) {
             const instanceConfig: AgentInstanceConfig = {
@@ -739,11 +742,15 @@ export async function POST(request: NextRequest) {
               });
             }
 
+            // Try to get authJson from params for auto-created sessions
+            const authJson = (p.authJson as string | undefined);
             acpSessionId = await manager.createDockerSession(
               sessionId,
               cwd,
               forwardSessionUpdate,
               process.env.ROUTA_DOCKER_OPENCODE_IMAGE ?? DEFAULT_DOCKER_AGENT_IMAGE,
+              undefined, // extraEnv
+              authJson,
             );
           } else if (isClaudeCodeSdk) {
             // Claude Code SDK session

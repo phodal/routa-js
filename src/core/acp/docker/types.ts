@@ -19,6 +19,8 @@ export interface DockerContainerConfig {
   labels?: Record<string, string>;
   /** Container port exposed by the OpenCode HTTP service */
   containerPort?: number;
+  /** OpenCode auth.json content (JSON string) to mount into container */
+  authJson?: string;
 }
 
 export interface DockerContainerInfo {

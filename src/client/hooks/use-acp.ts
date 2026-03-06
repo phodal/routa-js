@@ -26,6 +26,7 @@ import {
   toErrorMessage,
 } from "../utils/diagnostics";
 import { loadCustomAcpProviders, type CustomAcpProvider } from "../utils/custom-acp-providers";
+import { loadDockerOpencodeAuthJson } from "../components/settings-panel";
 
 /** Convert a custom ACP provider to AcpProviderInfo for the provider list. */
 function toAcpProviderInfo(cp: CustomAcpProvider): AcpProviderInfo {
@@ -295,6 +296,9 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         // Look up custom provider inline config if the selected provider is custom
         const customProvider = loadCustomAcpProviders().find((cp) => cp.id === activeProvider);
 
+        // For docker-opencode provider, load auth.json from localStorage
+        const authJson = activeProvider === "docker-opencode" ? loadDockerOpencodeAuthJson() : undefined;
+
         const result = await client.newSession({
           cwd,
           branch,
@@ -310,6 +314,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           apiKey,
           customCommand: customProvider?.command,
           customArgs: customProvider?.args,
+          authJson,
         });
         sessionIdRef.current = result.sessionId;
         setState((s) => ({

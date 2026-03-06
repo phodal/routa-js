@@ -1462,20 +1462,50 @@ function McpServersTab() {
   );
 }
 
+// ─── Docker OpenCode auth.json storage key ────────────────────────────────────
+const DOCKER_OPENCODE_AUTH_JSON_KEY = "docker-opencode-auth-json";
+
+/** Load saved Docker OpenCode auth.json from localStorage. */
+export function loadDockerOpencodeAuthJson(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(DOCKER_OPENCODE_AUTH_JSON_KEY) ?? "";
+}
+
+/** Save Docker OpenCode auth.json to localStorage. */
+export function saveDockerOpencodeAuthJson(json: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(DOCKER_OPENCODE_AUTH_JSON_KEY, json);
+}
+
+const EXAMPLE_AUTH_JSON = `{
+  "zai": {
+    "type": "api",
+    "key": "your-api-key-here"
+  }
+}`;
+
 // ─── Docker OpenCode Config Section ───────────────────────────────────────────
 function DockerOpenCodeSection() {
-  const [apiKey, setApiKey] = useState("");
+  const [authJson, setAuthJson] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setApiKey(loadProviderConnectionConfig("docker-opencode").apiKey ?? "");
+    setAuthJson(loadDockerOpencodeAuthJson());
   }, []);
 
   const handleSave = useCallback((value: string) => {
-    const existing = loadProviderConnections();
-    saveProviderConnections({
-      ...existing,
-      "docker-opencode": { ...(existing["docker-opencode"] ?? {}), apiKey: value },
-    });
+    if (value.trim()) {
+      try {
+        JSON.parse(value);
+        setError(null);
+      } catch {
+        setError("Invalid JSON format");
+        return;
+      }
+    } else {
+      setError(null);
+    }
+    saveDockerOpencodeAuthJson(value);
   }, []);
 
   return (
@@ -1485,27 +1515,26 @@ function DockerOpenCodeSection() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 10V7" />
         </svg>
         <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">Docker OpenCode</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">API Key</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">auth.json</span>
       </div>
       <p className="text-[11px] text-gray-500 dark:text-gray-400">
-        API key forwarded to the OpenCode agent running inside the Docker container (e.g. Anthropic, OpenAI).
+        Paste your <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">~/.local/share/opencode/auth.json</code> here.
+        This config will be mounted into the Docker container.
       </p>
-      <div className="flex gap-2 items-center">
-        <input
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          onBlur={(e) => handleSave(e.target.value)}
-          placeholder="sk-ant-... or sk-..."
-          className="flex-1 text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono"
-        />
-        <button
-          onClick={() => handleSave(apiKey)}
-          className="px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors shrink-0"
-        >
-          Save
-        </button>
-      </div>
+      <textarea
+        value={authJson}
+        onChange={(e) => setAuthJson(e.target.value)}
+        placeholder={EXAMPLE_AUTH_JSON}
+        rows={5}
+        className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono resize-y"
+      />
+      {error && <p className="text-[10px] text-red-500">{error}</p>}
+      <button
+        onClick={() => handleSave(authJson)}
+        className="px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+      >
+        Save
+      </button>
     </div>
   );
 }
@@ -1515,27 +1544,33 @@ export interface DockerConfigModalProps {
   open: boolean;
   errorMessage: string;
   onClose: () => void;
-  /** Called after the API key is saved; parent can use this to retry */
-  onSaved: (apiKey: string) => void;
+  /** Called after the auth.json is saved; parent can use this to retry */
+  onSaved: (authJson: string) => void;
 }
 
 export function DockerConfigModal({ open, errorMessage, onClose, onSaved }: DockerConfigModalProps) {
-  const [apiKey, setApiKey] = useState("");
+  const [authJson, setAuthJson] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setApiKey(loadProviderConnectionConfig("docker-opencode").apiKey ?? "");
+      setAuthJson(loadDockerOpencodeAuthJson());
     }
   }, [open]);
 
   const handleSave = useCallback(() => {
-    const existing = loadProviderConnections();
-    saveProviderConnections({
-      ...existing,
-      "docker-opencode": { ...(existing["docker-opencode"] ?? {}), apiKey },
-    });
-    onSaved(apiKey);
-  }, [apiKey, onSaved]);
+    if (authJson.trim()) {
+      try {
+        JSON.parse(authJson);
+        setError(null);
+      } catch {
+        setError("Invalid JSON format");
+        return;
+      }
+    }
+    saveDockerOpencodeAuthJson(authJson);
+    onSaved(authJson);
+  }, [authJson, onSaved]);
 
   if (!open) return null;
 
@@ -1546,9 +1581,9 @@ export function DockerConfigModal({ open, errorMessage, onClose, onSaved }: Dock
     .trim();
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+    <div className="fixed inset-0 z-60 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white dark:bg-[#1a1d2e] rounded-xl shadow-2xl w-full max-w-sm mx-4 border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="relative bg-white dark:bg-[#1a1d2e] rounded-xl shadow-2xl w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
@@ -1570,20 +1605,20 @@ export function DockerConfigModal({ open, errorMessage, onClose, onSaved }: Dock
               <p className="text-xs text-red-700 dark:text-red-400 font-mono break-all">{displayError}</p>
             </div>
           )}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">LLM API Key</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && apiKey.trim() && handleSave()}
-              placeholder="sk-ant-... or sk-..."
-              autoFocus
-              className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono"
-            />
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">OpenCode auth.json</label>
             <p className="text-[10px] text-gray-400 dark:text-gray-500">
-              This API key is forwarded to the OpenCode agent inside the Docker container.
+              Paste your local <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">~/.local/share/opencode/auth.json</code> here.
             </p>
+            <textarea
+              value={authJson}
+              onChange={(e) => setAuthJson(e.target.value)}
+              placeholder={EXAMPLE_AUTH_JSON}
+              rows={6}
+              autoFocus
+              className="w-full text-xs px-2 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#1e2130] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono resize-y"
+            />
+            {error && <p className="text-[10px] text-red-500">{error}</p>}
           </div>
         </div>
         {/* Footer */}
@@ -1593,7 +1628,7 @@ export function DockerConfigModal({ open, errorMessage, onClose, onSaved }: Dock
           </button>
           <button
             onClick={handleSave}
-            disabled={!apiKey.trim()}
+            disabled={!authJson.trim()}
             className="px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors"
           >
             Save & Retry

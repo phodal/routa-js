@@ -240,6 +240,7 @@ export class AcpProcessManager {
         onNotification: NotificationHandler,
         image?: string,
         extraEnv?: Record<string, string>,
+        authJson?: string,
     ): Promise<string> {
         const dockerManager = getDockerProcessManager();
         const container = await dockerManager.startContainer({
@@ -247,6 +248,7 @@ export class AcpProcessManager {
             image: image ?? DEFAULT_DOCKER_AGENT_IMAGE,
             workspacePath: cwd,
             env: extraEnv,
+            authJson,
         });
 
         try {

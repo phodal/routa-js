@@ -144,6 +144,8 @@ export class BrowserAcpClient {
     customCommand?: string;
     /** Custom provider args (for user-defined ACP providers) */
     customArgs?: string[];
+    /** Docker OpenCode: auth.json content to mount into container */
+    authJson?: string;
   }): Promise<AcpNewSessionResult> {
     const result = await this.rpc<AcpNewSessionResult>("session/new", {
       cwd: params.cwd,
@@ -164,6 +166,7 @@ export class BrowserAcpClient {
       apiKey: params.apiKey,
       customCommand: params.customCommand,
       customArgs: params.customArgs,
+      authJson: params.authJson,
     });
     this._sessionId = result.sessionId;
 
