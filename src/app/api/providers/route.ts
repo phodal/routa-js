@@ -50,12 +50,11 @@ async function getLocalProviders(shouldCheck = false): Promise<ProviderInfo[]> {
   }
 
   const providers: ProviderInfo[] = [];
+  const claudeSdkConfigured = isClaudeCodeSdkConfigured();
+  const opencodeSdkConfigured = isOpencodeServerConfigured();
 
   // In serverless environments (Vercel), show SDK-based providers only
   if (isServerlessEnvironment()) {
-    const claudeSdkConfigured = isClaudeCodeSdkConfigured();
-    const opencodeSdkConfigured = isOpencodeServerConfigured();
-
     // Claude Code SDK - recommended for serverless
     providers.push({
       id: "claude-code-sdk",
@@ -83,6 +82,30 @@ async function getLocalProviders(shouldCheck = false): Promise<ProviderInfo[]> {
     const availableCount = providers.filter(p => p.status === "available").length;
     console.log(`[Providers API] Serverless environment: ${availableCount}/${providers.length} SDK providers available`);
     return providers;
+  }
+
+  // In local development, expose configured SDK providers alongside CLI providers
+  // so SDK-specific features can be exercised in the normal UI.
+  if (claudeSdkConfigured) {
+    providers.push({
+      id: "claude-code-sdk",
+      name: "Claude Code SDK",
+      description: "Claude Code via SDK",
+      command: "sdk",
+      status: "available",
+      source: "static",
+    });
+  }
+
+  if (opencodeSdkConfigured) {
+    providers.push({
+      id: "opencode-sdk",
+      name: "OpenCode SDK",
+      description: "OpenCode via SDK",
+      command: "sdk",
+      status: "available",
+      source: "static",
+    });
   }
 
   // Non-serverless: show all CLI-based providers

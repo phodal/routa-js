@@ -1,11 +1,34 @@
-import React, {useState, useMemo} from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import {TerminalBubble} from "@/client/components/terminal/terminal-bubble";
 import {ChatMessage, PlanEntry} from "@/client/components/chat-panel";
 import {MarkdownViewer} from "@/client/components/markdown/markdown-viewer";
 import {CodeViewer} from "@/client/components/codemirror/code-viewer";
 import {TaskProgressBar, TaskInfo} from "@/client/components/task-progress-bar";
 
-export function MessageBubble({message}: { message: ChatMessage }) {
+interface AskUserQuestionOption {
+    label: string;
+    description?: string;
+}
+
+interface AskUserQuestionItem {
+    question: string;
+    header: string;
+    options?: AskUserQuestionOption[];
+    multiSelect?: boolean;
+}
+
+interface AskUserQuestionPayload {
+    questions?: AskUserQuestionItem[];
+    answers?: Record<string, string>;
+}
+
+export function MessageBubble({
+    message,
+    onSubmitAskUserQuestion,
+}: {
+    message: ChatMessage;
+    onSubmitAskUserQuestion?: (toolCallId: string, response: Record<string, unknown>) => Promise<void>;
+}) {
     const {role} = message;
     switch (role) {
         case "user":
@@ -25,7 +48,14 @@ export function MessageBubble({message}: { message: ChatMessage }) {
                     />
                 );
             }
-            console.log(message)
+            if (isAskUserQuestionMessage(message)) {
+                return (
+                    <AskUserQuestionBubble
+                        message={message}
+                        onSubmit={onSubmitAskUserQuestion}
+                    />
+                );
+            }
             return (
                 <ToolBubble
                     content={message.content}
@@ -74,6 +104,13 @@ function UserBubble({content}: { content: string }) {
             </div>
         </div>
     );
+}
+
+function isAskUserQuestionMessage(message: ChatMessage): boolean {
+    if (message.toolKind === "ask-user-question") return true;
+    if (message.toolName === "AskUserQuestion") return true;
+    const payload = message.toolRawInput as AskUserQuestionPayload | undefined;
+    return Array.isArray(payload?.questions) && payload.questions.length > 0;
 }
 
 function AssistantBubble({content}: { content: string }) {
@@ -445,6 +482,157 @@ function ToolBubble({
                     )}
                 </div>
             )}
+        </div>
+    );
+}
+
+function AskUserQuestionBubble({
+    message,
+    onSubmit,
+}: {
+    message: ChatMessage;
+    onSubmit?: (toolCallId: string, response: Record<string, unknown>) => Promise<void>;
+}) {
+    const rawInput = (message.toolRawInput ?? {}) as AskUserQuestionPayload;
+    const questions = Array.isArray(rawInput.questions) ? rawInput.questions : [];
+    const existingAnswers = rawInput.answers ?? {};
+    const [answers, setAnswers] = useState<Record<string, string>>(existingAnswers);
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+
+    useEffect(() => {
+        setAnswers(existingAnswers);
+    }, [message.id, rawInput.answers]);
+
+    const isCompleted = message.toolStatus === "completed";
+    const isFailed = message.toolStatus === "failed";
+    const isAwaitingInput = !isCompleted && !isFailed;
+
+    const updateSingleAnswer = (question: string, answer: string) => {
+        setAnswers((prev) => ({ ...prev, [question]: answer }));
+    };
+
+    const toggleMultiAnswer = (question: string, answer: string) => {
+        setAnswers((prev) => {
+            const current = prev[question]
+                ? prev[question].split(",").map((item) => item.trim()).filter(Boolean)
+                : [];
+            const next = current.includes(answer)
+                ? current.filter((item) => item !== answer)
+                : [...current, answer];
+            return { ...prev, [question]: next.join(", ") };
+        });
+    };
+
+    const handleSubmit = async () => {
+        if (!message.toolCallId || !onSubmit || submitting) return;
+
+        for (const item of questions) {
+            if (!answers[item.question]?.trim()) {
+                setSubmitError(`Please answer \"${item.header}\" before continuing.`);
+                return;
+            }
+        }
+
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            await onSubmit(message.toolCallId, {
+                questions,
+                answers,
+            });
+        } catch (error) {
+            setSubmitError(error instanceof Error ? error.message : "Failed to submit answers");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="w-full rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-950/20 overflow-hidden">
+            <div className="px-3 py-2 border-b border-amber-200/70 dark:border-amber-800/40 flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${isCompleted ? "bg-green-500" : isFailed ? "bg-red-500" : "bg-amber-500 animate-pulse"}`} />
+                <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">AskUserQuestion</span>
+                <span className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                    {isCompleted ? "answered" : isFailed ? "failed" : "waiting for input"}
+                </span>
+            </div>
+            <div className="px-3 py-3 space-y-4">
+                {questions.map((item) => {
+                    const selectedValues = answers[item.question]
+                        ? answers[item.question].split(",").map((value) => value.trim()).filter(Boolean)
+                        : [];
+                    return (
+                        <div key={item.question} className="space-y-2">
+                            <div>
+                                <div className="inline-flex items-center rounded-full bg-white/80 dark:bg-black/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                    {item.header}
+                                </div>
+                                <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{item.question}</div>
+                            </div>
+                            <div className="grid gap-2">
+                                {(item.options ?? []).map((option) => {
+                                    const selected = selectedValues.includes(option.label);
+                                    return (
+                                        <button
+                                            key={`${item.question}-${option.label}`}
+                                            type="button"
+                                            disabled={!isAwaitingInput || submitting}
+                                            onClick={() => item.multiSelect
+                                                ? toggleMultiAnswer(item.question, option.label)
+                                                : updateSingleAnswer(item.question, option.label)}
+                                            className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${selected
+                                                ? "border-amber-500 bg-amber-100/80 dark:bg-amber-900/30"
+                                                : "border-amber-200/80 dark:border-amber-800/40 bg-white/70 dark:bg-white/5 hover:border-amber-300 dark:hover:border-amber-700"
+                                            } ${!isAwaitingInput ? "cursor-default" : ""}`}
+                                        >
+                                            <div className="flex items-start gap-2">
+                                                <span className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border text-[10px] ${selected ? "border-amber-600 bg-amber-600 text-white" : "border-gray-300 dark:border-gray-600 text-transparent"}`}>
+                                                    {item.multiSelect ? "✓" : "•"}
+                                                </span>
+                                                <div>
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{option.label}</div>
+                                                    {option.description && (
+                                                        <div className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">{option.description}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {selectedValues.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {selectedValues.map((value) => (
+                                        <span key={`${item.question}-${value}`} className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">
+                                            {value}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+
+                {submitError && (
+                    <div className="rounded-lg border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-950/20 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+                        {submitError}
+                    </div>
+                )}
+
+                {isAwaitingInput && (
+                    <div className="flex justify-end">
+                        <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={submitting || questions.length === 0}
+                            className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {submitting ? "Submitting..." : "Submit answers"}
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

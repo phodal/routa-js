@@ -1077,6 +1077,34 @@ export async function POST(request: NextRequest) {
     }
 
     // ── session/cancel ─────────────────────────────────────────────────
+    if (method === "session/respond_user_input") {
+      const p = (params ?? {}) as Record<string, unknown>;
+      const sessionId = p.sessionId as string | undefined;
+      const toolCallId = p.toolCallId as string | undefined;
+      const response = (typeof p.response === "object" && p.response !== null)
+        ? p.response as Record<string, unknown>
+        : undefined;
+
+      if (!sessionId || !toolCallId || !response) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32602,
+          message: "Missing sessionId, toolCallId, or response",
+        });
+      }
+
+      const manager = getAcpProcessManager();
+      const handled = manager.respondToClaudeCodeSdkUserInput(sessionId, toolCallId, response);
+      if (!handled) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32000,
+          message: "No pending AskUserQuestion request found for this session",
+        });
+      }
+
+      return jsonrpcResponse(id ?? null, { ok: true });
+    }
+
+    // ── session/cancel ─────────────────────────────────────────────────
     if (method === "session/cancel") {
       const p = (params ?? {}) as Record<string, unknown>;
       const sessionId = p.sessionId as string;

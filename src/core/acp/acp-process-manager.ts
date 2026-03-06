@@ -394,6 +394,18 @@ export class AcpProcessManager {
         return this.claudeCodeSdkAdapters.get(sessionId)?.adapter;
     }
 
+    respondToClaudeCodeSdkUserInput(
+        sessionId: string,
+        toolUseId: string,
+        updatedInput: Record<string, unknown>,
+    ): boolean {
+        const adapter = this.claudeCodeSdkAdapters.get(sessionId)?.adapter;
+        if (!adapter) {
+            return false;
+        }
+        return adapter.respondToUserInput(toolUseId, updatedInput);
+    }
+
     /**
      * Get the Workspace Agent adapter for a session.
      */

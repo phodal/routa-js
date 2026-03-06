@@ -28,6 +28,14 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { join } from "path";
 
+interface PendingUserInputRequest {
+  sessionId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  resolve: (value: { behavior: "allow"; updatedInput: Record<string, unknown> }) => void;
+  reject: (reason: Error) => void;
+}
+
 /**
  * Resolve the path to the Claude Code cli.js binary.
  *
@@ -115,6 +123,10 @@ export class ClaudeCodeSdkAdapter {
   private _baseUrlOverride: string | undefined;
   /** Per-instance API key override — takes precedence over ANTHROPIC_AUTH_TOKEN. */
   private _apiKeyOverride: string | undefined;
+  /** Pending AskUserQuestion requests waiting for a UI response. */
+  private pendingUserInputRequests = new Map<string, PendingUserInputRequest>();
+  /** Completed AskUserQuestion responses keyed by tool call ID. */
+  private completedUserInputResponses = new Map<string, Record<string, unknown>>();
 
   constructor(
     cwd: string,
@@ -239,7 +251,13 @@ export class ClaudeCodeSdkAdapter {
         // Load Skills from user (~/.claude/skills/) and project (.claude/skills/) dirs
         settingSources: ["user", "project"],
         // Enable the Skill tool so Claude can invoke SKILL.md-defined skills
-        allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep", "AskUserQuestion"],
+        canUseTool: async (toolName, input, options) => {
+          if (toolName === "AskUserQuestion") {
+            return this.handleAskUserQuestion(sessionId, input, options.toolUseID, options.signal);
+          }
+          return { behavior: "allow" as const, updatedInput: input };
+        },
         // When a skill is explicitly selected via /skill in the UI, inject its
         // content into the system prompt using the preset+append mechanism.
         // This is the official SDK approach for skill integration — see:
@@ -425,7 +443,13 @@ export class ClaudeCodeSdkAdapter {
         // Load Skills from user (~/.claude/skills/) and project (.claude/skills/) dirs
         settingSources: ["user", "project"],
         // Enable the Skill tool so Claude can invoke SKILL.md-defined skills
-        allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep", "AskUserQuestion"],
+        canUseTool: async (toolName, input, options) => {
+          if (toolName === "AskUserQuestion") {
+            return this.handleAskUserQuestion(sessionId, input, options.toolUseID, options.signal);
+          }
+          return { behavior: "allow" as const, updatedInput: input };
+        },
         // Set CLAUDE_CONFIG_DIR to /tmp so the child process can write its
         // config/cache files in serverless environments (like Vercel Lambda)
         // where HOME or the default config directory is read-only.
@@ -653,8 +677,19 @@ export class ClaudeCodeSdkAdapter {
         // Also emit tool_call_update for completed tools
         for (const block of msg.message.content) {
           if (block.type === "tool_use") {
+            if (block.name === "AskUserQuestion" && this.pendingUserInputRequests.has(block.id)) {
+              continue;
+            }
             const toolBlock = block as unknown as Record<string, unknown>;
-            const rawInputObj = toolBlock.input ? { rawInput: toolBlock.input } : {};
+            const completedAskUserInput =
+              block.name === "AskUserQuestion"
+                ? this.completedUserInputResponses.get(block.id)
+                : undefined;
+            const rawInput = completedAskUserInput ?? toolBlock.input;
+            if (completedAskUserInput) {
+              this.completedUserInputResponses.delete(block.id);
+            }
+            const rawInputObj = rawInput ? { rawInput } : {};
             return createNotification("session/update", {
               sessionId,
               update: {
@@ -787,6 +822,108 @@ export class ClaudeCodeSdkAdapter {
     }
   }
 
+  respondToUserInput(toolUseId: string, updatedInput: Record<string, unknown>): boolean {
+    const pending = this.pendingUserInputRequests.get(toolUseId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingUserInputRequests.delete(toolUseId);
+    this.completedUserInputResponses.set(toolUseId, updatedInput);
+    this.onNotification(
+      createNotification("session/update", {
+        sessionId: pending.sessionId,
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: toolUseId,
+          title: pending.toolName,
+          kind: "ask-user-question",
+          status: "completed",
+          rawInput: updatedInput,
+        },
+      })
+    );
+    pending.resolve({ behavior: "allow", updatedInput });
+    return true;
+  }
+
+  private async handleAskUserQuestion(
+    sessionId: string,
+    input: Record<string, unknown>,
+    toolUseId: string | undefined,
+    signal: AbortSignal,
+  ): Promise<{ behavior: "allow"; updatedInput: Record<string, unknown> }> {
+    const effectiveToolUseId = toolUseId ?? `ask-user-${Date.now()}`;
+    this.onNotification(
+      createNotification("session/update", {
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          title: "AskUserQuestion",
+          kind: "ask-user-question",
+          status: "awaiting_input",
+          toolCallId: effectiveToolUseId,
+          rawInput: input,
+        },
+      })
+    );
+
+    return await new Promise<{ behavior: "allow"; updatedInput: Record<string, unknown> }>((resolve, reject) => {
+      const abortHandler = () => {
+        this.pendingUserInputRequests.delete(effectiveToolUseId);
+        this.onNotification(
+          createNotification("session/update", {
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId: effectiveToolUseId,
+              title: "AskUserQuestion",
+              kind: "ask-user-question",
+              status: "failed",
+              rawInput: input,
+            },
+          })
+        );
+        reject(new Error("AskUserQuestion request was aborted"));
+      };
+
+      signal.addEventListener("abort", abortHandler, { once: true });
+      this.pendingUserInputRequests.set(effectiveToolUseId, {
+        sessionId,
+        toolName: "AskUserQuestion",
+        input,
+        resolve: (value) => {
+          signal.removeEventListener("abort", abortHandler);
+          resolve(value);
+        },
+        reject: (reason) => {
+          signal.removeEventListener("abort", abortHandler);
+          reject(reason);
+        },
+      });
+    });
+  }
+
+  private rejectPendingUserInputs(message: string): void {
+    for (const [toolUseId, pending] of this.pendingUserInputRequests.entries()) {
+      this.onNotification(
+        createNotification("session/update", {
+          sessionId: pending.sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: toolUseId,
+            title: pending.toolName,
+            kind: "ask-user-question",
+            status: "failed",
+            rawInput: pending.input,
+          },
+        })
+      );
+      pending.reject(new Error(message));
+    }
+    this.pendingUserInputRequests.clear();
+  }
+
   /**
    * Cancel the in-progress prompt.
    */
@@ -795,6 +932,7 @@ export class ClaudeCodeSdkAdapter {
       this.abortController.abort();
       this.abortController = null;
     }
+    this.rejectPendingUserInputs("Prompt cancelled");
   }
 
   /**

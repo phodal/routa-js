@@ -396,6 +396,18 @@ export class BrowserAcpClient {
     await this.rpc("session/cancel", { sessionId });
   }
 
+  async respondToUserInput(
+    sessionId: string,
+    toolCallId: string,
+    response: Record<string, unknown>,
+  ): Promise<void> {
+    await this.rpc("session/respond_user_input", {
+      sessionId,
+      toolCallId,
+      response,
+    });
+  }
+
   /**
    * Register a handler for session updates (SSE).
    */

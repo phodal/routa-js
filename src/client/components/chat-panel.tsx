@@ -1019,6 +1019,13 @@ export function ChatPanel({
 
   const handleRepoChange = onRepoChange;
 
+  const handleSubmitAskUserQuestion = useCallback(async (
+    toolCallId: string,
+    response: Record<string, unknown>,
+  ) => {
+    await acp.respondToUserInput(toolCallId, response);
+  }, [acp]);
+
   const handleSend = useCallback(async (text: string, context: InputContext) => {
     if (!text.trim()) return;
 
@@ -1686,7 +1693,11 @@ export function ChatPanel({
                   return true;
                 })
                 .map((msg, index) => (
-                  <MessageBubble key={`${msg.id}-${index}`} message={msg} />
+                  <MessageBubble
+                    key={`${msg.id}-${index}`}
+                    message={msg}
+                    onSubmitAskUserQuestion={handleSubmitAskUserQuestion}
+                  />
                 ))}
               <div ref={messagesEndRef} />
             </div>
