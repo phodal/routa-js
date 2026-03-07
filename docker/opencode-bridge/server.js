@@ -12,14 +12,21 @@
  *   POST /session/prompt { sessionId, prompt }  → text/event-stream (SSE)
  *   POST /session/cancel { sessionId }          → { ok: true }
  *   POST /session/delete { sessionId }          → { ok: true }
+ *
+ * Agent→Client terminal requests (handled over JSON-RPC):
+ *   terminal/create       → spawn persistent process, returns { terminalId }
+ *   terminal/output       → returns accumulated { output } for a terminal
+ *   terminal/wait_for_exit → awaits process exit, returns { exitCode }
+ *   terminal/kill          → SIGTERM then SIGKILL after 3s
+ *   terminal/release       → kill + remove from managed set
  */
 'use strict'
 
 const http = require('http')
-const { spawn, execSync } = require('child_process')
+const { spawn } = require('child_process')
 const fs = require('fs')
 const path = require('path')
-const { execFile } = require('child_process')
+// execFile removed — terminal/create now uses spawn for persistent terminals
 
 const PORT = parseInt(process.env.PORT || '4321', 10)
 const HOST = process.env.HOST || '0.0.0.0'
@@ -133,6 +140,9 @@ class OpenCodeSession {
     this.sseClients = new Set()
     this.opencodeSessionId = null
     this.alive = false
+    // Terminal lifecycle management
+    this.terminals = new Map()   // terminalId → ManagedTerminal
+    this.terminalCounter = 0
   }
 
   /**
@@ -225,6 +235,19 @@ class OpenCodeSession {
 
   kill() {
     this.alive = false
+    // Kill all managed terminal processes
+    for (const [termId, terminal] of this.terminals) {
+      if (!terminal.exited) {
+        console.log(`[terminal] session cleanup — killing ${termId}`)
+        try { terminal.process.kill('SIGTERM') } catch {}
+        setTimeout(() => {
+          if (!terminal.exited) {
+            try { terminal.process.kill('SIGKILL') } catch {}
+          }
+        }, 3000)
+      }
+    }
+    this.terminals.clear()
     if (this.proc) {
       try { this.proc.kill('SIGTERM') } catch {}
       setTimeout(() => {
@@ -362,20 +385,165 @@ class OpenCodeSession {
       }
 
       case 'terminal/create': {
-        const p = params || {}
-        const shell = p.shell || '/bin/sh'
-        const cmd = typeof p.command === 'string' ? p.command
-          : Array.isArray(p.command) ? p.command.join(' ') : null
+        const MAX_TERMINALS = 10
+        const MAX_OUTPUT_BYTES = 1024 * 1024 // 1 MB
 
-        if (!cmd) {
-          this._write({ jsonrpc: '2.0', id, result: { terminalId: `t-${id}`, output: '' } })
+        if (this.terminals.size >= MAX_TERMINALS) {
+          this._write({ jsonrpc: '2.0', id, error: { code: -32000, message: `Terminal limit reached (max ${MAX_TERMINALS})` } })
           break
         }
 
-        execFile(shell, ['-c', cmd], { cwd: this.cwd, timeout: 30000 }, (err, stdout, stderr) => {
-          const output = stdout + (stderr ? `\n${stderr}` : '')
-          this._write({ jsonrpc: '2.0', id, result: { terminalId: `t-${id}`, output } })
+        const p = params || {}
+        const command = typeof p.command === 'string' ? p.command
+          : Array.isArray(p.command) ? p.command.join(' ') : ''
+        const terminalId = `term-${++this.terminalCounter}-${Date.now()}`
+
+        if (!command) {
+          this._write({ jsonrpc: '2.0', id, result: { terminalId } })
+          break
+        }
+
+        // Broadcast terminal_created event
+        this._broadcastSSE({
+          jsonrpc: '2.0',
+          method: 'session/update',
+          params: {
+            sessionId: this.opencodeSessionId,
+            update: { sessionUpdate: 'terminal_created', terminalId, command },
+          },
         })
+
+        let exitResolve
+        const exitPromise = new Promise((resolve) => { exitResolve = resolve })
+
+        const termProc = spawn(command, [], {
+          shell: true,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          cwd: (p.cwd) || this.cwd,
+          env: { ...process.env, ...(p.env || {}), FORCE_COLOR: '1', TERM: 'xterm-256color' },
+        })
+
+        const managed = {
+          terminalId,
+          process: termProc,
+          output: '',
+          exitCode: null,
+          exited: false,
+          exitPromise,
+          exitResolve,
+        }
+
+        const appendOutput = (data) => {
+          if (managed.output.length < MAX_OUTPUT_BYTES) {
+            managed.output += data.substring(0, MAX_OUTPUT_BYTES - managed.output.length)
+          }
+          this._broadcastSSE({
+            jsonrpc: '2.0',
+            method: 'session/update',
+            params: {
+              sessionId: this.opencodeSessionId,
+              update: { sessionUpdate: 'terminal_output', terminalId, data },
+            },
+          })
+        }
+
+        termProc.stdout.on('data', (chunk) => appendOutput(chunk.toString('utf-8')))
+        termProc.stderr.on('data', (chunk) => appendOutput(chunk.toString('utf-8')))
+
+        termProc.on('exit', (code, signal) => {
+          console.log(`[terminal] ${terminalId} exited code=${code} signal=${signal}`)
+          managed.exitCode = code ?? (signal ? 128 : 0)
+          managed.exited = true
+          exitResolve(managed.exitCode)
+          this._broadcastSSE({
+            jsonrpc: '2.0',
+            method: 'session/update',
+            params: {
+              sessionId: this.opencodeSessionId,
+              update: { sessionUpdate: 'terminal_exited', terminalId, exitCode: managed.exitCode },
+            },
+          })
+        })
+
+        termProc.on('error', (err) => {
+          console.error(`[terminal] ${terminalId} error:`, err)
+          managed.exited = true
+          managed.exitCode = 1
+          exitResolve(1)
+        })
+
+        this.terminals.set(terminalId, managed)
+        this._write({ jsonrpc: '2.0', id, result: { terminalId } })
+        break
+      }
+
+      case 'terminal/output': {
+        const termId = (params || {}).terminalId
+        const terminal = termId ? this.terminals.get(termId) : null
+        this._write({ jsonrpc: '2.0', id, result: { output: terminal ? terminal.output : '' } })
+        break
+      }
+
+      case 'terminal/wait_for_exit': {
+        const termId = (params || {}).terminalId
+        const terminal = termId ? this.terminals.get(termId) : null
+
+        if (!terminal) {
+          this._write({ jsonrpc: '2.0', id, result: { exitCode: -1 } })
+          break
+        }
+
+        if (terminal.exited) {
+          this._write({ jsonrpc: '2.0', id, result: { exitCode: terminal.exitCode ?? 0 } })
+          break
+        }
+
+        terminal.exitPromise.then((exitCode) => {
+          this._write({ jsonrpc: '2.0', id, result: { exitCode } })
+        })
+        break
+      }
+
+      case 'terminal/kill': {
+        const termId = (params || {}).terminalId
+        const terminal = termId ? this.terminals.get(termId) : null
+
+        if (terminal && !terminal.exited) {
+          console.log(`[terminal] killing ${termId}`)
+          try {
+            terminal.process.kill('SIGTERM')
+            setTimeout(() => {
+              if (!terminal.exited) {
+                try { terminal.process.kill('SIGKILL') } catch {}
+              }
+            }, 3000)
+          } catch (err) {
+            console.error(`[terminal] error killing ${termId}:`, err)
+          }
+        }
+        this._write({ jsonrpc: '2.0', id, result: {} })
+        break
+      }
+
+      case 'terminal/release': {
+        const termId = (params || {}).terminalId
+        const terminal = termId ? this.terminals.get(termId) : null
+
+        if (terminal) {
+          console.log(`[terminal] releasing ${termId}`)
+          if (!terminal.exited) {
+            try {
+              terminal.process.kill('SIGTERM')
+              setTimeout(() => {
+                if (!terminal.exited) {
+                  try { terminal.process.kill('SIGKILL') } catch {}
+                }
+              }, 3000)
+            } catch {}
+          }
+          this.terminals.delete(termId)
+        }
+        this._write({ jsonrpc: '2.0', id, result: {} })
         break
       }
 
