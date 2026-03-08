@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * MCP Tools Explorer - /mcp-tools
+ *
+ * Browse and test Model Context Protocol (MCP) tools.
+ * - List all available MCP tools by category
+ * - View tool schemas and parameters
+ * - Execute tools with custom arguments
+ * - Toggle essential/full mode for tool visibility
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface McpToolDefinition {

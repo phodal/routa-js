@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * A2A Protocol Test Page - /a2a
+ *
+ * Interactive testing interface for the Agent-to-Agent (A2A) protocol.
+ * - View agent card and capabilities
+ * - Send messages to remote agents
+ * - Monitor task status and responses
+ * - Inspect A2A protocol events
+ */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────

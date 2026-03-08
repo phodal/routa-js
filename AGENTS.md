@@ -5,6 +5,7 @@
 - **Next.js Backend** (TypeScript) — Web deployment on Vercel with Postgres/SQLite
 - **Rust Backend** (Axum) — Desktop app with embedded server and SQLite (`crates/routa-server`)
 - Both backends implement **identical REST APIs** for seamless frontend compatibility with `api-contract.yaml`
+- Product feature tree can be found in `docs/product-specs/FEATURE_TREE.md`
 
 ## Coding Standards
 
@@ -56,7 +57,7 @@ After generating or modifying code, agents must run the following checks automat
 
 ### Co-Author Format
 
-- If you want to add close issue, should view issue against the main branch with `gh issue view <issue-id>` 
+- If you want to add `closed issue` in commit message, should view issue against the main branch with `gh issue view <issue-id>` 
 - Every commit must include a co-author line:
 
 ```
@@ -105,3 +106,8 @@ gh issue create --label "Agent" --body "Agent: YourName\n\n[issue details]"
 ### 5. Garbage Collection
 - Periodically run `issue-garbage-collector` skill to clean up duplicates.
 - See: `.claude/skills/issue-garbage-collector/SKILL.md`
+
+### 6. Feature Tree
+- Run `python3 scripts/feature-tree-generator.py` to view current features (auto-scans routes + API)
+- Run with `--save` to update `docs/product-specs/FEATURE_TREE.md`
+- Use `claude -p --allowedTools "Edit,Read"` to optimize the generated document
