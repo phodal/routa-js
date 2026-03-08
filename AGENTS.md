@@ -65,7 +65,8 @@ After generating or modifying **source code** (not docs, configs, or workflows),
 ### Co-Author Format
 
 - If you want to add `closed issue` in commit message, should view issue against the main branch with `gh issue view <issue-id>` 
-- Every commit must include a co-author line:
+- Append a co-author line in the following format: (YourName, like Copilot,Augment,Claude etc.) (Your model name) <YourEmail, like, <claude@anthropic.com>, <auggie@augmentcode.com>)
+  for example:
 
 ```
 Co-authored-by: Kiro AI (Claude Opus 4.6) <kiro@kiro.dev>
