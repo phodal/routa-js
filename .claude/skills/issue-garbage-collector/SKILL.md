@@ -1,223 +1,232 @@
 ---
 name: issue-garbage-collector
-description: AI-powered cleanup of duplicate and outdated issue files in docs/issues/. Identifies duplicates by filename patterns and content similarity, merges related issues, and archives resolved ones.
+description: Two-phase cleanup of duplicate and outdated issue files in docs/issues/. Phase 1 (fast/cheap) uses pattern matching to identify suspects. Phase 2 (deep/expensive) uses claude -p for semantic analysis on suspects only.
 when_to_use: When the issues directory becomes cluttered, after resolving multiple issues, or as periodic maintenance (weekly during active development, monthly otherwise).
-version: 1.0.0
+version: 1.1.0
 ---
 
-## Quick Start
+## Two-Phase Strategy (Cost Optimization)
 
-Run the full garbage collection check:
+**Problem**: Running deep AI analysis on every issue is expensive.
 
-```bash
-claude -p "Run issue garbage collection on docs/issues/ following the SKILL at .claude/skills/issue-garbage-collector/SKILL.md. Scan all issues, detect duplicates, and generate a cleanup report. Ask before deleting anything."
+**Solution**: Two-phase approach:
+1. **Phase 1 (Fast/Cheap)** — Pattern matching to identify "suspects"
+2. **Phase 2 (Deep/Expensive)** — `claude -p` only on suspects
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  All Issues (N files)                                   │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │ Phase 1: Pattern Scan (You, the smart AI)         │  │
+│  │ - Filename similarity                             │  │
+│  │ - Same area tag                                   │  │
+│  │ - Age-based staleness                             │  │
+│  │ → Output: Suspect list (M files, M << N)          │  │
+│  └───────────────────────────────────────────────────┘  │
+│                         ↓                               │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │ Phase 2: Deep Analysis (claude -p, only M files)  │  │
+│  │ - Content similarity                              │  │
+│  │ - Semantic duplicate detection                    │  │
+│  │ - Merge recommendations                           │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## AI-Powered Health Checks
+---
 
-### 1. Full Garbage Collection
+## Phase 1: Pattern Scan (You Do This)
+
+Scan `docs/issues/` and identify suspects using these rules:
+
+### 1.1 Filename Similarity Detection
+
+Look for issues with similar keywords in filename:
+
+```
+2026-03-02-drizzle-migrate-neon-connection-failure.md
+2026-03-05-drizzle-neon-connection-timeout.md  ← SUSPECT: same keywords
+```
+
+**Matching rules**:
+| Pattern | Example | Verdict |
+|---------|---------|---------|
+| Same keywords, different dates | `drizzle-error` vs `drizzle-error` | 🔴 SUSPECT |
+| Overlapping keywords (>50%) | `api-timeout` vs `api-connection-timeout` | 🟡 SUSPECT |
+| Same area prefix | `db-*` vs `db-*` | 🟡 Check area tag |
+| Typo variants | `playwright` vs `playwrite` | 🔴 SUSPECT |
+
+### 1.2 YAML Front-Matter Check
+
+Parse front-matter and flag:
+
+```yaml
+# If two issues have:
+area: database        # Same area
+tags: [drizzle, neon] # Overlapping tags (>1 common)
+# → Mark as SUSPECT pair
+```
+
+### 1.3 Age-Based Staleness
+
+Flag based on filename date + status:
+
+| Status | Age Threshold | Action |
+|--------|---------------|--------|
+| `open` | > 30 days | 🟡 STALE |
+| `investigating` | > 14 days | 🟡 CHECK if still active |
+| `resolved` | any | ✅ Keep (knowledge base) |
+| `wontfix` | any | ✅ Keep (context) |
+
+### 1.4 Output: Suspect List
+
+After Phase 1, output a suspect list:
+
+```markdown
+## Phase 1 Scan Results
+
+### Duplicate Suspects (need Phase 2)
+| File A | File B | Reason |
+|--------|--------|--------|
+| 2026-03-02-drizzle-migrate.md | 2026-03-05-drizzle-timeout.md | Same keywords: drizzle, connection |
+| 2026-03-01-api-error.md | 2026-03-03-api-timeout.md | Same area: api |
+
+### Stale Issues (need review)
+| File | Status | Age | Reason |
+|------|--------|-----|--------|
+| 2026-02-01-old-bug.md | open | 35 days | Exceeds 30-day threshold |
+
+### Clean (no action needed)
+- 15 issues with status: resolved (knowledge base)
+- 3 issues with status: wontfix (context)
+```
+
+---
+
+## Phase 2: Deep Analysis (claude -p)
+
+Only run on suspects from Phase 1. This saves cost.
+
+### 2.1 Duplicate Confirmation
 
 ```bash
 claude -p "
-Scan docs/issues/ directory and perform garbage collection:
+Compare these two suspect duplicate issues:
+- docs/issues/2026-03-02-drizzle-migrate.md
+- docs/issues/2026-03-05-drizzle-timeout.md
 
-1. List all .md files (excluding _template.md)
-2. Parse YAML front-matter (title, status, area, tags)
-3. Detect duplicates by:
-   - Filename similarity (same keywords, different dates)
-   - Content similarity (same error messages, same relevant files)
-   - Same area + overlapping description
-4. For each duplicate pair, recommend: MERGE, CROSS-REFERENCE, or KEEP BOTH
-5. Flag stale issues (status: open, older than 30 days)
-6. Generate a cleanup report in markdown format
+Check:
+1. Are the error messages the same or related?
+2. Do they reference the same files in 'Relevant Files'?
+3. Is the root cause the same?
 
-Safety rules:
-- Never suggest deleting _template.md
-- Never suggest deleting issues with status: investigating
-- Always ask for confirmation before any deletion
-
-Output format:
-## Duplicate Detection Report
-| File A | File B | Similarity | Recommendation |
-...
-
-## Stale Issues (needs review)
-...
-
-## Suggested Actions
-...
+Output:
+- DUPLICATE: Same issue, recommend merge
+- RELATED: Different aspects of same problem, add cross-reference
+- DISTINCT: False positive, keep both
 "
 ```
 
-### 2. Duplicate Detection Only
+### 2.2 Stale Issue Triage
 
 ```bash
 claude -p "
-Scan docs/issues/ and detect potential duplicates:
+Review this stale issue:
+- docs/issues/2026-02-01-old-bug.md
 
-Check for:
-- Files with similar keywords in filename (e.g., 'drizzle-connection' vs 'drizzle-timeout')
-- Files with same 'area' tag in front-matter
-- Files with identical error messages or stack traces
-- Files referencing the same 'Relevant Files'
+Check:
+1. Does the referenced code still exist?
+2. Has the issue been fixed in recent commits?
+3. Is it still relevant to current codebase?
 
-For each potential duplicate pair, explain WHY they might be duplicates.
-Do NOT suggest any deletions - just report findings.
+Output:
+- CLOSE: Issue resolved, update status
+- ESCALATE: Still relevant, create GitHub issue
+- ARCHIVE: No longer applicable, move to archive
 "
 ```
 
-### 3. Stale Issue Detection
+### 2.3 Interactive Merge
 
 ```bash
 claude -p "
-Scan docs/issues/ for stale issues:
-
-Flag issues that are:
-- status: open AND older than 30 days (by filename date)
-- status: investigating AND older than 14 days
-- Referenced files no longer exist in codebase
-
-For each stale issue, suggest:
-- CLOSE (if likely resolved)
-- ESCALATE (if still relevant)
-- ARCHIVE (if no longer applicable)
-"
-```
-
-### 4. Cross-Reference Validation
-
-```bash
-claude -p "
-Validate cross-references in docs/issues/:
-
-Check that:
-- All 'related_issues' in front-matter point to existing files
-- All 'github_issue' links are valid (if accessible)
-- No orphaned issues (not referenced anywhere)
-
-Report broken references and suggest fixes.
-"
-```
-
-### 5. Merge Duplicates (Interactive)
-
-```bash
-claude -p "
-I want to merge these duplicate issues:
+Merge these confirmed duplicate issues:
 - docs/issues/2026-03-02-drizzle-connection-failure.md (older)
 - docs/issues/2026-03-05-drizzle-timeout.md (newer)
 
-Please:
+Steps:
 1. Read both files
-2. Identify unique content in the older file
-3. Propose merged content for the newer file
-4. Show me the diff before making changes
-5. After I approve, update the newer file and delete the older one
+2. Identify unique content in older file
+3. Propose merged content for newer file
+4. Show diff before changes
+5. Wait for my approval before executing
 "
 ```
 
-## Detection Rules
-
-### Filename Similarity
-
-| Pattern | Example | Action |
-|---------|---------|--------|
-| Same keywords, different dates | `2026-03-02-drizzle-error.md` vs `2026-03-05-drizzle-error.md` | Likely duplicate |
-| Same area prefix | `api-timeout.md` vs `api-connection.md` | Check content |
-| Typo variants | `playwright-test.md` vs `playwrite-test.md` | Likely duplicate |
-
-### Content Similarity
-
-| Signal | Weight | Example |
-|--------|--------|---------|
-| Same error message | High | Both contain `ECONNREFUSED` |
-| Same stack trace | High | Identical traceback |
-| Same `Relevant Files` | Medium | Both reference `src/db/connection.ts` |
-| Same `area` tag | Medium | Both tagged `database` |
-| Similar `What Happened` | Low | Manual review needed |
-
-### Status-Based Rules
-
-| Status | Age | Action |
-|--------|-----|--------|
-| `open` | > 30 days | Flag for review |
-| `investigating` | > 14 days | Check if still active |
-| `resolved` | any | Keep as knowledge base |
-| `wontfix` | any | Keep for context |
-| `duplicate` | any | Verify target exists, then archive |
-
-## Merge Strategy
-
-When merging duplicates:
-
-1. **Keep the newer file** (by date in filename)
-2. **Preserve unique observations** from older file
-3. **Update `related_issues`** to cross-reference
-4. **Combine tags** from both files
-5. **Delete older file** only after confirmation
-
-```markdown
-# Merged file should include:
----
-title: Combined title
-related_issues:
-  - 2026-03-02-drizzle-connection-failure.md  # merged from
 ---
 
-## What Happened
-[Content from newer file]
+## Decision Matrix
 
-## Additional Context (from 2026-03-02)
-[Unique content from older file]
-```
+| Phase 1 Finding | Phase 2 Action | Final Action |
+|-----------------|----------------|--------------|
+| Same keywords in filename | Run duplicate check | Merge if confirmed |
+| Same area + overlapping tags | Run duplicate check | Cross-reference if related |
+| Status: open > 30 days | Run stale triage | Close/Escalate/Archive |
+| Status: investigating > 14 days | Ask human | Continue or close |
+| Status: resolved | Skip Phase 2 | Keep as knowledge |
+
+---
 
 ## Safety Rules
 
 1. **Never delete `_template.md`**
-2. **Never delete issues with `status: investigating`** — active work in progress
+2. **Never delete issues with `status: investigating`** — active work
 3. **Always ask for confirmation** before any deletion
 4. **Show diff before merge** — let human verify
 5. **Commit incrementally** — one logical change per commit
 6. **Preserve knowledge** — resolved issues are valuable
 
+---
+
+## Execution Checklist
+
+### Phase 1 (You)
+- [ ] List all files in `docs/issues/` (excluding `_template.md`)
+- [ ] Extract filename keywords and dates
+- [ ] Parse YAML front-matter (status, area, tags)
+- [ ] Apply filename similarity rules
+- [ ] Apply age-based staleness rules
+- [ ] Output suspect list
+
+### Phase 2 (claude -p, only on suspects)
+- [ ] For each duplicate suspect pair: run confirmation check
+- [ ] For each stale issue: run triage check
+- [ ] Collect recommendations
+
+### Cleanup (You, with human approval)
+- [ ] Merge confirmed duplicates
+- [ ] Update stale issue statuses
+- [ ] Generate final report
+- [ ] Commit changes
+
+---
+
 ## Periodic Maintenance Schedule
 
-| Frequency | Check | Command |
-|-----------|-------|---------|
-| After adding issues | Duplicate detection | Check #2 |
-| Weekly (active dev) | Full GC | Check #1 |
-| Monthly (stable) | Full GC + stale | Check #1 + #3 |
-| After major refactor | Cross-reference validation | Check #4 |
+| Frequency | Phase 1 | Phase 2 |
+|-----------|---------|---------|
+| After adding issues | Filename scan only | Skip (too few suspects) |
+| Weekly (active dev) | Full scan | On suspects only |
+| Monthly (stable) | Full scan + stale check | On all suspects |
 
-## Output Symbols
+---
 
-- ✅ **Clean** — No issues found
-- ⚠️ **Warning** — Potential duplicate, needs review
-- ❌ **Error** — Broken reference, must fix
-- 🗑️ **Archive** — Safe to remove/archive
-- 🔗 **Link** — Should add cross-reference
+## Cost Comparison
 
-## Integration with Workflow
+| Approach | Issues Scanned | Deep Analysis | Relative Cost |
+|----------|----------------|---------------|---------------|
+| Naive (all deep) | 50 | 50 | 💰💰💰💰💰 |
+| Two-phase (this) | 50 | ~5 suspects | 💰 |
 
-### After Resolving Issues
-
-```bash
-# 1. Update issue status to resolved
-# 2. Run duplicate check
-claude -p "Check if docs/issues/2026-03-08-my-issue.md duplicates any existing resolved issues. If so, suggest merging."
-```
-
-### Before Creating New Issue
-
-```bash
-# Check if similar issue exists
-claude -p "I'm about to create an issue about 'Playwright test timeout on CI'. Check docs/issues/ for similar existing issues."
-```
-
-### Weekly Maintenance
-
-```bash
-# Run full garbage collection
-claude -p "Run weekly issue garbage collection on docs/issues/. Generate report, ask before any changes."
-```
+**Savings**: ~90% cost reduction by filtering in Phase 1.
 
