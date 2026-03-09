@@ -2,14 +2,11 @@
 
 ## Project Overview
 
-- **Next.js Backend** (TypeScript) — Web deployment on Vercel with Postgres/SQLite
-- **Rust Backend** (Axum) — Desktop app with embedded server and SQLite (`crates/routa-server`)
-- Both backends implement **identical REST APIs** for seamless frontend compatibility with `api-contract.yaml`
 - Product feature tree can be found in `docs/product-specs/FEATURE_TREE.md`
 
 ## Coding Standards
 
-- Limit file size to **1000 lines** as much as possible.
+- Limit file size to **1000 lines** as much as possible if the file is too large, split it into smaller files.
 - Unless explicitly asked, do not write additional documentation for your work.
 - **Linter**: ESLint 9 flat config (`eslint.config.mjs`) — TypeScript-ESLint + React Hooks + Next.js plugin. Run with `npm run lint`. Rust side uses `cargo clippy`. Fix all warnings before committing; do not disable rules inline without justification.
 
@@ -27,13 +24,7 @@
 
 ## After generating or modifying code
 
-After generating or modifying **source code** (not docs, configs, or workflows), agents must run the following checks automatically. All must pass before committing:
-
-1. **Type Check** — `npx tsc --noEmit` (or `cargo check` for Rust)
-2. **Lint** — `npm run lint` (or `cargo clippy`)
-3. **Unit Tests** — `npm run test` (or `cargo test`)
-4. **API Contract** — `npm run api:check`
-5. If UI changes are involved, run a **Playwright MCP** smoke test.
+After generating or modifying **source code** (not docs, configs, or workflows), agents must run the following checks automatically.
 
 > If any step fails, fix and re-validate. Never skip.
 >
@@ -46,16 +37,6 @@ After generating or modifying **source code** (not docs, configs, or workflows),
 - Each commit does **one thing**: one feature, one bug fix, or one refactor. Each commit should less than 10 files and less than 1000 lines of code.
 - No "kitchen sink" commits. If changes span multiple concerns, split into multiple commits.
 - Always include the related **GitHub issue ID** when applicable.
-- All tests + API contract check must pass before pushing (enforced by pre-push hook).
-
-### Git Worktree Isolation
-
-- When working on multiple features/fixes in parallel, use `git worktree` for physical isolation:
-  ```bash
-  git worktree add ../routa-feature-xxx feature/xxx
-  ```
-- Each worktree has its own working directory — no branch-switching pollution.
-- Clean up when done: `git worktree remove ../routa-feature-xxx`
 
 ### Co-Author Format
 
@@ -69,16 +50,6 @@ Co-authored-by: GitHub Copilot Agent (GPT 5.4) <198982749+copilot@users.noreply.
 Co-authored-by: QoderAI (Qwen 3.5 Max) <qoder_ai@qoder.com>
 Co-authored-by: gemini-cli (...) <218195315+gemini-cli@users.noreply.github.com>
 ```
-
-## AI Collaboration Protocol
-
-When multiple agents collaborate, follow these handoff disciplines:
-
-- **Context Handoff**: Pass context between agents via structured Markdown files in `docs/issues/` — no implicit assumptions.
-- **Responsibility Boundaries**: Each agent only modifies files within its assigned scope. Do not touch files another agent is actively working on.
-- **Conflict Prevention**: Use Git Worktree to physically isolate each agent's working directory, eliminating merge conflicts at the source.
-- **Status Sync**: When a task is completed or blocked, immediately update the corresponding issue file (`status: done` / `status: blocked`) so the next agent or human can pick up.
-- **Search First, Act Second**: Before starting work, search `docs/issues/` and existing code to avoid duplicate effort.
 
 ## Pull Request
 
@@ -105,12 +76,3 @@ gh issue create --label "Agent" --body "Agent: YourName\n\n[issue details]"
 
 ### 4. Close the Loop
 - Resolved? Update the local issue file with resolution notes and close the GitHub issue.
-
-### 5. Garbage Collection
-- Periodically run `issue-garbage-collector` skill to clean up duplicates.
-- See: `.claude/skills/issue-garbage-collector/SKILL.md`
-
-### 6. Feature Tree
-- Run `python3 scripts/feature-tree-generator.py` to view current features (auto-scans routes + API)
-- Run with `--save` to update `docs/product-specs/FEATURE_TREE.md`
-- Use `claude -p --allowedTools "Edit,Read"` to optimize the generated document
