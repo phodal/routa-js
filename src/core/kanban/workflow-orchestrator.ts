@@ -1,0 +1,212 @@
+/**
+ * KanbanWorkflowOrchestrator — Coordinates column automation and task progress.
+ *
+ * Listens for COLUMN_TRANSITION events and triggers the configured Column Agent
+ * for the target column. Tracks active automations and supports auto-advance
+ * when an agent completes successfully.
+ */
+
+import { EventBus, AgentEventType, AgentEvent } from "../events/event-bus";
+import type { KanbanBoardStore } from "../store/kanban-board-store";
+import type { TaskStore } from "../store/task-store";
+import type { KanbanColumnAutomation } from "../models/kanban";
+import { columnIdToTaskStatus } from "../models/kanban";
+import type { ColumnTransitionData } from "./column-transition";
+
+/** Represents an active column automation in progress */
+export interface ActiveAutomation {
+  cardId: string;
+  cardTitle: string;
+  boardId: string;
+  workspaceId: string;
+  columnId: string;
+  columnName: string;
+  automation: KanbanColumnAutomation;
+  sessionId?: string;
+  startedAt: Date;
+  status: "pending" | "running" | "completed" | "failed";
+}
+
+/** Callback to create an agent session for a column automation */
+export type CreateAutomationSession = (params: {
+  workspaceId: string;
+  cardId: string;
+  cardTitle: string;
+  columnId: string;
+  columnName: string;
+  automation: KanbanColumnAutomation;
+}) => Promise<string | null>;
+
+export class KanbanWorkflowOrchestrator {
+  private handlerKey = "kanban-workflow-orchestrator";
+  private activeAutomations = new Map<string, ActiveAutomation>();
+
+  constructor(
+    private eventBus: EventBus,
+    private kanbanBoardStore: KanbanBoardStore,
+    private taskStore: TaskStore,
+    private createSession?: CreateAutomationSession,
+  ) {}
+
+  /** Start listening for column transition events */
+  start(): void {
+    this.eventBus.on(this.handlerKey, (event: AgentEvent) => {
+      if (event.type === AgentEventType.COLUMN_TRANSITION) {
+        void this.handleColumnTransition(event);
+      }
+      if (
+        event.type === AgentEventType.AGENT_COMPLETED ||
+        event.type === AgentEventType.REPORT_SUBMITTED
+      ) {
+        void this.handleAgentCompletion(event);
+      }
+    });
+  }
+
+  /** Stop listening */
+  stop(): void {
+    this.eventBus.off(this.handlerKey);
+    this.activeAutomations.clear();
+  }
+
+  /** Set the session creation callback */
+  setCreateSession(fn: CreateAutomationSession): void {
+    this.createSession = fn;
+  }
+
+  /** Get all active automations */
+  getActiveAutomations(): ActiveAutomation[] {
+    return Array.from(this.activeAutomations.values());
+  }
+
+  /** Get active automation for a specific card */
+  getAutomationForCard(cardId: string): ActiveAutomation | undefined {
+    return this.activeAutomations.get(cardId);
+  }
+
+  private async handleColumnTransition(event: AgentEvent): Promise<void> {
+    const data = event.data as unknown as ColumnTransitionData;
+    const board = await this.kanbanBoardStore.get(data.boardId);
+    if (!board) return;
+
+    const targetColumn = board.columns.find((c) => c.id === data.toColumnId);
+    if (!targetColumn?.automation?.enabled) return;
+
+    const automation = targetColumn.automation;
+    const transitionType = automation.transitionType ?? "entry";
+
+    // Only trigger on entry or both
+    if (transitionType !== "entry" && transitionType !== "both") return;
+
+    const automationEntry: ActiveAutomation = {
+      cardId: data.cardId,
+      cardTitle: data.cardTitle,
+      boardId: data.boardId,
+      workspaceId: data.workspaceId,
+      columnId: targetColumn.id,
+      columnName: targetColumn.name,
+      automation,
+      startedAt: new Date(),
+      status: "pending",
+    };
+
+    this.activeAutomations.set(data.cardId, automationEntry);
+
+    // Trigger agent session if callback is available
+    if (this.createSession) {
+      try {
+        automationEntry.status = "running";
+        const sessionId = await this.createSession({
+          workspaceId: data.workspaceId,
+          cardId: data.cardId,
+          cardTitle: data.cardTitle,
+          columnId: targetColumn.id,
+          columnName: targetColumn.name,
+          automation,
+        });
+        automationEntry.sessionId = sessionId ?? undefined;
+      } catch (err) {
+        automationEntry.status = "failed";
+        console.error("[WorkflowOrchestrator] Failed to create session:", err);
+      }
+    }
+  }
+
+  private async handleAgentCompletion(event: AgentEvent): Promise<void> {
+    // Find any active automation that matches this agent's session
+    for (const [cardId, automation] of this.activeAutomations.entries()) {
+      if (automation.status !== "running") continue;
+
+      // Check if the completed agent is related to this automation
+      const isRelated =
+        automation.sessionId &&
+        event.data?.sessionId === automation.sessionId;
+
+      if (!isRelated) continue;
+
+      const success = event.data?.success !== false;
+      automation.status = success ? "completed" : "failed";
+
+      // Auto-advance if configured and successful
+      if (success && automation.automation.autoAdvanceOnSuccess) {
+        await this.autoAdvanceCard(cardId, automation);
+      }
+
+      // Clean up completed automations after a delay
+      setTimeout(() => {
+        this.activeAutomations.delete(cardId);
+      }, 30_000);
+    }
+  }
+
+  private async autoAdvanceCard(
+    cardId: string,
+    automation: ActiveAutomation,
+  ): Promise<void> {
+    try {
+      const board = await this.kanbanBoardStore.get(automation.boardId);
+      if (!board) return;
+
+      const currentColumn = board.columns.find((c) => c.id === automation.columnId);
+      if (!currentColumn) return;
+
+      // Find the next column by position
+      const sortedColumns = board.columns
+        .slice()
+        .sort((a, b) => a.position - b.position);
+      const currentIndex = sortedColumns.findIndex((c) => c.id === currentColumn.id);
+      const nextColumn = sortedColumns[currentIndex + 1];
+
+      if (!nextColumn) return; // Already at last column
+
+      // Update the task
+      const task = await this.taskStore.get(cardId);
+      if (!task) return;
+
+      task.columnId = nextColumn.id;
+      task.status = columnIdToTaskStatus(nextColumn.id);
+      task.updatedAt = new Date();
+      await this.taskStore.save(task);
+
+      // Emit transition event for the auto-advance (may trigger next column's automation)
+      this.eventBus.emit({
+        type: AgentEventType.COLUMN_TRANSITION,
+        agentId: "kanban-workflow-orchestrator",
+        workspaceId: automation.workspaceId,
+        data: {
+          cardId,
+          cardTitle: automation.cardTitle,
+          boardId: automation.boardId,
+          workspaceId: automation.workspaceId,
+          fromColumnId: automation.columnId,
+          toColumnId: nextColumn.id,
+          fromColumnName: currentColumn.name,
+          toColumnName: nextColumn.name,
+        },
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.error("[WorkflowOrchestrator] Auto-advance failed:", err);
+    }
+  }
+}
