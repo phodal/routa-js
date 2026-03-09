@@ -17,7 +17,11 @@ interface SpecialistOption {
 export function KanbanPageClient() {
   const params = useParams();
   const router = useRouter();
-  const workspaceId = params.workspaceId as string;
+  const rawWorkspaceId = params.workspaceId as string;
+  const workspaceId =
+    rawWorkspaceId === "__placeholder__" && typeof window !== "undefined"
+      ? (window.location.pathname.match(/^\/workspace\/([^/]+)/)?.[1] ?? rawWorkspaceId)
+      : rawWorkspaceId;
   const acp = useAcp();
   const workspacesHook = useWorkspaces();
   const { codebases } = useCodebases(workspaceId);

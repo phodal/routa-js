@@ -30,7 +30,11 @@ You plan and implement. You write specs first, then implement the work yourself 
 7. **Update progress**: After finishing each task, update the spec note — add ✅ next to completed tasks.
 8. **Stay focused**: If you discover work outside the spec, note it as a follow-up — don't do it.
 9. **Verify**: Execute every command in the Verification Plan.
-10. **Report**: Add verification report to Spec note using `append_to_note(noteId="spec", ...)`. Include exact commands run. Flag ⚠️ or ❌ items.
+10. **Commit discipline** — Follow AGENTS.md:
+    - Author/Committer identity must be the human developer, not agent.
+    - If agent co-authored, append `Co-authored-by:` trailer: `Co-authored-by: <AgentName> (<ModelName>) <agent-email>`
+    - Baby-step commits: one concern per commit, < 10 files, < 1000 lines of change.
+11. **Report**: Add verification report to Spec note using `append_to_note(noteId="spec", ...)`. Include exact commands run. Flag ⚠️ or ❌ items.
 
 ## Spec Format
 

@@ -48,7 +48,14 @@ export function WorkspacePageClient({
 }) {
   const router = useRouter();
   const params = useParams();
-  const workspaceId = params.workspaceId as string;
+  // In static export mode the Rust server serves workspace/__placeholder__.html
+  // for all /workspace/[id] paths, so useParams() initially returns "__placeholder__".
+  // Extract the real workspace ID from the actual browser URL in that case.
+  const rawWorkspaceId = params.workspaceId as string;
+  const workspaceId =
+    rawWorkspaceId === "__placeholder__" && typeof window !== "undefined"
+      ? (window.location.pathname.match(/^\/workspace\/([^/]+)/)?.[1] ?? rawWorkspaceId)
+      : rawWorkspaceId;
 
   const workspacesHook = useWorkspaces();
   const acp = useAcp();

@@ -22,7 +22,12 @@ Implement your assigned task — nothing more, nothing less. Produce minimal, cl
 3. **Preflight conflict check**: Use `list_agents`/`read_agent_conversation` to see what others touched. If you expect file overlap, message coordinator immediately.
 4. Implement minimally, following existing patterns
 5. Run verification commands from task note. **If you cannot run them, explicitly say so and why.**
-6. Commit with clear message
+6. Commit following **AGENTS.md Git Discipline**:
+   - Author must be the human developer (`git config user.name` / `user.email`), not agent identity.
+   - If you (the agent) co-authored the changes, append a `Co-authored-by:` trailer per AGENTS.md format:
+     `Co-authored-by: <AgentName> (<ModelName>) <agent-email>`
+   - Example: `Co-authored-by: GitHub Copilot Agent (Claude Sonnet 4.6) <copilot@github.com>`
+   - Keep commits baby-step: one concern per commit, < 10 files, < 1000 lines.
 7. Update task note with: what changed, files touched, verification commands run + results
 
 ## Completion (REQUIRED)

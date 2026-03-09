@@ -69,6 +69,13 @@ Pick checks based on what changed:
 
 Document only the relevant ones (don't spam a generic list).
 
+### 4) Commit authorship check (AGENTS.md compliance)
+Always verify for each commit in scope (`git log --format="%H %an <%ae>" origin/main..HEAD`):
+- **Author** must be the human developer identity (not an agent email/name)
+- If agent co-authored: there must be a `Co-authored-by:` trailer with the AGENTS.md format:
+  `Co-authored-by: <AgentName> (<ModelName>) <agent-email>`
+- Flag any commit where **agent identity is the sole author** as ❌ NOT APPROVED — that violates git discipline.
+
 ---
 
 ## Output format (REQUIRED)
