@@ -18,6 +18,7 @@ export interface PageSnapshotTarget {
   name: string;
   group: string;
   priority: SnapshotPriority;
+  ci?: boolean;
   route: string;
   pageFile: string;
   snapshotFile: string;
@@ -70,6 +71,7 @@ function validateRegistry(entries: unknown): PageSnapshotTarget[] {
       name: target.name ?? target.id,
       group: target.group ?? "default",
       priority: target.priority ?? "P2",
+      ci: target.ci ?? false,
       route: target.route,
       pageFile: target.pageFile,
       snapshotFile: target.snapshotFile,

@@ -13,6 +13,7 @@ import {
   openSession,
   parseCliArgs,
   resolveWorkspacePath,
+  selectSnapshotTargets,
   startDevServer,
   summarizeDiff,
   waitForServer,
@@ -22,7 +23,7 @@ import {
 
 async function main() {
   const options = parseCliArgs(process.argv.slice(2));
-  const registry = loadRegistry().filter((target) => !options.page || target.id === options.page);
+  const registry = selectSnapshotTargets(loadRegistry(), options);
 
   if (registry.length === 0) {
     console.error(`No page snapshot target matched --page=${options.page}`);

@@ -26,6 +26,7 @@ export function loadRegistry() {
 export function parseCliArgs(argv) {
   const options = {
     page: null,
+    ciOnly: false,
     update: false,
     headed: false,
     baseUrl: DEFAULT_BASE_URL,
@@ -35,6 +36,8 @@ export function parseCliArgs(argv) {
   for (const arg of argv) {
     if (arg.startsWith("--page=")) {
       options.page = arg.slice("--page=".length);
+    } else if (arg === "--ci") {
+      options.ciOnly = true;
     } else if (arg === "--update" || arg === "--update-snapshots") {
       options.update = true;
     } else if (arg === "--headed" || arg === "--headless=false") {
@@ -49,6 +52,20 @@ export function parseCliArgs(argv) {
   }
 
   return options;
+}
+
+export function selectSnapshotTargets(registry, options) {
+  return registry.filter((target) => {
+    if (options.page && target.id !== options.page) {
+      return false;
+    }
+
+    if (options.ciOnly && !target.ci) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 export function ensureParentDir(filePath) {
