@@ -2946,6 +2946,158 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── A2UI Dashboard Config ──
+  /api/a2ui/dashboard/config:
+    get:
+      operationId: getA2UIDashboardConfig
+      summary: Get dashboard configuration for a workspace
+      description: |
+        Returns the persisted dashboard configuration including panel order,
+        visibility settings, and custom surfaces for a specific workspace.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Workspace ID to retrieve config for
+      responses:
+        "200":
+          description: Dashboard configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [config]
+                properties:
+                  config:
+                    type: object
+                    required: [id, workspaceId, updatedAt]
+                    properties:
+                      id:
+                        type: string
+                        description: Config ID (format dc_{workspaceId})
+                      workspaceId:
+                        type: string
+                      surfaceOrder:
+                        type: array
+                        items:
+                          type: string
+                        nullable: true
+                        description: Ordered list of surface IDs
+                      hiddenSurfaces:
+                        type: array
+                        items:
+                          type: string
+                        nullable: true
+                        description: List of hidden surface IDs
+                      customSurfaces:
+                        type: array
+                        items:
+                          type: object
+                        nullable: true
+                        description: Custom A2UI surface definitions
+                      updatedAt:
+                        type: string
+                        format: date-time
+        "400":
+          description: Missing workspaceId parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to load dashboard config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: putA2UIDashboardConfig
+      summary: Save dashboard configuration for a workspace
+      description: |
+        Persists dashboard configuration including panel order, visibility,
+        and custom surfaces. Auto-detects database backend (Postgres/SQLite).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workspaceId]
+              properties:
+                workspaceId:
+                  type: string
+                  description: Workspace ID to save config for
+                surfaceOrder:
+                  type: array
+                  items:
+                    type: string
+                  nullable: true
+                  description: Ordered list of surface IDs
+                hiddenSurfaces:
+                  type: array
+                  items:
+                    type: string
+                  nullable: true
+                  description: List of hidden surface IDs
+                customSurfaces:
+                  type: array
+                  items:
+                    type: object
+                  nullable: true
+                  description: Custom A2UI surface definitions
+      responses:
+        "200":
+          description: Config saved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, config]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  config:
+                    type: object
+                    required: [id, workspaceId, updatedAt]
+                    properties:
+                      id:
+                        type: string
+                      workspaceId:
+                        type: string
+                      surfaceOrder:
+                        type: array
+                        items:
+                          type: string
+                        nullable: true
+                      hiddenSurfaces:
+                        type: array
+                        items:
+                          type: string
+                        nullable: true
+                      customSurfaces:
+                        type: array
+                        items:
+                          type: object
+                        nullable: true
+                      updatedAt:
+                        type: string
+                        format: date-time
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to save dashboard config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── AG-UI Protocol ──
   /api/ag-ui:
     post:
