@@ -946,12 +946,12 @@ export function getMcpToolDefinitions(toolMode: ToolMode = "essential") {
     },
     {
       name: "move_card",
-      description: "Move a Kanban card to a different column. Use 'in-progress' when starting work, 'done' when complete.",
+      description: "Move a Kanban card to a different column. Use 'dev' when starting work, 'review' for code review, 'done' when complete.",
       inputSchema: {
         type: "object",
         properties: {
           cardId: { type: "string", description: "Card ID (same as task ID)" },
-          targetColumnId: { type: "string", description: "Target column ID (e.g., 'backlog', 'in-progress', 'done')" },
+          targetColumnId: { type: "string", description: "Target column ID. Valid columns: 'backlog', 'todo', 'dev' (in progress), 'review', 'blocked', 'done'" },
           position: { type: "number", description: "Position within the column (optional)" },
         },
         required: ["cardId", "targetColumnId"],

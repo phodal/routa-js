@@ -984,10 +984,10 @@ Note: taskId must be a UUID from create_task, not a task name.`,
   private registerMoveCard(server: McpServer) {
     server.tool(
       "move_card",
-      "Move a card to a different column or position",
+      "Move a card to a different column. Use 'dev' when starting work, 'review' for code review, 'done' when complete.",
       {
         cardId: z.string().describe("Card ID"),
-        targetColumnId: z.string().describe("Target column ID"),
+        targetColumnId: z.string().describe("Target column ID. Valid columns: 'backlog', 'todo', 'dev' (in progress), 'review', 'blocked', 'done'"),
         position: z.number().optional().describe("Position in the column"),
       },
       async (params) => {
