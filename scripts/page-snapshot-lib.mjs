@@ -52,7 +52,7 @@ export function parseCliArgs(argv) {
       options.timeoutMs = Number.parseInt(arg.slice("--timeout=".length), 10) || DEFAULT_TIMEOUT_MS;
     } else if (arg.startsWith("--similarity=")) {
       const value = Number.parseFloat(arg.slice("--similarity=".length));
-      if (value >= 0 && value <= 1) {
+      if (value > 0 && value <= 1) {
         options.similarityThreshold = value;
       }
     }
