@@ -92,7 +92,7 @@ export class RoutaMcpToolManager {
    */
   registerTools(server: McpServer): void {
     if (this.toolMode === "essential") {
-      // Essential mode: 12 core coordination tools
+      // Essential mode: 14 core coordination tools
       // Task tools (1) - needed so delegate_task_to_agent has a taskId to work with
       this.registerCreateTask(server);
       // Agent tools (7)
@@ -110,6 +110,9 @@ export class RoutaMcpToolManager {
       this.registerListNotes(server);
       this.registerSetNoteContent(server);
       this.registerConvertTaskBlocks(server);
+      // Kanban tools (2) - needed for card-assigned agents to update their cards
+      this.registerUpdateCard(server);
+      this.registerMoveCard(server);
       // Artifact tools (6) - critical for multi-agent coordination and desk check workflow
       this.registerRequestArtifact(server);
       this.registerProvideArtifact(server);

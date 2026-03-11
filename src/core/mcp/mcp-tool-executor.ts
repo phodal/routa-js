@@ -14,7 +14,7 @@ import { ToolMode } from "./routa-mcp-tool-manager";
 
 /**
  * Essential tools for weak models - minimum viable coordination.
- * Only 7 tools needed for basic multi-agent coordination.
+ * Core coordination tools plus Kanban tools for card-assigned agents.
  */
 const ESSENTIAL_TOOL_NAMES = new Set([
   "list_agents",
@@ -26,6 +26,9 @@ const ESSENTIAL_TOOL_NAMES = new Set([
   "send_message_to_agent",
   "report_to_parent",
   "fetch_webpage",
+  // Kanban tools - needed for card-assigned agents to update their cards
+  "update_card",
+  "move_card",
 ]);
 
 export async function executeMcpTool(
@@ -923,6 +926,35 @@ export function getMcpToolDefinitions(toolMode: ToolMode = "essential") {
           branch: { type: "string", description: "Git branch name" },
         },
         required: ["id", "title"],
+      },
+    },
+    // ── Kanban tools ──────────────────────────────────────────────────
+    {
+      name: "update_card",
+      description: "Update a Kanban card's title, description, priority, or labels. Use this to track progress on your assigned task.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          cardId: { type: "string", description: "Card ID (same as task ID)" },
+          title: { type: "string", description: "New card title" },
+          description: { type: "string", description: "New card description/objective" },
+          priority: { type: "string", enum: ["low", "medium", "high", "urgent"], description: "Card priority" },
+          labels: { type: "array", items: { type: "string" }, description: "Card labels" },
+        },
+        required: ["cardId"],
+      },
+    },
+    {
+      name: "move_card",
+      description: "Move a Kanban card to a different column. Use 'in-progress' when starting work, 'done' when complete.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          cardId: { type: "string", description: "Card ID (same as task ID)" },
+          targetColumnId: { type: "string", description: "Target column ID (e.g., 'backlog', 'in-progress', 'done')" },
+          position: { type: "number", description: "Position within the column (optional)" },
+        },
+        required: ["cardId", "targetColumnId"],
       },
     },
   ];
