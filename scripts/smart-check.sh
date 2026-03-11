@@ -100,6 +100,18 @@ main() {
   npx tsc --noEmit 2>&1 | tee "$TYPECHECK_LOG"
   typecheck_exit=${PIPESTATUS[0]}
   set -e
+
+  # Check if the error is due to stale .next types
+  if [[ $typecheck_exit -ne 0 ]] && grep -q "\.next/types/.*Cannot find module.*src/app/.*page\.js" "$TYPECHECK_LOG"; then
+    echo -e "${YELLOW}⚠ Detected stale .next types. Cleaning and retrying...${NC}"
+    rm -rf .next
+    echo ""
+    set +e
+    npx tsc --noEmit 2>&1 | tee "$TYPECHECK_LOG"
+    typecheck_exit=${PIPESTATUS[0]}
+    set -e
+  fi
+
   echo ""
   if [[ $typecheck_exit -eq 0 ]]; then
     echo -e "${GREEN}✓ Type check passed${NC}"
@@ -142,6 +154,13 @@ main() {
 
   # Errors already shown in real-time above
 
+  # Check if we're in an AI agent environment
+  if is_ai_agent; then
+    echo -e "${YELLOW}Running in AI agent environment.${NC}"
+    echo -e "${YELLOW}Please fix the errors shown above.${NC}"
+    exit 1
+  fi
+
   # Check if claude CLI is available
   if ! command -v claude &> /dev/null; then
     echo -e "${YELLOW}Claude CLI not found. Please fix errors manually.${NC}"
@@ -152,7 +171,7 @@ main() {
     echo -e "${BLUE}Auto-fix mode enabled. Starting Claude...${NC}"
   else
     echo -e "${YELLOW}Would you like Claude to fix these issues? [y/N]${NC}"
-    read -r response
+    read -r -t 30 response || response="n"
     if [[ ! "$response" =~ ^[Yy]$ ]]; then
       echo "Aborted. Please fix errors manually."
       exit 1
