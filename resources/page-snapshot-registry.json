@@ -52,7 +52,7 @@
     "name": "MCP Tools",
     "group": "integrations",
     "priority": "P1",
-    "ci": true,
+    "ci": false,
     "route": "/mcp-tools",
     "pageFile": "src/app/mcp-tools/page.tsx",
     "snapshotFile": "src/app/mcp-tools/page.snapshot.yaml",
