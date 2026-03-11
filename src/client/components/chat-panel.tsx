@@ -1835,7 +1835,10 @@ export function ChatPanel({
               <div className="flex gap-2 items-end">
                 <TiptapInput
                   onSend={handleSend}
-                  onStop={acp.cancel}
+                  onStop={() => {
+                    setIsSessionRunning(false);
+                    acp.cancel();
+                  }}
                   placeholder={
                     connected
                       ? activeSessionId
