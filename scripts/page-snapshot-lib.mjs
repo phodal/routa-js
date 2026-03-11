@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { URL } from "node:url";
 
 export const ROOT_DIR = process.cwd();
 export const REGISTRY_FILE = path.join(ROOT_DIR, "resources", "page-snapshot-registry.json");
@@ -122,11 +123,11 @@ export function getPlaywrightCliVersion() {
 }
 
 export async function isServerReachable(baseUrl) {
-  const controller = new AbortController();
+  const controller = new globalThis.AbortController();
   const timer = setTimeout(() => controller.abort(), 2000);
 
   try {
-    const response = await fetch(baseUrl, {
+    const response = await globalThis.fetch(baseUrl, {
       method: "GET",
       signal: controller.signal,
       redirect: "manual",
