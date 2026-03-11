@@ -135,7 +135,7 @@ export function parseCodeRetrievalOutput(output: string): CodeSection[] {
         extractSectionsFromText(text);
       }
     }
-  } catch (e) {
+  } catch {
     // If JSON parsing fails, try plain text extraction
     // Format 1: Plain text starting with "The following code sections"
     if (output.includes("code sections") && output.includes("Path:")) {

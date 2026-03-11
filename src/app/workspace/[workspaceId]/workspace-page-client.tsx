@@ -84,10 +84,10 @@ export function WorkspacePageClient({
   });
 
   // Sessions modal state
-  const [showSessionsModal, setShowSessionsModal] = useState(false);
-  const [_sessionsPage, setSessionsPage] = useState(1);
-  const [_hasMoreSessions, setHasMoreSessions] = useState(false);
-  const [_allSessions, setAllSessions] = useState<SessionInfo[]>([]);
+  const [showSessionsModal, _setShowSessionsModal] = useState(false);
+  const [_sessionsPage, _setSessionsPage] = useState(1);
+  const [_hasMoreSessions, _setHasMoreSessions] = useState(false);
+  const [_allSessions, _setAllSessions] = useState<SessionInfo[]>([]);
 
   // Auto-connect ACP
   useEffect(() => {
@@ -111,18 +111,19 @@ export function WorkspacePageClient({
   // Fetch all sessions for modal (with pagination)
   useEffect(() => {
     if (!showSessionsModal) return;
+    // Only fetch first page when modal opens
     (async () => {
       try {
         const limit = 50;
-        const offset = (sessionsPage - 1) * limit;
+        const offset = 0;
         const res = await fetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=${limit}&offset=${offset}`, { cache: "no-store" });
         const data = await res.json();
         const newSessions = Array.isArray(data?.sessions) ? data.sessions : [];
-        setAllSessions(prev => sessionsPage === 1 ? newSessions : [...prev, ...newSessions]);
+        setAllSessions(newSessions);
         setHasMoreSessions(newSessions.length === limit);
       } catch { /* ignore */ }
     })();
-  }, [workspaceId, showSessionsModal, sessionsPage]);
+  }, [workspaceId, showSessionsModal]);
 
   // Fetch tasks
   useEffect(() => {

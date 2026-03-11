@@ -86,7 +86,7 @@ function detectLanguageFromContent(content: string): string {
   }
 
   // CSS patterns
-  if (/^[\w\-#\.]+\s*{[\s\S]*}/.test(trimmed)) {
+  if (/^[\w-#.]+\s*{[\s\S]*}/.test(trimmed)) {
     return "css";
   }
 

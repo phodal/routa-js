@@ -54,7 +54,7 @@ export function CollaborativeTaskEditor({
   connected,
   onUpdateNote,
   onDeleteNote,
-  workspaceId,
+  workspaceId: _workspaceId,
   crafterAgents = [],
   onSelectTaskNote,
   onExecuteTask,
@@ -66,7 +66,7 @@ export function CollaborativeTaskEditor({
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [specExpanded, setSpecExpanded] = useState(true);
-  const [viewMode, setViewMode] = useState<CollabPanelView>("tasks");
+  const [viewMode, _setViewMode] = useState<CollabPanelView>("tasks");
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);

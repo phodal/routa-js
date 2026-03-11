@@ -117,7 +117,7 @@ export function ChatPanel({
   repoSkills = [],
   agentRole,
   onAgentRoleChange,
-  onCreateSession,
+  onCreateSession: _onCreateSession,
   onLoadSkill,
   repoSelection,
   onRepoChange,
@@ -125,7 +125,7 @@ export function ChatPanel({
   workspaces = [],
   activeWorkspaceId,
   onWorkspaceChange,
-  codebases = [],
+  codebases: _codebases = [],
   inputPrefill,
   onInputPrefillConsumed,
 }: ChatPanelProps) {
