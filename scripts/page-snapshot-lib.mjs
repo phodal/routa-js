@@ -166,7 +166,11 @@ export function normalizeSnapshotBody(content) {
   const refMap = new Map();
   let nextRef = 1;
 
+  const escapedRoot = ROOT_DIR.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const rootPattern = new RegExp(escapedRoot, "g");
+
   return content
+    .replace(rootPattern, "<repo-root>")
     .replace(/\[ref=(e\d+)\]/g, (_, originalRef) => {
       if (!refMap.has(originalRef)) {
         refMap.set(originalRef, `e${nextRef}`);
@@ -185,28 +189,35 @@ export function normalizeComparableSnapshot(content) {
 export function calculateSimilarity(expected, actual) {
   const expectedLines = expected.split(/\r?\n/).filter(line => line.trim());
   const actualLines = actual.split(/\r?\n/).filter(line => line.trim());
-  
+
   if (expectedLines.length === 0 && actualLines.length === 0) {
     return 1.0;
   }
-  
+
   if (expectedLines.length === 0 || actualLines.length === 0) {
     return 0.0;
   }
-  
-  const minLines = Math.min(expectedLines.length, actualLines.length);
-  const maxLines = Math.max(expectedLines.length, actualLines.length);
-  let matchingLines = 0;
-  
-  // Count matching lines up to the shorter length
-  for (let i = 0; i < minLines; i += 1) {
-    if (expectedLines[i] === actualLines[i]) {
-      matchingLines += 1;
+
+  // Build a frequency map for expected lines
+  const expectedCounts = new Map();
+  for (const line of expectedLines) {
+    expectedCounts.set(line, (expectedCounts.get(line) ?? 0) + 1);
+  }
+
+  // Multiset intersection: consume one occurrence per matching actual line
+  let intersection = 0;
+  const remaining = new Map(expectedCounts);
+  for (const line of actualLines) {
+    const count = remaining.get(line) ?? 0;
+    if (count > 0) {
+      intersection += 1;
+      remaining.set(line, count - 1);
     }
   }
-  
-  // Similarity is based on the longer snapshot to penalize additions/deletions
-  return matchingLines / maxLines;
+
+  // Jaccard similarity on multisets: intersection / union
+  const union = expectedLines.length + actualLines.length - intersection;
+  return intersection / union;
 }
 
 export function summarizeDiff(expected, actual) {
