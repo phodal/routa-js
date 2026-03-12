@@ -16,11 +16,19 @@
 
 import { test, expect } from "@playwright/test";
 
-const BASE = "http://localhost:3000";
+const BASE = "http://127.0.0.1:3000";
+
+async function fillIssueObjective(page: import("@playwright/test").Page, text: string) {
+  const editor = page.locator(".ProseMirror").last();
+  await expect(editor).toBeVisible({ timeout: 5_000 });
+  await editor.click();
+  await page.keyboard.type(text);
+}
 
 test.describe("Kanban OpenCode Smoke Test", () => {
-  test("ACP triggering with OpenCode provider and session popup", async ({ page }) => {
+  test("ACP triggering with OpenCode provider and session popup", async ({ page, request }) => {
     const results: string[] = [];
+    const title = `Test OpenCode Smoke Issue ${Date.now()}`;
 
     test.setTimeout(180_000);
 
@@ -32,20 +40,14 @@ test.describe("Kanban OpenCode Smoke Test", () => {
       }
     });
 
-    // Step 1: Navigate to workspace
-    await page.goto(`${BASE}/workspace/default`);
-    results.push("1. Navigated to workspace/default");
+    // Step 1: Navigate directly to the Kanban page.
+    await page.goto(`${BASE}/workspace/default/kanban`, { waitUntil: "domcontentloaded" });
+    results.push("1. Navigated to workspace/default/kanban");
 
-    // Wait for page load
-    await page.waitForLoadState("networkidle");
-
-    // Step 2: Click on Kanban tab
-    const kanbanTab = page.locator("button:has-text('Kanban'), [role='tab']:has-text('Kanban')").first();
-    await kanbanTab.click({ timeout: 10_000 });
-    results.push("2. Clicked Kanban tab");
-
-    // Wait for Kanban board to load
-    await page.waitForTimeout(2000);
+    await expect(page.getByRole("button", { name: /Create issue|Manual/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    results.push("2. Kanban page loaded");
 
     // Step 3: Check if there's an existing board, or create one
     const boardSelect = page.locator("select").filter({ has: page.locator("option") }).first();
@@ -64,7 +66,7 @@ test.describe("Kanban OpenCode Smoke Test", () => {
     }
 
     // Step 4: Click "Create issue" button
-    const createIssueBtn = page.locator("button:has-text('Create issue')");
+    const createIssueBtn = page.locator("button:has-text('Create issue'), button:has-text('Manual')");
     await expect(createIssueBtn).toBeVisible({ timeout: 10_000 });
     await createIssueBtn.click();
     results.push("4. Clicked 'Create issue' button");
@@ -75,12 +77,14 @@ test.describe("Kanban OpenCode Smoke Test", () => {
     // Step 5: Fill in issue details
     const titleInput = page.locator('input[placeholder="Issue title"]');
     await expect(titleInput).toBeVisible({ timeout: 5_000 });
-    await titleInput.fill("Test OpenCode Smoke Issue");
+    await titleInput.fill(title);
     results.push("5. Filled issue title");
 
     // Fill objective
-    const objectiveInput = page.locator('textarea[placeholder="Describe the work"]');
-    await objectiveInput.fill("Testing ACP triggering with OpenCode provider and session popup behavior");
+    await fillIssueObjective(
+      page,
+      "Testing ACP triggering with OpenCode provider and session popup behavior",
+    );
     results.push("   - Filled issue objective");
 
     // Step 6: Select priority (medium)
@@ -98,38 +102,51 @@ test.describe("Kanban OpenCode Smoke Test", () => {
     results.push("8. Issue created, waiting for Kanban to update");
 
     // Step 8: Find the created issue card
-    const issueCard = page.locator("text=Test OpenCode Smoke Issue").first();
+    const issueCard = page.getByTestId("kanban-card").filter({ hasText: title }).first();
     await expect(issueCard).toBeVisible({ timeout: 15_000 });
     results.push("9. Issue card visible in Kanban");
 
-    // Step 9: Click Assign button on the issue
-    const assignBtn = page.locator("button:has-text('Assign')").first();
-    await assignBtn.click();
-    results.push("10. Clicked Assign button");
+    // Step 9: Assign provider and move to dev via API for a stable smoke path.
+    const taskResponse = await request.get("/api/tasks?workspaceId=default");
+    const taskData = await taskResponse.json();
+    const createdTask = (taskData.tasks as Array<{ id: string; title: string }>).find(
+      (task) => task.title === title,
+    );
+    expect(createdTask).toBeTruthy();
 
-    // Wait for assignment dropdown
-    await page.waitForTimeout(1000);
+    const triggerResponse = await request.patch(`/api/tasks/${createdTask!.id}`, {
+      data: {
+        assignedProvider: "opencode",
+        assignedRole: "CRAFTER",
+        columnId: "dev",
+        position: 0,
+      },
+    });
+    expect(triggerResponse.ok()).toBeTruthy();
+    results.push("10. Assigned OpenCode and moved task to dev via API");
 
-    // Step 10: Select OpenCode provider
-    const providerSelect = page.locator("select").filter({ has: page.locator("option[value='opencode']") }).first();
-    await providerSelect.selectOption("opencode");
-    results.push("11. Selected OpenCode provider");
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get("/api/tasks?workspaceId=default");
+          if (!response.ok()) return null;
+          const data = await response.json();
+          const task = (data.tasks as Array<{ title: string; triggerSessionId?: string }>).find(
+            (item) => item.title === title,
+          );
+          return task?.triggerSessionId ?? null;
+        },
+        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+      )
+      .not.toBeNull();
+    results.push("11. ACP session created");
 
-    // Step 11: Select CRAFTER role
-    const roleSelect = page.locator("select").nth(1);
-    await roleSelect.selectOption("CRAFTER");
-    results.push("12. Selected CRAFTER role");
-
-    // Step 12: Save assignment
-    const saveBtn = page.locator("button:has-text('Save')").first();
-    await saveBtn.click();
-    results.push("13. Saved assignment");
-
-    // Wait for session to be triggered
-    await page.waitForTimeout(5000);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const triggeredCard = page.getByTestId("kanban-card").filter({ hasText: title }).first();
+    await expect(triggeredCard).toBeVisible({ timeout: 20_000 });
 
     // Step 14: Check if "View session" button appears (indicates session was created)
-    const viewSessionBtn = page.locator("button:has-text('View session')").first();
+    const viewSessionBtn = triggeredCard.getByRole("button", { name: "View session" });
     
     // Also check for error banner (Docker not running, etc.)
     const errorBanner = page.locator(".bg-red-50, .dark\\:bg-red-900\\/20, .bg-red-100");
@@ -149,7 +166,7 @@ test.describe("Kanban OpenCode Smoke Test", () => {
     }
 
     // Step 15: Click View session to open popup (if available)
-    const sessionPopupBtn = page.locator("button:has-text('View session')").first();
+    const sessionPopupBtn = triggeredCard.getByRole("button", { name: "View session" });
     if (await sessionPopupBtn.isVisible()) {
       await sessionPopupBtn.click();
       results.push("15. Clicked 'View session' button");

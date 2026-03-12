@@ -47,6 +47,7 @@ function TipTapObjectiveEditor({
       Placeholder.configure({ placeholder: "Describe the work — supports **bold**, lists, code blocks…" }),
     ],
     content: value || "",
+    immediatelyRender: false,
     onUpdate: ({ editor: e }) => {
       onChange(e.getHTML());
     },

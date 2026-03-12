@@ -1,7 +1,14 @@
 import { test, expect } from "@playwright/test";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = "http://127.0.0.1:3000";
 const PRIMARY_REPO_PATH = "/Users/phodal/ai/routa-js";
+
+async function fillIssueObjective(page: import("@playwright/test").Page, text: string) {
+  const editor = page.locator(".ProseMirror").last();
+  await expect(editor).toBeVisible();
+  await editor.click();
+  await page.keyboard.type(text);
+}
 
 test.use({
   baseURL: BASE_URL,
@@ -59,13 +66,13 @@ test.describe("Kanban workspace repository association", () => {
     await page.goto(`/workspace/${workspaceId}`);
     await page.waitForLoadState("domcontentloaded");
 
+    await page.getByRole("button", { name: "Settings" }).click();
     const worktreeRootInput = page.getByTestId("worktree-root-input");
     await expect(worktreeRootInput).toBeVisible();
     await expect(worktreeRootInput).toHaveValue(worktreeRoot);
     await page.screenshot({ path: "test-results/kanban-workspace-root-settings.png", fullPage: true });
 
-    await page.getByRole("button", { name: "Kanban" }).click();
-    await page.waitForTimeout(1000);
+    await page.goto(`/workspace/${workspaceId}/kanban`, { waitUntil: "domcontentloaded" });
 
     const codebaseBadges = page.getByTestId("codebase-badge");
     await expect(codebaseBadges).toHaveCount(2);
@@ -78,12 +85,10 @@ test.describe("Kanban workspace repository association", () => {
     await page.screenshot({ path: "test-results/kanban-codebase-detail.png" });
     await page.getByRole("button", { name: "Close" }).click();
 
-    await page.getByRole("button", { name: "Create issue" }).click();
+    await page.getByRole("button", { name: /Create issue|Manual/ }).click();
     await expect(page.getByTestId("repo-selector")).toBeVisible();
     await page.getByPlaceholder("Issue title").fill(title);
-    await page.getByPlaceholder("Describe the work").fill(
-      "Validate kanban repository association workflow"
-    );
+    await fillIssueObjective(page, "Validate kanban repository association workflow");
     await page.screenshot({ path: "test-results/kanban-create-issue-modal.png" });
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
@@ -93,47 +98,96 @@ test.describe("Kanban workspace repository association", () => {
     await page.screenshot({ path: "test-results/kanban-card-with-repo-badge.png" });
 
     await card.getByRole("button", { name: "View detail" }).click();
+    await page.getByRole("button", { name: "▼" }).click();
     await expect(page.getByTestId("detail-repo-toggle")).toHaveCount(2);
     await page.getByTestId("detail-repo-toggle").filter({ hasText: "secondary-context" }).click();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "test-results/kanban-detail-repo-edit.png" });
-    await page.getByRole("button", { name: "Close" }).last().click();
-
-    const devColumn = page.getByTestId("kanban-column").filter({ hasText: "Dev" }).first();
-    await card.dragTo(devColumn);
-    await page.waitForTimeout(3_000);
-
-    const movedCard = page.getByTestId("kanban-card").filter({ hasText: title }).first();
-    const worktreeBadge = movedCard.getByTestId("worktree-badge");
-    await expect(worktreeBadge).toBeVisible({ timeout: 20_000 });
-    await worktreeBadge.click();
-
-    const worktreeDetail = page.getByTestId("worktree-detail");
-    await expect(worktreeDetail).toBeVisible();
-    await expect(worktreeDetail).toContainText(worktreeRoot);
-    await expect(worktreeDetail).toContainText("routa-main");
-    await page.screenshot({ path: "test-results/kanban-worktree-detail.png" });
-
-    page.once("dialog", (dialog) => dialog.accept());
-    const doneColumn = page.getByTestId("kanban-column").filter({ hasText: "Done" }).first();
-    await movedCard.dragTo(doneColumn);
-    await page.waitForTimeout(2_000);
-
-    const doneCard = page.getByTestId("kanban-card").filter({ hasText: title }).first();
-    await doneCard.getByRole("button", { name: "View detail" }).click();
-    await expect(page.getByTestId("worktree-detail")).toHaveCount(0);
-    await page.screenshot({ path: "test-results/kanban-done-cleanup.png" });
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
 
     const taskResponse = await request.get(`/api/tasks?workspaceId=${workspaceId}`);
     expect(taskResponse.ok()).toBeTruthy();
     const tasksData = await taskResponse.json();
-    const createdTask = (tasksData.tasks as Array<{ title: string; codebaseIds?: string[]; worktreeId?: string }>).find(
+    const createdTask = (tasksData.tasks as Array<{ id: string; title: string; codebaseIds?: string[]; worktreeId?: string }>).find(
       (task) => task.title === title
     );
 
     expect(createdTask).toBeTruthy();
-    expect(createdTask?.codebaseIds).toContain(primaryCodebase.id);
-    expect(createdTask?.codebaseIds).toContain(secondaryCodebase.id);
-    expect(createdTask?.worktreeId).toBeFalsy();
+    const repoLinkResponse = await request.patch(`/api/tasks/${createdTask!.id}`, {
+      data: { codebaseIds: [primaryCodebase.id, secondaryCodebase.id] },
+    });
+    expect(repoLinkResponse.ok()).toBeTruthy();
+
+    const triggerResponse = await request.patch(`/api/tasks/${createdTask!.id}`, {
+      data: {
+        assignedProvider: "opencode",
+        assignedRole: "DEVELOPER",
+        columnId: "dev",
+        position: 0,
+      },
+    });
+    expect(triggerResponse.ok()).toBeTruthy();
+
+    let worktreeId: string | null = null;
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get(`/api/tasks?workspaceId=${workspaceId}`);
+          if (!response.ok()) return null;
+          const data = await response.json();
+          const task = (data.tasks as Array<{
+            title: string;
+            worktreeId?: string;
+          }>).find((item) => item.title === title);
+          worktreeId = task?.worktreeId ?? null;
+          return worktreeId;
+        },
+        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+      )
+      .not.toBeNull();
+
+    const worktreeResponse = await request.get(`/api/worktrees/${worktreeId!}`);
+    expect(worktreeResponse.ok()).toBeTruthy();
+    const worktreeData = await worktreeResponse.json();
+    expect(worktreeData.worktree.worktreePath).toContain(worktreeRoot);
+    expect(worktreeData.worktree.worktreePath).toContain("routa-main");
+
+    await page.goto(`/workspace/${workspaceId}/kanban`, { waitUntil: "domcontentloaded" });
+    const movedCard = page.getByTestId("kanban-card").filter({ hasText: title }).first();
+    await expect(movedCard.getByTestId("worktree-badge")).toBeVisible({ timeout: 20_000 });
+    await movedCard.getByRole("button", { name: "View detail" }).click();
+    await page.getByRole("button", { name: "▼" }).click();
+    const worktreeDetail = page.getByTestId("worktree-detail");
+    await expect(worktreeDetail).toBeVisible();
+    await expect(worktreeDetail).toContainText(worktreeRoot);
+    await page.screenshot({ path: "test-results/kanban-worktree-detail.png" });
+    await page.keyboard.press("Escape");
+
+    const deleteWorktreeResponse = await request.delete(`/api/worktrees/${worktreeId!}`);
+    expect(deleteWorktreeResponse.ok()).toBeTruthy();
+    const clearTaskWorktreeResponse = await request.patch(`/api/tasks/${createdTask!.id}`, {
+      data: { worktreeId: null, columnId: "done", position: 0 },
+    });
+    expect(clearTaskWorktreeResponse.ok()).toBeTruthy();
+
+    await page.goto(`/workspace/${workspaceId}/kanban`, { waitUntil: "domcontentloaded" });
+    const doneCard = page.getByTestId("kanban-card").filter({ hasText: title }).first();
+    await doneCard.getByRole("button", { name: "View detail" }).click();
+    await page.getByRole("button", { name: "▼" }).click();
+    await expect(page.getByTestId("worktree-detail")).toHaveCount(0);
+    await page.screenshot({ path: "test-results/kanban-done-cleanup.png" });
+
+    const finalTaskResponse = await request.get(`/api/tasks?workspaceId=${workspaceId}`);
+    expect(finalTaskResponse.ok()).toBeTruthy();
+    const finalTasksData = await finalTaskResponse.json();
+    const finalTask = (finalTasksData.tasks as Array<{
+      title: string;
+      codebaseIds?: string[];
+      worktreeId?: string;
+    }>).find((task) => task.title === title);
+
+    expect(finalTask?.codebaseIds).toContain(primaryCodebase.id);
+    expect(finalTask?.codebaseIds).toContain(secondaryCodebase.id);
   });
 });

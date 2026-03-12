@@ -7,27 +7,141 @@
 
 import { KanbanWorkflowOrchestrator } from "./workflow-orchestrator";
 import type { RoutaSystem } from "../routa-system";
+import type { KanbanColumnAutomation } from "../models/kanban";
+import { TaskStatus } from "../models/task";
+import { GitWorktreeService } from "../git/git-worktree-service";
+import {
+  getDefaultWorkspaceWorktreeRoot,
+  getEffectiveWorkspaceMetadata,
+} from "../models/workspace";
+import { getInternalApiOrigin, triggerAssignedTaskAgent } from "./agent-trigger";
 
 // Use globalThis to survive HMR in Next.js dev mode
 const GLOBAL_KEY = "__routa_workflow_orchestrator__";
 const STARTED_KEY = "__routa_workflow_orchestrator_started__";
+
+async function createAutomationSession(
+  system: RoutaSystem,
+  params: {
+    workspaceId: string;
+    cardId: string;
+    columnId: string;
+    automation: KanbanColumnAutomation;
+  },
+): Promise<string | null> {
+  const task = await system.taskStore.get(params.cardId);
+  if (!task) return null;
+  if (task.triggerSessionId) return task.triggerSessionId;
+
+  const nextTask = {
+    ...task,
+    assignedProvider:
+      params.automation.providerId ?? task.assignedProvider ?? "opencode",
+    assignedRole:
+      params.automation.role ?? task.assignedRole ?? "DEVELOPER",
+    assignedSpecialistId:
+      params.automation.specialistId ?? task.assignedSpecialistId,
+    assignedSpecialistName:
+      params.automation.specialistName ?? task.assignedSpecialistName,
+    updatedAt: new Date(),
+  };
+
+  let preferredCodebase = (nextTask.codebaseIds?.length ?? 0) > 0
+    ? await system.codebaseStore.get(nextTask.codebaseIds[0])
+    : undefined;
+  if (!preferredCodebase) {
+    preferredCodebase = await system.codebaseStore.getDefault(nextTask.workspaceId);
+  }
+
+  let worktreeCwd = preferredCodebase?.repoPath ?? process.cwd();
+  if (params.columnId === "dev" && preferredCodebase && !nextTask.worktreeId) {
+    try {
+      const worktreeService = new GitWorktreeService(
+        system.worktreeStore,
+        system.codebaseStore,
+      );
+      const slugifiedTitle = nextTask.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 40);
+      const branch = `issue/${nextTask.id.slice(0, 8)}-${slugifiedTitle}`;
+      const label = `${nextTask.id.slice(0, 8)}-${slugifiedTitle}`;
+      const workspace = await system.workspaceStore.get(nextTask.workspaceId);
+      const worktreeRoot = workspace
+        ? getEffectiveWorkspaceMetadata(workspace).worktreeRoot
+        : getDefaultWorkspaceWorktreeRoot(nextTask.workspaceId);
+      const worktree = await worktreeService.createWorktree(preferredCodebase.id, {
+        branch,
+        baseBranch: preferredCodebase.branch ?? "main",
+        label,
+        worktreeRoot,
+      });
+      nextTask.worktreeId = worktree.id;
+      worktreeCwd = worktree.worktreePath;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      nextTask.status = TaskStatus.BLOCKED;
+      nextTask.columnId = "blocked";
+      nextTask.lastSyncError = `Worktree creation failed: ${message}`;
+      await system.taskStore.save(nextTask);
+      return null;
+    }
+  } else if (nextTask.worktreeId) {
+    const existingWorktree = await system.worktreeStore.get(nextTask.worktreeId);
+    if (existingWorktree?.worktreePath) {
+      worktreeCwd = existingWorktree.worktreePath;
+    }
+  }
+
+  const triggerResult = await triggerAssignedTaskAgent({
+    origin: getInternalApiOrigin(),
+    workspaceId: params.workspaceId,
+    cwd: worktreeCwd,
+    branch: preferredCodebase?.branch,
+    task: nextTask,
+  });
+
+  if (triggerResult.sessionId) {
+    nextTask.triggerSessionId = triggerResult.sessionId;
+    nextTask.lastSyncError = undefined;
+    if (nextTask.worktreeId) {
+      await system.worktreeStore.assignSession(nextTask.worktreeId, triggerResult.sessionId);
+    }
+  } else if (triggerResult.error) {
+    nextTask.lastSyncError = triggerResult.error;
+  }
+
+  await system.taskStore.save(nextTask);
+  return triggerResult.sessionId ?? null;
+}
 
 /**
  * Get or create the global KanbanWorkflowOrchestrator instance.
  */
 export function getWorkflowOrchestrator(system: RoutaSystem): KanbanWorkflowOrchestrator {
   const g = globalThis as Record<string, unknown>;
-  
-  if (!g[GLOBAL_KEY]) {
-    const orchestrator = new KanbanWorkflowOrchestrator(
+  let orchestrator = g[GLOBAL_KEY] as KanbanWorkflowOrchestrator | undefined;
+
+  if (!orchestrator) {
+    orchestrator = new KanbanWorkflowOrchestrator(
       system.eventBus,
       system.kanbanBoardStore,
       system.taskStore,
     );
     g[GLOBAL_KEY] = orchestrator;
   }
-  
-  return g[GLOBAL_KEY] as KanbanWorkflowOrchestrator;
+
+  orchestrator.setCreateSession((params) =>
+    createAutomationSession(system, {
+      workspaceId: params.workspaceId,
+      cardId: params.cardId,
+      columnId: params.columnId,
+      automation: params.automation,
+    })
+  );
+
+  return orchestrator;
 }
 
 /**
@@ -35,20 +149,14 @@ export function getWorkflowOrchestrator(system: RoutaSystem): KanbanWorkflowOrch
  */
 export function startWorkflowOrchestrator(system: RoutaSystem): void {
   const g = globalThis as Record<string, unknown>;
-
-  console.log("[WorkflowOrchestrator] startWorkflowOrchestrator called, already started:", !!g[STARTED_KEY]);
+  const orchestrator = getWorkflowOrchestrator(system);
 
   if (g[STARTED_KEY]) {
-    console.log("[WorkflowOrchestrator] Already started, skipping");
     return; // Already started
   }
 
-  console.log("[WorkflowOrchestrator] Creating and starting orchestrator...");
-  const orchestrator = getWorkflowOrchestrator(system);
   orchestrator.start();
   g[STARTED_KEY] = true;
-
-  console.log("[WorkflowOrchestrator] Started listening for column transitions");
 }
 
 /**
@@ -65,4 +173,3 @@ export function resetWorkflowOrchestrator(): void {
   delete g[GLOBAL_KEY];
   delete g[STARTED_KEY];
 }
-

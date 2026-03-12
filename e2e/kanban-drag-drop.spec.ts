@@ -8,7 +8,14 @@
 
 import { test, expect } from "@playwright/test";
 
-const BASE = "http://localhost:3000";
+const BASE = "http://127.0.0.1:3000";
+
+async function fillIssueObjective(page: import("@playwright/test").Page, text: string) {
+  const editor = page.locator(".ProseMirror").last();
+  await expect(editor).toBeVisible();
+  await editor.click();
+  await page.keyboard.type(text);
+}
 
 test.describe("Kanban Drag and Drop", () => {
   test("cards can be dragged between columns", async ({ page }) => {
@@ -33,9 +40,9 @@ test.describe("Kanban Drag and Drop", () => {
       console.log("No cards found, creating a test card");
       
       // Create a test card
-      await page.getByRole("button", { name: "Create issue" }).click();
+      await page.getByRole("button", { name: /Create issue|Manual/ }).click();
       await page.getByPlaceholder("Issue title").fill("Test Drag and Drop");
-      await page.getByPlaceholder("Describe the work").fill("Testing drag and drop functionality");
+      await fillIssueObjective(page, "Testing drag and drop functionality");
       await page.getByRole("button", { name: "Create", exact: true }).click();
       
       await page.waitForTimeout(2000);
@@ -110,4 +117,3 @@ test.describe("Kanban Drag and Drop", () => {
     console.log("✓ Assignment spacing test completed successfully");
   });
 });
-
