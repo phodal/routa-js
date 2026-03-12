@@ -658,6 +658,14 @@ User request: ${agentInput}`;
     return (
       <div className="rounded-2xl border border-gray-200/60 dark:border-[#1c1f2e] bg-white dark:bg-[#12141c] p-6 text-sm text-gray-500 dark:text-gray-400">
         No board available yet.
+        <button
+          onClick={() => {
+            void _createBoard();
+          }}
+          className="mt-4 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+        >
+          Create board
+        </button>
       </div>
     );
   }

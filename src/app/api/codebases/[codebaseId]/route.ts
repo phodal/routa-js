@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import { GitWorktreeService } from "@/core/git/git-worktree-service";
+import { resolveCodebaseSource } from "@/app/api/codebases/codebase-source";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +18,38 @@ export async function PATCH(
 ) {
   const { codebaseId } = await params;
   const body = await request.json();
-  const { branch, label, repoPath } = body;
+  const { branch, label, repoPath, sourceType, sourceUrl } = body as {
+    branch?: string;
+    label?: string;
+    repoPath?: string;
+    sourceType?: "local" | "github";
+    sourceUrl?: string;
+  };
 
   const system = getRoutaSystem();
 
-  await system.codebaseStore.update(codebaseId, { branch, label, repoPath });
+  const source = repoPath ? resolveCodebaseSource(repoPath) : {};
+  const updates: {
+    branch?: string;
+    label?: string;
+    repoPath?: string;
+    sourceType?: "local" | "github";
+    sourceUrl?: string;
+  } = {};
+
+  if (branch !== undefined) updates.branch = branch;
+  if (label !== undefined) updates.label = label;
+  if (repoPath !== undefined) updates.repoPath = repoPath;
+  if (typeof sourceType === "string" && sourceType.trim()) updates.sourceType = sourceType;
+  if (typeof sourceUrl === "string" && sourceUrl.trim()) updates.sourceUrl = sourceUrl;
+  if (repoPath !== undefined) {
+    if (source.sourceType) updates.sourceType = source.sourceType;
+    if (source.sourceUrl) updates.sourceUrl = source.sourceUrl;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await system.codebaseStore.update(codebaseId, updates);
+  }
   const codebase = await system.codebaseStore.get(codebaseId);
 
   return NextResponse.json({ codebase });

@@ -17,7 +17,7 @@
  */
 
 import React, { useCallback, useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { HomeInput } from "@/client/components/home-input";
 import { useWorkspaces, useCodebases } from "@/client/hooks/use-workspaces";
 import { useAcp } from "@/client/hooks/use-acp";
@@ -49,6 +49,7 @@ export function WorkspacePageClient({
 }) {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   // In static export mode the Rust server serves workspace/__placeholder__.html
   // for all /workspace/[id] paths, so useParams() initially returns "__placeholder__".
   // Extract the real workspace ID from the actual browser URL in that case.
@@ -71,7 +72,16 @@ export function WorkspacePageClient({
   const [traces, setTraces] = useState<TraceInfo[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "kanban" | "notes" | "note_tasks" | "bg_tasks" | "settings">(initialTab);
+  const parseTab = useCallback((tab: string | null) => {
+    if (tab === "kanban" || tab === "overview" || tab === "notes" || tab === "note_tasks" || tab === "bg_tasks" || tab === "settings") {
+      return tab;
+    }
+    return initialTab;
+  }, [initialTab]);
+
+  const [activeTab, setActiveTab] = useState<"overview" | "kanban" | "notes" | "note_tasks" | "bg_tasks" | "settings">(
+    parseTab(searchParams?.get("tab"))
+  );
   const [showA2UISource, setShowA2UISource] = useState(false);
   const [customA2UISurfaces, setCustomA2UISurfaces] = useState<A2UIMessage[]>([]);
   const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);

@@ -230,6 +230,25 @@ export async function PATCH(
     body.assignedProvider !== undefined || body.assignedSpecialistId !== undefined || body.assignedRole !== undefined
   );
   const retryingTrigger = body.retryTrigger === true;
+  const toColumnId = nextTask.columnId;
+  const targetBoard = toColumnId ? await system.kanbanBoardStore.get(nextTask.boardId) : undefined;
+  const targetColumn = toColumnId ? targetBoard?.columns.find((column) => column.id === toColumnId) : undefined;
+  const targetAutomation = targetColumn?.automation;
+
+  if (targetAutomation?.enabled && enteringDev) {
+    if (!nextTask.assignedProvider && targetAutomation.providerId) {
+      nextTask.assignedProvider = targetAutomation.providerId;
+    }
+    if (!nextTask.assignedRole && targetAutomation.role) {
+      nextTask.assignedRole = targetAutomation.role;
+    }
+    if (!nextTask.assignedSpecialistId && targetAutomation.specialistId) {
+      nextTask.assignedSpecialistId = targetAutomation.specialistId;
+    }
+    if (!nextTask.assignedSpecialistName && targetAutomation.specialistName) {
+      nextTask.assignedSpecialistName = targetAutomation.specialistName;
+    }
+  }
 
   if ((enteringDev || assignedWhileInDev || retryingTrigger) && !nextTask.triggerSessionId) {
     // Determine which codebase to use: first from task's codebaseIds, else repo path, else default
@@ -339,4 +358,3 @@ export async function DELETE(
   await system.taskStore.delete(taskId);
   return NextResponse.json({ deleted: true });
 }
-

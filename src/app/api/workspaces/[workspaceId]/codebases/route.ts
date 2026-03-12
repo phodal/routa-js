@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import { createCodebase } from "@/core/models/codebase";
+import { resolveCodebaseSource } from "@/app/api/codebases/codebase-source";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export async function POST(
   // If first codebase in workspace, set as default
   const count = await system.codebaseStore.countByWorkspace(workspaceId);
   const isDefault = count === 0;
+  const source = resolveCodebaseSource(repoPath);
 
   const codebase = createCodebase({
     id: crypto.randomUUID(),
@@ -57,6 +59,8 @@ export async function POST(
     branch,
     label,
     isDefault,
+    sourceType: source.sourceType,
+    sourceUrl: source.sourceUrl,
   });
 
   await system.codebaseStore.add(codebase);

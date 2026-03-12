@@ -11,7 +11,16 @@ export interface CodebaseStore {
   add(codebase: Codebase): Promise<void>;
   get(codebaseId: string): Promise<Codebase | undefined>;
   listByWorkspace(workspaceId: string): Promise<Codebase[]>;
-  update(codebaseId: string, fields: { branch?: string; label?: string; repoPath?: string }): Promise<void>;
+  update(
+    codebaseId: string,
+    fields: {
+      branch?: string;
+      label?: string;
+      repoPath?: string;
+      sourceType?: Codebase["sourceType"];
+      sourceUrl?: string;
+    },
+  ): Promise<void>;
   remove(codebaseId: string): Promise<void>;
   getDefault(workspaceId: string): Promise<Codebase | undefined>;
   setDefault(workspaceId: string, codebaseId: string): Promise<void>;
@@ -38,12 +47,23 @@ export class InMemoryCodebaseStore implements CodebaseStore {
     return Array.from(this.store.values()).filter((cb) => cb.workspaceId === workspaceId);
   }
 
-  async update(codebaseId: string, fields: { branch?: string; label?: string; repoPath?: string }): Promise<void> {
+  async update(
+    codebaseId: string,
+    fields: {
+      branch?: string;
+      label?: string;
+      repoPath?: string;
+      sourceType?: Codebase["sourceType"];
+      sourceUrl?: string;
+    },
+  ): Promise<void> {
     const cb = this.store.get(codebaseId);
     if (cb) {
       if (fields.branch !== undefined) cb.branch = fields.branch;
       if (fields.label !== undefined) cb.label = fields.label;
       if (fields.repoPath !== undefined) cb.repoPath = fields.repoPath;
+      if (fields.sourceType !== undefined) cb.sourceType = fields.sourceType;
+      if (fields.sourceUrl !== undefined) cb.sourceUrl = fields.sourceUrl;
       cb.updatedAt = new Date();
     }
   }
@@ -109,7 +129,16 @@ export class PgCodebaseStore implements CodebaseStore {
     return rows.map(this.toModel);
   }
 
-  async update(codebaseId: string, fields: { branch?: string; label?: string; repoPath?: string }): Promise<void> {
+  async update(
+    codebaseId: string,
+    fields: {
+      branch?: string;
+      label?: string;
+      repoPath?: string;
+      sourceType?: Codebase["sourceType"];
+      sourceUrl?: string;
+    },
+  ): Promise<void> {
     await this.db
       .update(codebases)
       .set({ ...fields, updatedAt: new Date() })
