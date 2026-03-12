@@ -67,6 +67,7 @@ Building agents is complex — failures happen. Use a feedback-driven loop:
 
 ### 2. Search Before Creating
 - Always search `docs/issues/` first — someone may have already documented the same problem.
+- When create issue to github, try to use `agent-browser` to capture  image and attach to issue body
 
 ### 3. Escalate to GitHub
 ```bash

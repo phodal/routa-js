@@ -105,3 +105,4 @@ target/
 .playwright-mcp/*
 *.png
 routa.db-shm
+dogfood-output
