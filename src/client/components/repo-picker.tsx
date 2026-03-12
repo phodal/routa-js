@@ -531,6 +531,13 @@ function SelectedRepoPill({
         onBranchChange={onBranchChange}
       />
 
+      <span
+        className="max-w-[200px] truncate text-[10px] font-mono text-gray-500 dark:text-gray-400"
+        title={value.path}
+      >
+        {value.path}
+      </span>
+
       {/* Status badges */}
       {currentRepo && !currentRepo.status.clean && (
         <span className="text-[9px] px-1 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">

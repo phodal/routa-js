@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { UseAcpState, UseAcpActions } from "@/client/hooks/use-acp";
@@ -50,6 +50,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
 
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(defaultBoardId);
   const [localTasks, setLocalTasks] = useState<TaskInfo[]>(tasks);
+  const autoPatchedTasksRef = useRef(new Set<string>());
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [draft, setDraft] = useState<DraftIssue>({
@@ -135,9 +136,62 @@ User request: ${agentInput}`;
     setSelectedBoardId(defaultBoardId);
   }, [defaultBoardId]);
 
+  const patchTask = useCallback(async (taskId: string, payload: Record<string, unknown>) => {
+    const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error ?? "Failed to update task");
+    }
+    const updated = data.task as TaskInfo;
+    setLocalTasks((current) => current.map((task) => (task.id === taskId ? updated : task)));
+    return updated;
+  }, []);
+
   useEffect(() => {
     setLocalTasks(tasks);
   }, [tasks]);
+
+  useEffect(() => {
+    if (codebases.length === 0 || localTasks.length === 0) return;
+
+    const codebaseById = new Map(codebases.map((codebase) => [codebase.id, codebase]));
+    const sessionById = new Map(sessions.map((session) => [session.sessionId, session]));
+
+    const pendingPatches: Array<{ taskId: string; codebaseId: string }> = [];
+
+    for (const task of localTasks) {
+      if (autoPatchedTasksRef.current.has(task.id)) continue;
+
+      const taskCodebaseIds = task.codebaseIds ?? [];
+      const hasValidCodebase = taskCodebaseIds.some((id) => codebaseById.has(id));
+      if (hasValidCodebase) continue;
+
+      let resolved: CodebaseData | null = null;
+      const session = task.triggerSessionId ? sessionById.get(task.triggerSessionId) : null;
+      if (session?.cwd) {
+        resolved = codebases.find((codebase) => codebase.repoPath === session.cwd) ?? null;
+      }
+
+      if (!resolved && defaultCodebase) {
+        resolved = defaultCodebase;
+      }
+
+      if (resolved) {
+        pendingPatches.push({ taskId: task.id, codebaseId: resolved.id });
+      }
+    }
+
+    if (pendingPatches.length === 0) return;
+
+    for (const patch of pendingPatches) {
+      autoPatchedTasksRef.current.add(patch.taskId);
+      void patchTask(patch.taskId, { codebaseIds: [patch.codebaseId] });
+    }
+  }, [codebases, defaultCodebase, localTasks, patchTask, sessions]);
 
   const repoHealth = useMemo(() => {
     if (codebases.length === 0) {
@@ -237,21 +291,6 @@ User request: ${agentInput}`;
     () => new Map(sessions.map((session) => [session.sessionId, session])),
     [sessions],
   );
-
-  const patchTask = useCallback(async (taskId: string, payload: Record<string, unknown>) => {
-    const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error ?? "Failed to update task");
-    }
-    const updated = data.task as TaskInfo;
-    setLocalTasks((current) => current.map((task) => (task.id === taskId ? updated : task)));
-    return updated;
-  }, []);
 
   const openTaskDetail = useCallback(async (task: TaskInfo) => {
     setActiveTaskId(task.id);
@@ -572,21 +611,6 @@ User request: ${agentInput}`;
                       </span>
                     </button>
                   ))}
-                  {(repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
-                    <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
-                      <span className="font-medium">Repo health</span>
-                      {repoHealth.missingRepoTasks > 0 && (
-                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-                          {repoHealth.missingRepoTasks} missing
-                        </span>
-                      )}
-                      {repoHealth.cwdMismatchTasks > 0 && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                          {repoHealth.cwdMismatchTasks} session mismatch
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -632,6 +656,21 @@ User request: ${agentInput}`;
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {(repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
+              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
+                <span className="font-medium">Repo health</span>
+                {repoHealth.missingRepoTasks > 0 && (
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                    {repoHealth.missingRepoTasks} missing
+                  </span>
+                )}
+                {repoHealth.cwdMismatchTasks > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                    {repoHealth.cwdMismatchTasks} session mismatch
+                  </span>
+                )}
+              </div>
+            )}
             {boards.length > 1 && (
               <select
                 value={selectedBoardId ?? ""}
