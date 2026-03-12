@@ -164,22 +164,6 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
     return output;
   }, [output, parsed, isCodebaseRetrievalFormat]);
 
-  // If it's codebase-retrieval with code sections, always use CodeRetrievalViewer
-  if (isCodebaseRetrievalFormat) {
-    return (
-      <div>
-        <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
-          <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-            Output (Code Sections)
-          </span>
-        </div>
-        <div className="p-2">
-          <CodeRetrievalViewer output={codeRetrievalContent} initiallyExpanded={true} />
-        </div>
-      </div>
-    );
-  }
-
   // Extract inner output from JSON wrapper (common pattern: {output: "..."})
   const innerOutput = parsed && typeof parsed === "object" && "output" in parsed
     ? (parsed as { output: string }).output
@@ -217,6 +201,22 @@ function ToolOutput({ output, toolName }: { output: string; toolName?: string })
   // Render rich text content with MarkdownViewer
   const [richTextExpanded, setRichTextExpanded] = useState(false);
   const richTextContent = typeof innerOutput === "string" ? innerOutput : output;
+
+  // If it's codebase-retrieval with code sections, always use CodeRetrievalViewer
+  if (isCodebaseRetrievalFormat) {
+    return (
+      <div>
+        <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+          <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+            Output (Code Sections)
+          </span>
+        </div>
+        <div className="p-2">
+          <CodeRetrievalViewer output={codeRetrievalContent} initiallyExpanded={true} />
+        </div>
+      </div>
+    );
+  }
 
   if (isRichTextContent && !isCodebaseRetrievalFormat) {
     return (
@@ -595,147 +595,6 @@ function inferToolName(name: string, input: unknown): string {
   }
 
   return name;
-}
-
-/** Merged Tool View - shows tool call input and result output together */
-function MergedToolView({
-  merged,
-  formatTime,
-}: {
-  merged: MergedToolRecord;
-  formatTime: (timestamp: string) => string;
-}) {
-  const [expanded, setExpanded] = useState(true); // Default expanded
-  const { toolCall, toolResult } = merged;
-  const rawToolName = toolCall.tool?.name ?? "unknown";
-  const toolName = inferToolName(rawToolName, toolCall.tool?.input);
-  const status = toolResult?.tool?.status ?? toolCall.tool?.status ?? "running";
-
-  // Parse output for display
-  const rawOutput = toolResult?.tool?.output;
-  const outputStr =
-    rawOutput == null
-      ? ""
-      : typeof rawOutput === "string"
-        ? rawOutput
-        : JSON.stringify(rawOutput, null, 2);
-
-  const hasOutput = !!outputStr;
-
-  return (
-    <div className="px-4 py-2.5 flex gap-3 border-l-2 border-orange-300 dark:border-orange-700">
-      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 shrink-0 w-16 text-right pt-0.5">
-        {formatTime(toolCall.timestamp)}
-      </span>
-      <div className="flex-1 min-w-0">
-        {/* Tool header row with expand toggle */}
-        <div className="flex items-center gap-2 mb-1.5">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-          >
-            <svg
-              className={`w-3 h-3 text-gray-400 transition-transform ${expanded ? "rotate-90" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wide">
-              Tool
-            </span>
-          </button>
-          <code className="text-[11px] font-mono font-semibold px-2 py-0.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded border border-orange-100 dark:border-orange-800/40">
-            {toolName}
-          </code>
-          <span
-            className={`text-[10px] font-medium ${
-              status === "completed"
-                ? "text-green-600 dark:text-green-400"
-                : status === "failed"
-                  ? "text-red-600 dark:text-red-400"
-                  : "text-yellow-600 dark:text-yellow-400"
-            }`}
-          >
-            {status}
-          </span>
-          {toolResult && (
-            <span className="text-[9px] text-gray-400 dark:text-gray-500">
-              → {formatTime(toolResult.timestamp)}
-            </span>
-          )}
-        </div>
-
-        {/* Collapsed preview or expanded details */}
-        {!expanded ? (
-          // Collapsed: show brief input summary
-          <div
-            onClick={() => setExpanded(true)}
-            className="cursor-pointer text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate hover:text-gray-700 dark:hover:text-gray-300"
-          >
-            {toolCall.tool?.input
-              ? typeof toolCall.tool.input === "string"
-                ? toolCall.tool.input.slice(0, 100)
-                : JSON.stringify(toolCall.tool.input).slice(0, 100)
-              : "(no input)"}
-            {(toolCall.tool?.input?.toString().length ?? 0) > 100 && "…"}
-          </div>
-        ) : (
-          // Expanded: show full input and output
-          <div className="space-y-2">
-            {/* Input parameters */}
-            {toolCall.tool && (
-              <div className="rounded-md border border-gray-200 dark:border-gray-700/60 overflow-hidden">
-                <div className="px-2 py-1 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700/60">
-                  <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                    Input Parameters
-                  </span>
-                </div>
-                <div className="px-2 py-1.5 bg-white dark:bg-gray-900/40">
-                  <ToolInputTable input={toolCall.tool} />
-                </div>
-              </div>
-            )}
-
-            {/* Files affected */}
-            {toolCall.files && toolCall.files.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {toolCall.files.map((f, i) => (
-                  <span
-                    key={i}
-                    className="text-[9px] font-mono px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded border border-gray-200 dark:border-gray-700"
-                  >
-                    {f.operation && (
-                      <span className="text-blue-500 dark:text-blue-400 mr-1">
-                        {f.operation}
-                      </span>
-                    )}
-                    {f.path}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Output */}
-            {hasOutput && (
-              <div className="rounded-md border border-cyan-200 dark:border-cyan-800/40 overflow-hidden">
-                <ToolOutput output={outputStr} toolName={toolName} />
-              </div>
-            )}
-
-            {/* No output yet */}
-            {!toolResult && (
-              <div className="text-[10px] text-yellow-600 dark:text-yellow-400 italic">
-                ⏳ Waiting for result...
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 /** Inline tool display for conversation flow - compact, non-intrusive */

@@ -51,8 +51,6 @@ type ContentSegment =
 
 const MERMAID_BLOCK_RE = /```mermaid\n([\s\S]*?)```/gm;
 const HTML_BLOCK_RE = /```html\n([\s\S]*?)```/gm;
-// Combined regex for any special block
-const SPECIAL_BLOCK_RE = /```(mermaid|html)\n([\s\S]*?)```/gm;
 
 function hasMermaidBlocks(content: string): boolean {
   MERMAID_BLOCK_RE.lastIndex = 0;
@@ -93,10 +91,6 @@ function splitSpecialBlocks(content: string): ContentSegment[] {
   return segments;
 }
 
-/** @deprecated Use splitSpecialBlocks instead */
-function splitMermaidBlocks(content: string): ContentSegment[] {
-  return splitSpecialBlocks(content);
-}
 
 // ─── Content complexity detection ────────────────────────────────────
 // Patterns that REQUIRE tiptap for interactivity
@@ -151,6 +145,12 @@ export function MarkdownViewer({
     [content, isStreaming]
   );
 
+  const complexity = useMemo(() => detectComplexity(content), [content]);
+  const html = useMemo(() => {
+    if (complexity === "simple") return "";
+    return markdownToHtml(content);
+  }, [content, complexity]);
+
   if (hasSpecial) {
     const segments = splitSpecialBlocks(content);
     return (
@@ -175,12 +175,6 @@ export function MarkdownViewer({
       </div>
     );
   }
-
-  const complexity = useMemo(() => detectComplexity(content), [content]);
-  const html = useMemo(() => {
-    if (complexity === "simple") return "";
-    return markdownToHtml(content);
-  }, [content, complexity]);
 
   // ── Simple: plain text ──────────────────────────────────────────────
   if (complexity === "simple") {
