@@ -620,33 +620,33 @@ class HttpSessionStore {
     let removedCount = 0;
 
     // Remove stale sessions
-    for (const [sessionId, lastAccess] of this.lastAccessTime.entries()) {
+    for (const [_sessionId, lastAccess] of this.lastAccessTime.entries()) {
       const isStale = now - lastAccess > staleThreshold;
-      const hasActiveSse = this.sseControllers.has(sessionId);
-      const isStreaming = this.streamingSessionIds.has(sessionId);
+      const hasActiveSse = this.sseControllers.has(_sessionId);
+      const isStreaming = this.streamingSessionIds.has(_sessionId);
 
       // Only remove if stale AND not actively used
       if (isStale && !hasActiveSse && !isStreaming) {
-        const session = this.sessions.get(sessionId);
+        const session = this.sessions.get(_sessionId);
 
         // Protect child sessions whose parent is still active
         const isChildSession = !!session?.parentSessionId;
         const parentStillActive = isChildSession && this.sessions.has(session!.parentSessionId!);
         if (parentStillActive) {
           // Refresh access time so child stays alive while parent exists
-          this.lastAccessTime.set(sessionId, now);
+          this.lastAccessTime.set(_sessionId, now);
           continue;
         }
 
         // Protect ROUTA orchestrator sessions — they are long-running and must not
         // be evicted while child CRAFTERs / GATEs could still be running.
         if (session?.role === "ROUTA") {
-          this.lastAccessTime.set(sessionId, now);
+          this.lastAccessTime.set(_sessionId, now);
           continue;
         }
 
-        this.deleteSession(sessionId);
-        this.lastAccessTime.delete(sessionId);
+        this.deleteSession(_sessionId);
+        this.lastAccessTime.delete(_sessionId);
         removedCount++;
       }
     }
@@ -688,7 +688,7 @@ class HttpSessionStore {
       totalPendingNotifications += pending.length;
     }
 
-    for (const [sessionId, lastAccess] of this.lastAccessTime.entries()) {
+    for (const [_sessionId, lastAccess] of this.lastAccessTime.entries()) {
       if (now - lastAccess > HttpSessionStore.STALE_SESSION_MS) {
         staleSessionCount++;
       }

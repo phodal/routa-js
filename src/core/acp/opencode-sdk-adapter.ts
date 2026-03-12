@@ -246,7 +246,10 @@ export class OpencodeSdkAdapter {
       this._alive = true;
     } catch (error) {
       console.error("[OpencodeSdkAdapter] Failed to connect:", error);
-      throw new Error(`Failed to connect to OpenCode server at ${this.serverUrl}: ${error}`);
+      throw new Error(
+        `Failed to connect to OpenCode server at ${this.serverUrl}: ${error}`,
+        { cause: error }
+      );
     }
   }
 
@@ -441,7 +444,6 @@ export class OpencodeSdkAdapter {
     const sessionId = this.sessionId!;
     const resolvedModel = model ?? config.model;
 
-    let fullContent = "";
     let inputTokens = 0;
     let outputTokens = 0;
     let stopReason = "end_turn";
@@ -939,7 +941,6 @@ export class OpencodeSdkDirectAdapter {
     requestMessages.push({ role: "user", content: text });
     this.messages.push({ role: "user", content: text });
 
-    let fullContent = "";
     let inputTokens = 0;
     let outputTokens = 0;
     let stopReason = "end_turn";
@@ -1038,7 +1039,6 @@ export class OpencodeSdkDirectAdapter {
               // Regular text content
               if (delta.content) {
                 roundContent += delta.content;
-                fullContent += delta.content;
                 const n = createNotification("session/update", {
                   sessionId,
                   update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: delta.content } },
@@ -1224,4 +1224,3 @@ export class OpencodeSdkDirectAdapter {
     this.close().catch(() => {});
   }
 }
-

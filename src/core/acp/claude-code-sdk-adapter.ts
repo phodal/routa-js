@@ -230,7 +230,6 @@ export class ClaudeCodeSdkAdapter {
     );
 
     let stopReason = "end_turn";
-    let fullContent = "";
     let inputTokens = 0;
     let outputTokens = 0;
 
@@ -331,11 +330,6 @@ export class ClaudeCodeSdkAdapter {
 
         // Accumulate content
         if (msg.type === "assistant") {
-          for (const block of msg.message.content) {
-            if (block.type === "text") {
-              fullContent += block.text;
-            }
-          }
           if (msg.message.usage) {
             inputTokens = msg.message.usage.input_tokens ?? inputTokens;
             outputTokens = msg.message.usage.output_tokens ?? outputTokens;
@@ -345,7 +339,7 @@ export class ClaudeCodeSdkAdapter {
         if (msg.type === "result") {
           stopReason = msg.stop_reason ?? (msg.is_error ? "error" : "end_turn");
           if (msg.subtype === "success" && msg.result) {
-            fullContent = msg.result;
+            // no-op: promptStream does not return accumulated content
           }
           if (msg.usage) {
             inputTokens = msg.usage.input_tokens ?? inputTokens;
