@@ -56,6 +56,42 @@ Co-authored-by: gemini-cli (...) <218195315+gemini-cli@users.noreply.github.com>
 - PR body must include **Playwright screenshots** or recordings.
 - Attach e2e test screenshots or recordings when available.
 
+### PR Description Template (建议)
+
+Use this template to avoid vague/low-signal summaries:
+
+- 目标：一句话说明要解决的业务问题。
+- 影响范围：改动了哪些模块（文件/域名）与为什么。
+- 变更清单：逐条列出关键改动（建议 4-8 条）。
+- 风险与影响：是否有行为变更、兼容性风险、回归面。
+- 验证：列出执行过的命令与结果。
+- 跟踪：关联 issue（例如 `Fixes #124`）。
+
+示例：
+
+```text
+## Why
+修复 Kanban 自动化列在某些路径下不触发 agent 会话的问题，恢复「移动卡片自动开始」的核心流程。
+
+## What Changed
+- 修复 workflow orchestrator 重复实例导致 createSession 回调丢失的问题。
+- MCP 侧 Kanban 流程改为复用全局 singleton，避免 handler 被覆盖。
+- 修复 manual issue 弹窗的 TipTap SSR 崩溃。
+- 补齐 Kanban column automation e2e，并同步更新旧的 kanban e2e 用例。
+
+## Validation
+- `npm run lint`
+- `npm run typecheck`（如有）
+- `npm run test`
+- `npx playwright test e2e/kanban-column-automation.spec.ts ...`
+
+## Risks
+- 自动化触发链路新增了会话启动的依赖路径，建议观察新建卡片到启动耗时是否有回归。
+
+## References
+- Fixes #124
+```
+
 ## Issue Management — Feedback-Driven Loop
 
 Building agents is complex — failures happen. Use a feedback-driven loop:
