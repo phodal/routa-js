@@ -4,8 +4,19 @@
 
 - Scope: `crates/routa-core/src` + `crates/routa-server/src`
 - Rust source files: 120
-- Files with test markers (`#[test]` / `#[tokio::test]`): 10
-- Gap: 110 files without direct test markers
+- Files with test markers (`#[test]` / `#[tokio::test]`): 13
+- Gap: 107 files without direct test markers
+
+## Coverage Targets
+
+- Focus: test coverage is the primary fitness signal (not only task checklist progress).
+- Tooling target: `cargo llvm-cov` (line/function/region coverage).
+- Interim proxy (until `cargo llvm-cov` available): file-level test-marker ratio.
+- Current proxy: `13 / 120 = 10.8%` files with test markers.
+- Target gates:
+  - `routa-core` line coverage >= 55% (short-term), >= 70% (mid-term).
+  - changed Rust files in PR should not reduce crate-level coverage.
+  - new store/api modules should include direct unit tests in same PR.
 
 ## Plan
 
@@ -33,6 +44,9 @@
 
 ## Validation Log
 
+- Coverage tooling:
+  - `cargo llvm-cov --version` -> unavailable in current environment (`no such command: llvm-cov`).
+  - Action: install `cargo-llvm-cov` in dev/CI and start recording line coverage trend.
 - `cargo test -p routa-core --offline`:
   - Result: failed due existing permission-sensitive tests in `storage::local_session_provider::*` (`Operation not permitted` in sandbox).
   - Note: all newly added tests under `git::tests::*` passed.
