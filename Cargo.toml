@@ -5,6 +5,7 @@ members = [
     "crates/routa-server",
     "crates/routa-cli",
     "crates/routa-rpc",
+    "crates/routa-security-scan",
     "apps/desktop/src-tauri",
 ]
 

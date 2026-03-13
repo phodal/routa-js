@@ -1,0 +1,62 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Dockerfile'
+      - 'src/**'
+      - 'crates/**'
+      - '.github/workflows/security-scan.yml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Dockerfile'
+      - 'src/**'
+      - 'crates/**'
+      - '.github/workflows/security-scan.yml'
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install deps for scanners
+        run: |
+          npm ci
+          cargo install cargo-audit --locked || true
+          sudo apt-get update
+          sudo apt-get install -y hadolint || true
+
+      - name: Run reusable security scan module
+        run: cargo run -p routa-security-scan -- --target . --json-out reports/security-scan.json --md-out reports/security-scan.md
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-report
+          path: reports/
+
+      - name: Publish summary
+        if: always()
+        run: cat reports/security-scan.md >> "$GITHUB_STEP_SUMMARY"
