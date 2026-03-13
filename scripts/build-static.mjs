@@ -7,7 +7,7 @@
  * static build, then restores it.
  */
 import { execSync } from "child_process";
-import { renameSync, existsSync, mkdirSync } from "fs";
+import { renameSync, existsSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
 

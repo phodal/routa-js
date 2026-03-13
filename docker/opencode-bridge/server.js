@@ -177,7 +177,7 @@ class OpenCodeSession {
       }
       this.pendingRequests.clear()
       for (const { res } of this.sseClients) {
-        try { res.end() } catch {}
+        try { res.end() } catch { /* ignore client disconnect during shutdown */ }
       }
       this.sseClients.clear()
     })
@@ -240,20 +240,20 @@ class OpenCodeSession {
     for (const [termId, terminal] of this.terminals) {
       if (!terminal.exited) {
         console.log(`[terminal] session cleanup — killing ${termId}`)
-        try { terminal.process.kill('SIGTERM') } catch {}
+        try { terminal.process.kill('SIGTERM') } catch { /* ignore already-exited process */ }
         setTimeout(() => {
           if (!terminal.exited) {
-            try { terminal.process.kill('SIGKILL') } catch {}
+            try { terminal.process.kill('SIGKILL') } catch { /* ignore already-exited process */ }
           }
         }, 3000)
       }
     }
     this.terminals.clear()
     if (this.proc) {
-      try { this.proc.kill('SIGTERM') } catch {}
+      try { this.proc.kill('SIGTERM') } catch { /* ignore already-exited process */ }
       setTimeout(() => {
         if (this.proc && this.proc.exitCode === null) {
-          try { this.proc.kill('SIGKILL') } catch {}
+          try { this.proc.kill('SIGKILL') } catch { /* ignore already-exited process */ }
         }
       }, 5000)
     }
@@ -263,7 +263,7 @@ class OpenCodeSession {
 
   _write(msg) {
     if (this.proc && this.proc.stdin) {
-      try { this.proc.stdin.write(JSON.stringify(msg) + '\n') } catch {}
+      try { this.proc.stdin.write(JSON.stringify(msg) + '\n') } catch { /* ignore write errors on closed stdin */ }
     }
   }
 
@@ -288,7 +288,7 @@ class OpenCodeSession {
       else if (line[i] === '}') {
         depth--
         if (!depth && start >= 0) {
-          try { this._handleMsg(JSON.parse(line.slice(start, i + 1))) } catch {}
+          try { this._handleMsg(JSON.parse(line.slice(start, i + 1))) } catch { /* ignore malformed extracted fragment */ }
           start = -1
         }
       }
@@ -515,7 +515,7 @@ class OpenCodeSession {
             terminal.process.kill('SIGTERM')
             setTimeout(() => {
               if (!terminal.exited) {
-                try { terminal.process.kill('SIGKILL') } catch {}
+                try { terminal.process.kill('SIGKILL') } catch { /* ignore already-exited process */ }
               }
             }, 3000)
           } catch (err) {
@@ -537,10 +537,10 @@ class OpenCodeSession {
               terminal.process.kill('SIGTERM')
               setTimeout(() => {
                 if (!terminal.exited) {
-                  try { terminal.process.kill('SIGKILL') } catch {}
+                  try { terminal.process.kill('SIGKILL') } catch { /* ignore already-exited process */ }
                 }
               }, 3000)
-            } catch {}
+            } catch { /* ignore already-exited process */ }
           }
           this.terminals.delete(termId)
         }

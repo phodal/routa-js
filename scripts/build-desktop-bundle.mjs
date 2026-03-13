@@ -14,7 +14,7 @@
  * copied into the standalone node_modules.
  */
 import { execSync } from "child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, readdirSync } from "fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 

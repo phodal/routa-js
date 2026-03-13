@@ -34,7 +34,7 @@ async function main() {
 
     // Check for visible error messages
     const errorElements = await page.locator('[role="alert"], .error, .text-red-500, [class*="error"]').all();
-    let visibleErrors = [];
+    const visibleErrors = [];
     for (const el of errorElements) {
       if (await el.isVisible()) {
         visibleErrors.push(await el.textContent());

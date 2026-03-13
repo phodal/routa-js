@@ -50,47 +50,41 @@ const eslintConfig = [
     },
     rules: {
       ...reactPlugin.configs.recommended.rules,
-      // Convert all react-hooks rules to warnings
-      ...Object.fromEntries(
-        Object.entries(reactHooksPlugin.configs.recommended.rules).map(
-          ([key, value]) => [key, value === "error" ? "warn" : value]
-        )
-      ),
+      ...reactHooksPlugin.configs.recommended.rules,
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs["core-web-vitals"].rules,
-      // Disable some overly strict rules
+      // Keep only rules that must stay relaxed for current codebase compatibility.
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": [
-        "warn",
+        "error",
         {
           argsIgnorePattern: "^_",
           varsIgnorePattern: "^_",
         },
       ],
       "@typescript-eslint/no-require-imports": "off", // Allow require() for dynamic imports
-      "@typescript-eslint/triple-slash-reference": "warn", // Downgrade to warning
-      "@typescript-eslint/no-unsafe-function-type": "warn", // Downgrade to warning
+      "@typescript-eslint/triple-slash-reference": "error",
+      "@typescript-eslint/no-unsafe-function-type": "error",
       "react/react-in-jsx-scope": "off",
       "react/prop-types": "off",
-      "react/no-unescaped-entities": "warn", // Downgrade to warning
-      // Downgrade all react-hooks rules to warnings
-      "react-hooks/rules-of-hooks": "warn",
-      "react-hooks/exhaustive-deps": "warn",
-      "@next/next/no-html-link-for-pages": "warn", // Downgrade to warning
-      "no-useless-escape": "warn", // Downgrade to warning
-      "prefer-const": "warn", // Downgrade to warning
-      "no-empty": "warn", // Downgrade to warning
-      "no-prototype-builtins": "warn", // Downgrade to warning
-      "no-regex-spaces": "warn", // Downgrade to warning
-      "no-fallthrough": "warn", // Downgrade to warning
-      "no-unused-private-class-members": "warn", // Downgrade to warning
-      "preserve-caught-error": "warn", // Downgrade to warning
-      "no-useless-assignment": "warn", // Downgrade to warning
-      "no-unsafe-finally": "warn", // Downgrade to warning
-      "@next/next/no-img-element": "warn", // Downgrade to warning
-      "react-hooks/set-state-in-effect": "warn", // Downgrade to warning
-      "react-hooks/purity": "warn", // Downgrade to warning
-      "react-hooks/refs": "warn", // Downgrade to warning
+      "react/no-unescaped-entities": "error",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "error",
+      "@next/next/no-html-link-for-pages": "error",
+      "no-useless-escape": "error",
+      "prefer-const": "error",
+      "no-empty": "error",
+      "no-prototype-builtins": "error",
+      "no-regex-spaces": "error",
+      "no-fallthrough": "error",
+      "no-unused-private-class-members": "error",
+      "preserve-caught-error": "error",
+      "no-useless-assignment": "error",
+      "no-unsafe-finally": "error",
+      "@next/next/no-img-element": "error",
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/purity": "error",
+      "react-hooks/refs": "error",
     },
     settings: {
       react: {
@@ -107,23 +101,6 @@ const eslintConfig = [
       "no-empty": "off",
     },
   },
-  // Relax rules for scripts
-  {
-    files: ["scripts/**/*.{ts,js,mjs}"],
-    rules: {
-      "@typescript-eslint/no-unused-vars": "off",
-      "no-regex-spaces": "off",
-      "prefer-const": "off",
-    },
-  },
-  // Relax rules for docker bridge server
-  {
-    files: ["docker/opencode-bridge/**/*.js"],
-    rules: {
-      "no-empty": "off",
-    },
-  },
 ];
 
 export default eslintConfig;
-

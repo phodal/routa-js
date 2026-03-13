@@ -59,7 +59,7 @@ function parseContract(): RouteEndpoint[] {
 
   for (const line of content.split("\n")) {
     // Match path definitions (2-space indented, starts with /)
-    const pathMatch = line.match(/^  (\/api\/\S+):$/);
+    const pathMatch = line.match(/^{2}(\/api\/\S+):$/);
     if (pathMatch) {
       currentPath = pathMatch[1];
       continue;
@@ -67,7 +67,7 @@ function parseContract(): RouteEndpoint[] {
 
     // Match method definitions (4-space indented)
     if (currentPath) {
-      const methodMatch = line.match(/^    (\w+):$/);
+      const methodMatch = line.match(/^{4}(\w+):$/);
       if (methodMatch && methods.includes(methodMatch[1].toLowerCase())) {
         endpoints.push({
           method: methodMatch[1].toUpperCase(),
@@ -271,10 +271,6 @@ function extractRouteCalls(
 // ─────────────────────────────────────────────────────────
 // Comparison logic
 // ─────────────────────────────────────────────────────────
-function snakeToCamel(s: string): string {
-  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-}
-
 function normalizeEndpoint(e: RouteEndpoint): string {
   // Normalize path params to a generic placeholder so that naming differences
   // between backends don't cause false mismatches:

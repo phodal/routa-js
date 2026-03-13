@@ -15,7 +15,6 @@ import { PgNoteStore } from "../src/core/db/pg-note-store";
 import { PgConversationStore } from "../src/core/db/pg-conversation-store";
 import { AgentRole, AgentStatus, ModelTier } from "../src/core/models/agent";
 import { TaskStatus } from "../src/core/models/task";
-import { createSpecNote } from "../src/core/models/note";
 import { MessageRole } from "../src/core/models/message";
 import { v4 as uuidv4 } from "uuid";
 
@@ -306,7 +305,7 @@ async function testEventBus() {
 
   try {
     let received = false;
-    bus.on("test", (e) => { received = true; });
+    bus.on("test", (_e) => { received = true; });
     bus.emit({
       type: AgentEventType.AGENT_CREATED,
       agentId: "a1",
@@ -380,7 +379,7 @@ async function testEventBus() {
   } catch (e) { fail("wait group", e); }
 
   try {
-    const { promise, dispose } = bus.preSubscribe({
+    const { promise } = bus.preSubscribe({
       id: "pre1",
       agentId: "watcher",
       agentName: "watcher-agent",

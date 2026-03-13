@@ -91,43 +91,6 @@ function extractRefs(obj: unknown, refs: Set<string> = new Set()): Set<string> {
 }
 
 // ─────────────────────────────────────────────────────────
-// Fully dereference a schema for AJV compilation
-// ─────────────────────────────────────────────────────────
-function deref(
-  schema: unknown,
-  components: Record<string, unknown>,
-  depth = 0,
-  visiting = new Set<string>()
-): unknown {
-  if (depth > 25) return schema;
-  if (!schema || typeof schema !== "object") return schema;
-  if (Array.isArray(schema)) return schema.map((i) => deref(i, components, depth, visiting));
-
-  const obj = schema as Record<string, unknown>;
-
-  if (typeof obj.$ref === "string") {
-    const match = obj.$ref.match(/^#\/components\/schemas\/(.+)$/);
-    if (match && components[match[1]]) {
-      const name = match[1];
-      // Stop circular recursion — leave as $ref (will be resolved via $defs)
-      if (visiting.has(name)) {
-        return { $ref: `#/$defs/${name}` };
-      }
-      const nextVisiting = new Set(visiting);
-      nextVisiting.add(name);
-      return deref(components[name], components, depth + 1, nextVisiting);
-    }
-    return obj;
-  }
-
-  const result: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    result[k] = deref(v, components, depth, visiting);
-  }
-  return result;
-}
-
-// ─────────────────────────────────────────────────────────
 // Collect all schemas referenced by operations
 // ─────────────────────────────────────────────────────────
 function collectSchemaUsage(
