@@ -42,4 +42,5 @@ reqwest = { version = "0.12", features = ["json"] }
 [dev-dependencies]
 axum = "0.8.8"
 reqwest = { version = "0.12", features = ["json"] }
+tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6.8", features = ["cors"] }

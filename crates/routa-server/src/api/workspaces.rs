@@ -44,7 +44,7 @@ async fn get_workspace(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateWorkspaceRequest {
-    title: String,
+    title: Option<String>,
     metadata: Option<HashMap<String, String>>,
 }
 
@@ -52,7 +52,12 @@ async fn create_workspace(
     State(state): State<AppState>,
     Json(body): Json<CreateWorkspaceRequest>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
-    let ws = Workspace::new(uuid::Uuid::new_v4().to_string(), body.title, body.metadata);
+    let title = body
+        .title
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ServerError::BadRequest("title is required".to_string()))?;
+    let ws = Workspace::new(uuid::Uuid::new_v4().to_string(), title, body.metadata);
 
     state.workspace_store.save(&ws).await?;
     Ok(Json(serde_json::json!({ "workspace": ws })))

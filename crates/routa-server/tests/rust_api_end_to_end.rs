@@ -451,7 +451,7 @@ async fn api_codebase_and_file_search_flow() {
     let search = fixture
         .client
         .get(fixture.endpoint(&format!(
-            "/api/files/search?repoPath={}&q=main&limit=5",
+            "/api/files/search?repoPath={}&q=lib&limit=5",
             repo_path.to_string_lossy()
         )))
         .send()
