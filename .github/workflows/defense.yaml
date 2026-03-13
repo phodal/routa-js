@@ -1,0 +1,162 @@
+# Defense-in-Depth CI Pipeline
+#
+# 摒弃传统针对 DX 的"宽容度"，用硬性约束封锁 AI 的乱写空间。
+# 通过持续演进的架构约束实现深度防御：
+#   - 控制爆炸半径：通过权限和行为约束限定 AI 的操作范围
+#   - 反熵增机制：设立质量门槛与技术债检查，将 AI 的解空间限制在安全边界内
+#
+# Hard Gates（任一失败直接阻断）:
+#   - ts_test_pass: TypeScript 测试必须 100% 通过
+#   - rust_test_pass: Rust 测试必须 100% 通过
+#   - api_contract_parity: API 契约必须一致
+#   - lint_pass: Lint 必须 0 错误
+#   - no_critical_vulnerabilities: 无严重安全漏洞
+
+name: 'Defense'
+
+on:
+  pull_request:
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_ENV: test
+
+jobs:
+  # ══════════════════════════════════════════════════════════════
+  # HARD GATE 1: Lint (反熵增 - 代码风格约束)
+  # ══════════════════════════════════════════════════════════════
+  lint:
+    name: 'Gate: Lint'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  # ══════════════════════════════════════════════════════════════
+  # HARD GATE 2: TypeScript Tests (行为约束)
+  # ══════════════════════════════════════════════════════════════
+  test-ts:
+    name: 'Gate: TS Tests'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test:run
+
+  # ══════════════════════════════════════════════════════════════
+  # HARD GATE 3: Rust Tests (行为约束)
+  # ══════════════════════════════════════════════════════════════
+  test-rust:
+    name: 'Gate: Rust Tests'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --workspace
+
+  # ══════════════════════════════════════════════════════════════
+  # HARD GATE 4: API Contract Parity (契约约束)
+  # ══════════════════════════════════════════════════════════════
+  api-contract:
+    name: 'Gate: API Contract'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate OpenAPI schema
+        run: npm run api:schema:validate
+
+      - name: Check API parity (Next.js vs Rust vs Contract)
+        run: npm run api:check
+
+  # ══════════════════════════════════════════════════════════════
+  # Fitness Score Report (评分，不阻断)
+  # ══════════════════════════════════════════════════════════════
+  fitness-report:
+    name: 'Fitness Report'
+    runs-on: ubuntu-latest
+    needs: [lint, test-ts, test-rust, api-contract]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Run fitness check (dry-run)
+        run: python3 docs/fitness/scripts/fitness.py --dry-run
+
+      - name: Summary
+        run: |
+          echo "## Fitness Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Gate | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TS Tests | ${{ needs.test-ts.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Tests | ${{ needs.test-rust.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API Contract | ${{ needs.api-contract.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+

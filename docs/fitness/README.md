@@ -1,13 +1,23 @@
 # Fitness Function Rulebook
 
+> **Defense-in-Depth**: 摒弃传统针对 DX 的"宽容度"，用硬性约束封锁 AI 的乱写空间。
+
+## 防御理念
+
+通过持续演进的架构约束实现深度防御：
+
+- **控制爆炸半径**: 通过权限和行为约束限定 AI 的操作范围
+- **反熵增机制**: 设立质量门槛与技术债检查（Linter、静态分析），将 AI 的解空间限制在安全边界内
+- **契约优先**: `api-contract.yaml` 作为单一事实来源，双后端必须一致
+
 ## Quick Start
 
 ```bash
 # 运行 fitness 检查（解析 frontmatter，执行命令，输出结果）
-python docs/fitness/scripts/fitness.py
+python3 docs/fitness/scripts/fitness.py
 
 # 仅查看会执行什么（不实际运行）
-python docs/fitness/scripts/fitness.py --dry-run
+python3 docs/fitness/scripts/fitness.py --dry-run
 ```
 
 ## Scope
@@ -36,17 +46,17 @@ Fitness = Σ (Weight_i × Score_i) / 100
 
 ## Dimensions (九大维度)
 
-| 维度 | 权重 | 描述 | 关键指标 |
-|------|------|------|----------|
-| testability | 14% | 测试覆盖与通过率 | 覆盖率≥80%, 通过率100% |
-| performance | 10% | API 延迟与错误率 | p95<300ms, 错误率<1% |
-| security | 14% | 依赖漏洞与安全扫描 | critical=0, high≤阈值 |
-| maintainability | 14% | 架构回归与代码质量 | 新增smell=0, 契约100% |
-| deployability | 10% | 容器构建与配置 | 构建成功, 镜像回归≤5% |
-| evolvability | 10% | API 兼容性 | breaking changes=0 |
-| observability | 10% | 日志/指标/追踪 | trace覆盖≥80% |
-| compliance | 10% | 策略合规 | policy deny=0 |
-| ai | 8% | AI 特有治理 | prompt回归≤2%, 对抗测试通过 |
+| 维度 | 权重 | 描述 | 关键指标 | 证据文件 |
+|------|------|------|----------|----------|
+| testability | 14% | 测试覆盖与通过率 | 覆盖率≥80%, 通过率100% | [unit-test.md](unit-test.md) |
+| performance | 10% | API 延迟与错误率 | p95<300ms, 错误率<1% | k6/wrk |
+| security | 14% | 依赖漏洞与安全扫描 | critical=0, high≤阈值 | snyk/trivy |
+| maintainability | 14% | 架构回归与代码质量 | 新增smell=0, 契约100% | [rust-api-test.md](rust-api-test.md) |
+| deployability | 10% | 容器构建与配置 | 构建成功, 镜像回归≤5% | Dockerfile |
+| evolvability | 10% | API 兼容性与契约 | breaking changes=0, parity=100% | [api-contract.md](api-contract.md) |
+| observability | 10% | 日志/指标/追踪 | trace覆盖≥80% | OTEL |
+| compliance | 10% | 策略合规 | policy deny=0 | OPA/Conftest |
+| ai | 8% | AI 特有治理 | prompt回归≤2%, 对抗测试通过 | promptfoo |
 
 ## Hard Gates
 
