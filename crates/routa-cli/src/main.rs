@@ -138,6 +138,12 @@ enum Commands {
         #[command(subcommand)]
         action: WorkflowAction,
     },
+
+    /// Local security scanning commands
+    Security {
+        #[command(subcommand)]
+        action: SecurityAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -324,6 +330,22 @@ enum WorkflowAction {
         /// Custom specialist definitions directory
         #[arg(long)]
         specialist_dir: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SecurityAction {
+    /// Scan a directory with built-in security rules
+    Scan {
+        /// Directory path to scan
+        #[arg(long, default_value = ".")]
+        path: String,
+        /// Output format: text or json
+        #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+        format: String,
+        /// Return non-zero when error-level findings are present
+        #[arg(long, default_value_t = false)]
+        fail_on_error: bool,
     },
 }
 
@@ -564,6 +586,14 @@ async fn main() {
                     }
                 }
             }
+
+            Commands::Security { action } => match action {
+                SecurityAction::Scan {
+                    path,
+                    format,
+                    fail_on_error,
+                } => commands::security::scan(&path, &format, fail_on_error).await,
+            },
         }
     } else {
         // No prompt and no subcommand — show help
