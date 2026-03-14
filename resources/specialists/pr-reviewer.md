@@ -109,10 +109,10 @@ Use this exact structure:
 - **Suggestion:** [Smallest credible fix]
 
 ## Filtered Out
-- [Count] below threshold
-- [Count] covered by linter/style tooling
-- [Count] framework-handled / precedent-based
-- [Count] test-only or otherwise non-actionable
+- [actual count] below threshold
+- [actual count] covered by linter/style tooling
+- [actual count] framework-handled / precedent-based
+- [actual count] test-only or otherwise non-actionable
 
 ## Positive Observations
 - [Only include meaningful positives]

@@ -14,11 +14,15 @@ export function loadProjectReviewRules(cwd: string = process.cwd()): string | nu
     return null;
   }
 
-  const rawRules = fs.readFileSync(rulesPath, "utf-8");
-  const { content } = matter(rawRules);
-  const rules = content.trim();
+  try {
+    const rawRules = fs.readFileSync(rulesPath, "utf-8");
+    const { content } = matter(rawRules);
+    const rules = content.trim();
 
-  return rules.length > 0 ? rules : null;
+    return rules.length > 0 ? rules : null;
+  } catch {
+    return null;
+  }
 }
 
 export function formatProjectReviewRulesContext(cwd: string = process.cwd()): string {

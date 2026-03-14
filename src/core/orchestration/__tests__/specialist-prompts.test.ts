@@ -31,8 +31,16 @@ function createSpecialist(id: string): SpecialistConfig {
 }
 
 afterEach(() => {
-  for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+  while (tempDirs.length > 0) {
+    const dir = tempDirs.pop();
+    if (!dir) {
+      continue;
+    }
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup for temp fixtures.
+    }
   }
 });
 
@@ -77,6 +85,7 @@ title: "Local rules"
 
     expect(prompt).not.toContain("Project-Specific Review Rules");
     expect(prompt).not.toContain("This should not be injected for crafter");
+    expect(prompt).toContain("**Reminder:** Stay read-only.");
   });
 
   it("keeps extra delegation context alongside project review rules", () => {

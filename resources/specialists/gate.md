@@ -56,7 +56,7 @@ Use this exact format:
 ```markdown
 ### Finding Validation
 - Verdict: KEEP / REJECT
-- Confidence: 1-10
+- Confidence: 1-10 (KEEP only when confidence is at least 7)
 - Category: [security|logic_error|performance|testing|...]
 - Reasoning: [one or two evidence-based sentences]
 - Suggested action: [smallest fix, or "Do not report"]
