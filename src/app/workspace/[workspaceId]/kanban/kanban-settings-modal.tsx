@@ -89,139 +89,137 @@ export function KanbanSettingsModal({
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="relative flex h-full w-full items-center justify-center p-3 sm:p-6">
-        <div className="relative flex h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-white shadow-[0_30px_120px_rgba(15,23,42,0.32)] dark:bg-[#0d1118]">
-          <div className="relative overflow-hidden border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.22),_transparent_35%),linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.92))] px-5 py-5 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.18),_transparent_32%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(13,17,24,0.98))] sm:px-7">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-3">
-                <div className="inline-flex items-center rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+      <div className="relative flex h-full w-full items-center justify-center p-2 sm:p-4">
+        <div className="relative flex h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[24px] border border-white/10 bg-white shadow-[0_30px_120px_rgba(15,23,42,0.32)] dark:bg-[#0d1118]">
+          <div className="relative overflow-hidden border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.16),_transparent_30%),linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.94))] px-4 py-4 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.12),_transparent_28%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(13,17,24,0.98))] sm:px-5">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0 space-y-2">
+                <div className="inline-flex items-center rounded-full border border-amber-300/70 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                   Kanban Control Room
                 </div>
-                <div className="space-y-2">
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+                <div className="space-y-1">
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
                     {board.name}
                   </h2>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    Resize the board surface, decide which stages stay visible, and wire agent automation per column without squeezing everything into one narrow form.
+                  <p className="max-w-2xl text-sm leading-5 text-slate-600 dark:text-slate-300">
+                    Stage visibility on the left, column automation on the right.
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <StatCard label="Visible columns" value={`${visibleColumnCount}/${sortedColumns.length}`} tone="amber" />
-                <StatCard label="Automations live" value={String(automationEnabledCount)} tone="slate" />
-                <StatCard label="Parallel sessions" value={String(Math.max(1, Math.floor(sessionConcurrencyLimit)))} tone="emerald" />
+
+              <div className="w-full xl:w-auto xl:min-w-[560px] rounded-[20px] border border-white/60 bg-white/90 p-3.5 shadow-sm backdrop-blur dark:border-slate-700/70 dark:bg-slate-950/50">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                        Session queue
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2.5">
+                      <label className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Max</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={sessionConcurrencyLimit}
+                          onChange={(event) => setSessionConcurrencyLimit(Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1))}
+                          className="h-10 w-20 rounded-xl border border-slate-200 bg-slate-50 px-3 text-base font-semibold text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100"
+                        />
+                      </label>
+                      <StatPill label="Visible" value={`${visibleColumnCount}/${sortedColumns.length}`} tone="amber" />
+                      <StatPill label="Automation" value={String(automationEnabledCount)} tone="emerald" />
+                    </div>
+                  </div>
+                  <p className="max-w-[260px] text-sm leading-5 text-slate-500 dark:text-slate-400">
+                    Extra cards wait here until a running session completes.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)]">
-            <aside className="min-h-0 overflow-y-auto border-b border-slate-200/80 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-[#0a0f16] lg:border-b-0 lg:border-r">
-              <div className="space-y-5">
+          <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)]">
+            <aside className="min-h-0 overflow-y-auto border-b border-slate-200/80 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-[#0a0f16] xl:border-b-0 xl:border-r">
+              <div className="space-y-4">
                 <SectionCard
-                  eyebrow="Board surface"
-                  title="Visibility"
-                  description="Keep high-signal stages on the board and hide noise without losing the data model."
-                >
-                  <div className="space-y-2.5">
-                    {sortedColumns.map((column) => {
-                      const checked = visibleColumns.includes(column.id);
-                      return (
-                        <label
-                          key={column.id}
-                          className={`flex cursor-pointer items-start justify-between gap-3 rounded-2xl border px-3.5 py-3 transition ${
-                            checked
-                              ? "border-amber-300 bg-amber-50/80 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10"
-                              : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-[#111722] dark:hover:border-slate-700"
-                          }`}
-                        >
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{column.name}</div>
-                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">{column.id}</div>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) => {
-                              if (event.target.checked) {
-                                setVisibleColumns((current) => [...current, column.id]);
-                                return;
-                              }
-                              const remaining = visibleColumns.filter((id) => id !== column.id);
-                              setVisibleColumns(remaining.length > 0 ? remaining : [column.id]);
-                            }}
-                            className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500"
-                          />
-                        </label>
-                      );
-                    })}
-                  </div>
-                </SectionCard>
-
-                <SectionCard
-                  eyebrow="Execution"
-                  title="Session queue"
-                  description="Throttle concurrent ACP work to avoid swamping the workspace while keeping throughput predictable."
-                >
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#111722]">
-                    <label className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Max concurrent sessions
-                    </label>
-                    <div className="mt-3 flex items-center gap-3">
-                      <input
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={sessionConcurrencyLimit}
-                        onChange={(event) => setSessionConcurrencyLimit(Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1))}
-                        className="h-12 w-28 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-lg font-semibold text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100"
-                      />
-                      <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
-                        When the limit is reached, extra cards stay queued until a running session finishes.
-                      </p>
-                    </div>
-                  </div>
-                </SectionCard>
-
-                <SectionCard
-                  eyebrow="Automation map"
-                  title="Configured stages"
-                  description="Use this rail to jump between columns and quickly see which ones already trigger work."
+                  eyebrow="Stage map"
+                  title="Stages"
+                  description="Pick a stage and decide whether it stays visible."
                 >
                   <div className="space-y-2">
                     {sortedColumns.map((column) => {
                       const automation = columnAutomation[column.id] ?? { enabled: false };
                       const active = selectedColumnId === column.id;
+                      const visible = visibleColumns.includes(column.id);
                       return (
-                        <button
+                        <div
                           key={column.id}
-                          type="button"
-                          onClick={() => setSelectedColumnId(column.id)}
-                          className={`flex w-full items-center justify-between rounded-2xl border px-3.5 py-3 text-left transition ${
+                          className={`rounded-[18px] border px-3 py-2.5 transition ${
                             active
                               ? "border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10 dark:border-amber-400/40 dark:bg-slate-900"
                               : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-[#111722] dark:hover:border-slate-700"
                           }`}
                         >
-                          <div>
-                            <div className={`text-sm font-medium ${active ? "text-white" : "text-slate-900 dark:text-slate-100"}`}>{column.name}</div>
-                            <div className={`text-xs ${active ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
-                              {automation.enabled ? getAutomationSummary(automation, availableProviders, specialists) : "Manual only"}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedColumnId(column.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className={`text-sm font-medium ${active ? "text-white" : "text-slate-900 dark:text-slate-100"}`}>{column.name}</div>
+                                <div className={`truncate text-[11px] uppercase tracking-[0.18em] ${active ? "text-slate-300" : "text-slate-400 dark:text-slate-500"}`}>
+                                  {column.id}
+                                </div>
+                                <div className={`mt-1 text-[11px] leading-4 ${active ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
+                                  {automation.enabled ? getAutomationSummary(automation, availableProviders, specialists) : "Manual only"}
+                                </div>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                                  automation.enabled
+                                    ? active
+                                      ? "bg-white/10 text-amber-200"
+                                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                    : active
+                                      ? "bg-white/10 text-slate-300"
+                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                                }`}
+                              >
+                                {automation.enabled ? "Live" : "Off"}
+                              </span>
                             </div>
-                          </div>
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
-                              automation.enabled
-                                ? active
-                                  ? "bg-white/10 text-amber-200"
-                                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-                                : active
-                                  ? "bg-white/10 text-slate-300"
-                                  : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          </button>
+                          <div
+                            className={`mt-2 flex items-center justify-between rounded-xl border px-2.5 py-1.5 ${
+                              active
+                                ? "border-white/15 bg-white/5"
+                                : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-[#0b1119]"
                             }`}
                           >
-                            {automation.enabled ? "Live" : "Off"}
-                          </span>
-                        </button>
+                            <div className="space-y-0.5">
+                              <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
+                                Visible
+                              </div>
+                              <div className={`text-[11px] leading-4 ${active ? "text-slate-400" : "text-slate-500 dark:text-slate-400"}`}>
+                                Hidden stages stay in the board data.
+                              </div>
+                            </div>
+                            <input
+                              type="checkbox"
+                              aria-label={`Toggle visibility for ${column.name}`}
+                              checked={visible}
+                              onChange={(event) => {
+                                if (event.target.checked) {
+                                  setVisibleColumns((current) => [...current, column.id]);
+                                  return;
+                                }
+                                const remaining = visibleColumns.filter((id) => id !== column.id);
+                                setVisibleColumns(remaining.length > 0 ? remaining : [column.id]);
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -229,7 +227,7 @@ export function KanbanSettingsModal({
               </div>
             </aside>
 
-            <main className="min-h-0 overflow-y-auto bg-white p-5 dark:bg-[#0d1118] sm:p-7">
+            <main className="min-h-0 overflow-y-auto bg-white p-4 dark:bg-[#0d1118] sm:p-5">
               {selectedColumn ? (
                 <ColumnAutomationWorkspace
                   column={selectedColumn}
@@ -251,22 +249,22 @@ export function KanbanSettingsModal({
             </main>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-slate-200/80 bg-slate-50/80 px-5 py-4 dark:border-slate-800 dark:bg-[#0a0f16] sm:flex-row sm:items-center sm:justify-between sm:px-7">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-[#0a0f16] sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <p className="text-sm leading-5 text-slate-500 dark:text-slate-400">
               Changes apply to this board only. Hidden columns stay in data; automation changes only affect future transitions.
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={onClose}
                 disabled={saving}
-                className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#111722]"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#111722]"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void handleSave()}
                 disabled={saving}
-                className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
               >
                 {saving ? "Saving..." : "Save board settings"}
               </button>
@@ -294,26 +292,26 @@ function ColumnAutomationWorkspace({
   const selectedSpecialist = specialists.find((specialist) => specialist.id === automation.specialistId) ?? null;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,_rgba(251,191,36,0.12),_rgba(255,255,255,0.98)_38%,_rgba(255,255,255,1)_100%)] p-5 dark:border-slate-800 dark:bg-[linear-gradient(135deg,_rgba(245,158,11,0.14),_rgba(15,23,42,0.92)_38%,_rgba(13,17,24,0.98)_100%)] sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
+    <div className="space-y-4">
+      <div className="rounded-[22px] border border-slate-200 bg-[linear-gradient(135deg,_rgba(251,191,36,0.10),_rgba(255,255,255,0.98)_38%,_rgba(255,255,255,1)_100%)] p-4 dark:border-slate-800 dark:bg-[linear-gradient(135deg,_rgba(245,158,11,0.10),_rgba(15,23,42,0.92)_38%,_rgba(13,17,24,0.98)_100%)] sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
                 Column automation
               </span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
                 {column.id}
               </span>
             </div>
             <div>
-              <h3 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{column.name}</h3>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                Decide whether this stage should automatically wake an agent, which specialist runs, and what evidence must exist before the workflow can continue.
+              <h3 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{column.name}</h3>
+              <p className="mt-1.5 max-w-2xl text-sm leading-5 text-slate-600 dark:text-slate-300">
+                Decide who runs when this stage is triggered and what evidence is required.
               </p>
             </div>
           </div>
-          <div className="rounded-3xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-[#0d1118]/90">
+          <div className="rounded-2xl border border-slate-200 bg-white/90 p-2.5 dark:border-slate-700 dark:bg-[#0d1118]/90">
             <label className="flex items-center gap-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Automation</span>
               <button
@@ -340,14 +338,14 @@ function ColumnAutomationWorkspace({
       </div>
 
       {automation.enabled ? (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="space-y-4">
             <SectionCard
               eyebrow="Routing"
               title="Who gets triggered"
               description="Provider, role, and specialist selection define which execution lane this stage pushes work into."
             >
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <ConfigField label="Provider" hint="Leave blank to use the workspace default provider.">
                   <select
                     aria-label="Provider"
@@ -484,7 +482,7 @@ function ColumnAutomationWorkspace({
             </SectionCard>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             <SectionCard
               eyebrow="Preview"
               title="Effective automation"
@@ -528,17 +526,17 @@ function ColumnAutomationWorkspace({
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: string; tone: "amber" | "slate" | "emerald" }) {
+function StatPill({ label, value, tone }: { label: string; value: string; tone: "amber" | "slate" | "emerald" }) {
   const toneClass = {
-    amber: "border-amber-300/80 bg-white/80 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200",
-    slate: "border-slate-200 bg-white/85 text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200",
-    emerald: "border-emerald-300/80 bg-white/80 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200",
+    amber: "border-amber-300/80 bg-amber-50/80 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200",
+    slate: "border-slate-200 bg-slate-50/90 text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200",
+    emerald: "border-emerald-300/80 bg-emerald-50/80 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200",
   }[tone];
 
   return (
-    <div className={`min-w-[160px] rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] opacity-80">{label}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 ${toneClass}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] opacity-80">{label}</span>
+      <span className="text-sm font-semibold tracking-tight">{value}</span>
     </div>
   );
 }
@@ -555,11 +553,11 @@ function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#0f1621] sm:p-5">
-      <div className="mb-4 space-y-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">{eyebrow}</div>
-        <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h4>
-        <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
+    <section className="rounded-[20px] border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-[#0f1621] sm:p-4">
+      <div className="mb-3 space-y-1">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">{eyebrow}</div>
+        <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h4>
+        <p className="text-sm leading-5 text-slate-500 dark:text-slate-400">{description}</p>
       </div>
       {children}
     </section>
@@ -579,7 +577,7 @@ function ConfigField({
     <label className="block space-y-2">
       <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">{label}</span>
       {children}
-      <span className="block text-sm leading-6 text-slate-500 dark:text-slate-400">{hint}</span>
+      <span className="block text-sm leading-5 text-slate-500 dark:text-slate-400">{hint}</span>
     </label>
   );
 }
@@ -621,4 +619,4 @@ function getAutomationSummary(
   return [provider, specialist ?? automation.role ?? "DEVELOPER", formatTriggerLabel(automation.transitionType)].join(" • ");
 }
 
-const SELECT_CLASS = "h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100";
+const SELECT_CLASS = "h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100";
