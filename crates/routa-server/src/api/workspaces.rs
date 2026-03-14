@@ -67,6 +67,7 @@ async fn create_workspace(
 #[serde(rename_all = "camelCase")]
 struct UpdateWorkspaceRequest {
     title: Option<String>,
+    metadata: Option<HashMap<String, String>>,
 }
 
 async fn update_workspace(
@@ -74,8 +75,7 @@ async fn update_workspace(
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(body): Json<UpdateWorkspaceRequest>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
-    // Verify workspace exists
-    state
+    let mut ws = state
         .workspace_store
         .get(&id)
         .await?
@@ -83,6 +83,11 @@ async fn update_workspace(
 
     if let Some(title) = &body.title {
         state.workspace_store.update_title(&id, title).await?;
+    }
+
+    if let Some(metadata) = body.metadata {
+        ws.metadata.extend(metadata);
+        state.workspace_store.save(&ws).await?;
     }
 
     let ws = state
