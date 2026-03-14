@@ -34,7 +34,11 @@ import type { AgentInstanceConfig } from "@/core/acp/agent-instance-factory";
 import { initRoutaOrchestrator, getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
 import { getRoutaSystem } from "@/core/routa-system";
 import { AgentRole } from "@/core/models/agent";
-import { buildCoordinatorPrompt, loadSpecialistsSync } from "@/core/orchestration/specialist-prompts";
+import {
+  buildCoordinatorPrompt,
+  buildSpecialistSystemPrompt,
+  loadSpecialistsSync,
+} from "@/core/orchestration/specialist-prompts";
 import { getDatabase, isPostgres } from "@/core/db";
 import { PostgresSpecialistStore } from "@/core/store/specialist-store";
 import { AcpError } from "@/core/acp/acp-process";
@@ -589,7 +593,10 @@ export async function POST(request: NextRequest) {
           // ── Load specialist system prompt ──────────────────────────────
           let specialistSystemPrompt: string | undefined;
           if (specialistId) {
-            let specialist: { systemPrompt?: string; roleReminder?: string } | null | undefined;
+            let specialist:
+              | { id: string; systemPrompt?: string; roleReminder?: string }
+              | null
+              | undefined;
             if (isPostgres()) {
               try {
                 const db = getDatabase();
@@ -603,11 +610,15 @@ export async function POST(request: NextRequest) {
               specialist = loadSpecialistsSync().find(s => s.id === specialistId.toLowerCase());
             }
             if (specialist?.systemPrompt) {
-              let prompt = specialist.systemPrompt;
-              if (specialist.roleReminder) {
-                prompt += `\n\n---\n**Reminder:** ${specialist.roleReminder}`;
-              }
-              specialistSystemPrompt = prompt;
+              const specialistPrompt = {
+                id: specialist.id,
+                systemPrompt: specialist.systemPrompt,
+                roleReminder: specialist.roleReminder ?? "",
+              };
+              specialistSystemPrompt = buildSpecialistSystemPrompt({
+                specialist: specialistPrompt,
+                cwd,
+              });
             }
           }
 

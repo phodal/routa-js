@@ -330,6 +330,7 @@ export class RoutaOrchestrator {
           : ""),
       parentAgentId: callerAgentId,
       additionalContext: additionalInstructions,
+      cwd,
     });
 
     // 6. Assign task to agent

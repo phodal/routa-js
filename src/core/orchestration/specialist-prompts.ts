@@ -13,6 +13,7 @@
 
 import { AgentRole, ModelTier } from "../models/agent";
 import { loadAllSpecialists } from "../specialists/specialist-file-loader";
+import { formatProjectReviewRulesContext } from "../specialists/project-review-rules";
 import {
   loadSpecialistsFromAllSources,
   invalidateSpecialistCache,
@@ -30,6 +31,29 @@ export interface SpecialistConfig {
   /** Optional model override (e.g. "claude-3-5-haiku-20241022"). Takes precedence over tier-based selection. */
   model?: string;
   enabled?: boolean;
+}
+
+const REVIEW_RULES_SPECIALIST_IDS = new Set(["pr-reviewer", "pr-analyzer"]);
+
+export function buildSpecialistSystemPrompt(params: {
+  specialist: Pick<SpecialistConfig, "id" | "systemPrompt" | "roleReminder">;
+  cwd?: string;
+}): string {
+  const { specialist, cwd } = params;
+  let prompt = specialist.systemPrompt;
+
+  if (REVIEW_RULES_SPECIALIST_IDS.has(specialist.id.toLowerCase())) {
+    const reviewRulesContext = formatProjectReviewRulesContext(cwd);
+    if (reviewRulesContext) {
+      prompt += `\n\n---\n\n${reviewRulesContext}`;
+    }
+  }
+
+  if (specialist.roleReminder) {
+    prompt += `\n\n---\n**Reminder:** ${specialist.roleReminder}`;
+  }
+
+  return prompt;
 }
 
 // ─── Hardcoded Fallbacks ─────────────────────────────────────────────────
@@ -472,17 +496,26 @@ export function buildDelegationPrompt(params: {
   taskContent: string;
   parentAgentId: string;
   additionalContext?: string;
+  cwd?: string;
 }): string {
-  const { specialist, agentId, taskId, taskTitle, taskContent, parentAgentId, additionalContext } =
+  const {
+    specialist,
+    agentId,
+    taskId,
+    taskTitle,
+    taskContent,
+    parentAgentId,
+    additionalContext,
+    cwd,
+  } =
     params;
 
-  let prompt = specialist.systemPrompt + "\n\n---\n\n";
+  let prompt = buildSpecialistSystemPrompt({ specialist, cwd }) + "\n\n---\n\n";
   prompt += `**Your Agent ID:** ${agentId}\n`;
   prompt += `**Your Parent Agent ID:** ${parentAgentId}\n`;
   prompt += `**Task ID:** ${taskId}\n\n`;
   prompt += `# Task: ${taskTitle}\n\n`;
   prompt += taskContent + "\n\n";
-  prompt += `---\n**Reminder:** ${specialist.roleReminder}\n`;
 
   if (additionalContext) {
     prompt += `\n**Additional Context:** ${additionalContext}\n`;
@@ -521,12 +554,10 @@ export function buildCoordinatorPrompt(params: {
 export function buildSpecialistFirstPrompt(params: {
   specialist: SpecialistConfig;
   userRequest: string;
+  cwd?: string;
 }): string {
-  const { specialist, userRequest } = params;
-  let prompt = specialist.systemPrompt;
-  if (specialist.roleReminder) {
-    prompt += `\n\n---\n**Reminder:** ${specialist.roleReminder}`;
-  }
+  const { specialist, userRequest, cwd } = params;
+  let prompt = buildSpecialistSystemPrompt({ specialist, cwd });
   prompt += `\n\n---\n\n${userRequest}`;
   return prompt;
 }
