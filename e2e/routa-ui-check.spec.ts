@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * Routa JS UI Check
  * Verifies main page layout, MCP badge, providers, MCP test page, and ROUTA agent mode
@@ -11,7 +13,7 @@ test.describe("Routa JS Application Check", () => {
     page,
   }) => {
     // 1. Navigate to http://localhost:3000
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
 
     // 2. Take screenshot of main page
     await page.screenshot({
@@ -45,7 +47,7 @@ test.describe("Routa JS Application Check", () => {
     });
 
     // 7. Navigate to MCP test page
-    await page.goto("http://localhost:3000/mcp-test");
+    await page.goto(`${BASE_URL}/mcp-test`);
 
     // 8. Screenshot of MCP test page
     await page.screenshot({
@@ -54,7 +56,7 @@ test.describe("Routa JS Application Check", () => {
     });
 
     // 9. Go back to main page
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForTimeout(3000);
 
     // 10. Select ROUTA from agent selector

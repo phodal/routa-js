@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * Task Panel with MarkdownViewer styles - Visual verification
  */
@@ -7,7 +9,7 @@ test.describe("Task Panel MarkdownViewer Styles", () => {
   test.setTimeout(30_000);
 
   test("inject styled task panel with markdown content", async ({ page }) => {
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForTimeout(3000);
 
     // Snapshot before

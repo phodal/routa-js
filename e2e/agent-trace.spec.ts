@@ -12,11 +12,13 @@
 
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 test.describe("Agent Trace", () => {
   test("session lifecycle and message tracing", async ({ page, request }) => {
     test.setTimeout(120_000);
 
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await expect(page.locator("h1")).toHaveText("Routa");
 
     // Step 1: Connect
@@ -60,7 +62,7 @@ test.describe("Agent Trace", () => {
 
     // Query traces for this session
     const tracesResponse = await request.get(
-      `http://localhost:3000/api/traces?sessionId=${sessionId}`
+      `${BASE_URL}/api/traces?sessionId=${sessionId}`
     );
 
     expect(tracesResponse.ok()).toBeTruthy();
@@ -88,7 +90,7 @@ test.describe("Agent Trace", () => {
   test("tool call with file ranges", async ({ page, request }) => {
     test.setTimeout(120_000);
 
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     const connectBtn = page.getByRole("button", { name: "Connect" });
     await connectBtn.click();
     await page.getByRole("button", { name: "New" }).click();
@@ -120,7 +122,7 @@ test.describe("Agent Trace", () => {
     });
 
     const tracesResponse = await request.get(
-      `http://localhost:3000/api/traces?sessionId=${sessionId}`
+      `${BASE_URL}/api/traces?sessionId=${sessionId}`
     );
     const tracesData = await tracesResponse.json();
 
@@ -147,7 +149,7 @@ test.describe("Agent Trace", () => {
   test("VCS context in traces", async ({ page, request }) => {
     test.setTimeout(120_000);
 
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     const connectBtn = page.getByRole("button", { name: "Connect" });
     await connectBtn.click();
     await page.getByRole("button", { name: "New" }).click();
@@ -176,7 +178,7 @@ test.describe("Agent Trace", () => {
     });
 
     const tracesResponse = await request.get(
-      `http://localhost:3000/api/traces?sessionId=${sessionId}`
+      `${BASE_URL}/api/traces?sessionId=${sessionId}`
     );
     const tracesData = await tracesResponse.json();
 
@@ -197,7 +199,7 @@ test.describe("Agent Trace", () => {
   test("export traces in Agent Trace JSON format", async ({ page, request }) => {
     test.setTimeout(120_000);
 
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     const connectBtn = page.getByRole("button", { name: "Connect" });
     await connectBtn.click();
     await page.getByRole("button", { name: "New" }).click();
@@ -227,7 +229,7 @@ test.describe("Agent Trace", () => {
 
     // Export traces
     const exportResponse = await request.post(
-      `http://localhost:3000/api/traces/export`,
+      `${BASE_URL}/api/traces/export`,
       {
         data: { sessionId },
       }
@@ -256,7 +258,7 @@ test.describe("Agent Trace", () => {
 
   test("trace statistics endpoint", async ({ request }) => {
     const statsResponse = await request.get(
-      "http://localhost:3000/api/traces/stats"
+      `${BASE_URL}/api/traces/stats`
     );
 
     expect(statsResponse.ok()).toBeTruthy();
@@ -276,7 +278,7 @@ test.describe("Agent Trace", () => {
   test("query traces by filters", async ({ page, request }) => {
     test.setTimeout(120_000);
 
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     const connectBtn = page.getByRole("button", { name: "Connect" });
     await connectBtn.click();
     await page.getByRole("button", { name: "New" }).click();
@@ -300,7 +302,7 @@ test.describe("Agent Trace", () => {
 
     // Query by event type
     const userMsgResponse = await request.get(
-      "http://localhost:3000/api/traces?eventType=user_message&limit=10"
+      `${BASE_URL}/api/traces?eventType=user_message&limit=10`
     );
     expect(userMsgResponse.ok()).toBeTruthy();
     const userMsgData = await userMsgResponse.json();
@@ -317,7 +319,7 @@ test.describe("Agent Trace", () => {
 
     // Query tool calls
     const toolCallResponse = await request.get(
-      "http://localhost:3000/api/traces?eventType=tool_call&limit=10"
+      `${BASE_URL}/api/traces?eventType=tool_call&limit=10`
     );
     expect(toolCallResponse.ok()).toBeTruthy();
     const toolCallData = await toolCallResponse.json();

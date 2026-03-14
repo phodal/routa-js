@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * Routa JS Task Panel Feature Test
  *
@@ -17,7 +19,7 @@ test.describe("Routa JS Task Panel Feature", () => {
 
   test("main page, ROUTA mode, layout verification", async ({ page }) => {
     // 1. Navigate to http://localhost:3000
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
 
     // 2. Take screenshot of initial page
     await page.screenshot({

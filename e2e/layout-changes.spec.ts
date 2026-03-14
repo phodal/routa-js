@@ -4,12 +4,14 @@
  */
 import { test } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 test.describe("Layout Changes Verification", () => {
   test.setTimeout(60_000);
 
   test("1. Initial layout at 1280x800", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2500);
 
@@ -21,7 +23,7 @@ test.describe("Layout Changes Verification", () => {
 
   test("2. Left sidebar resize handle - drag and screenshot", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -48,7 +50,7 @@ test.describe("Layout Changes Verification", () => {
 
   test("3. Expanded skill with markdown", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -67,7 +69,7 @@ test.describe("Layout Changes Verification", () => {
 
   test("4a. Mobile view - sidebar closed", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -79,7 +81,7 @@ test.describe("Layout Changes Verification", () => {
 
   test("4b. Mobile view - sidebar open via hamburger", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -95,7 +97,7 @@ test.describe("Layout Changes Verification", () => {
 
   test("5a. Catalog modal - skills.sh tab", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -110,7 +112,7 @@ test.describe("Layout Changes Verification", () => {
 
   test("5b. Catalog modal - GitHub tab", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 

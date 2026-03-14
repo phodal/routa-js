@@ -3,12 +3,14 @@
  */
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 test.describe("Final Verification", () => {
   test.setTimeout(45_000);
 
   test("1. Desktop screenshot - overall layout clean", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
     await page.screenshot({ path: "test-results/final-1-desktop.png" });
@@ -21,7 +23,7 @@ test.describe("Final Verification", () => {
 
   test("2. Skill click - markdown renders (not raw)", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -39,7 +41,7 @@ test.describe("Final Verification", () => {
 
   test("3. Catalog - no error, skills.sh and GitHub tabs", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -57,7 +59,7 @@ test.describe("Final Verification", () => {
 
   test("4. skills.sh search - type react", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -76,7 +78,7 @@ test.describe("Final Verification", () => {
 
   test("5. GitHub tab - click preset loads", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -96,7 +98,7 @@ test.describe("Final Verification", () => {
 
   test("6. Mobile - hamburger visible, sidebar hidden", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -111,7 +113,7 @@ test.describe("Final Verification", () => {
 
   test("7. Mobile sidebar open - bottom actions visible", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 

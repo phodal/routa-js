@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
-const BASE_URL = process.env.ROUTA_TEST_BASE_URL ?? "http://localhost:3000";
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? process.env.ROUTA_TEST_BASE_URL ?? "http://localhost:3000";
 const SESSION_URL = `${BASE_URL}/workspace/default/sessions/1eed8a78-7673-4a1b-b6b9-cd68dc5b75c7`;
 
 async function openSession(page: Page, viewport: { width: number; height: number }) {

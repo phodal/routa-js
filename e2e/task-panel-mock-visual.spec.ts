@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * Task Panel Mock - Visual verification
  * Navigate, inject mock, take snapshots
@@ -9,7 +11,7 @@ test.describe("Task Panel Mock Visual", () => {
 
   test("inject mock task panel and capture layout", async ({ page }) => {
     // 1. Navigate to http://localhost:3000
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
 
     // 2. Wait 3 seconds for page to load
     await page.waitForTimeout(3000);

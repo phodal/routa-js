@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
  *  7. REST API: DELETE /api/background-tasks/:id cancels the task
  */
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const WORKSPACE_URL = `${BASE_URL}/workspace/default`;
 
 test.describe("Background Task Queue", () => {

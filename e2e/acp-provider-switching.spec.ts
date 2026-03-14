@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * ACP Provider Switching Verification
  *
@@ -31,8 +33,8 @@ test.describe("ACP Provider Switching", () => {
     const results: string[] = [];
 
     // Step 1: Navigate to http://localhost:3000
-    await page.goto("http://localhost:3000");
-    results.push("1. Navigated to http://localhost:3000");
+    await page.goto(BASE_URL);
+    results.push(`1. Navigated to ${BASE_URL}`);
 
     // Wait for the home input container to be visible (main app content)
     await page.waitForSelector("#home-input-container", { timeout: 15_000 });

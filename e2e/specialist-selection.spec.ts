@@ -13,7 +13,7 @@
 
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 
 const TEST_SPECIALIST = {
   id: "pw-test-specialist-001",

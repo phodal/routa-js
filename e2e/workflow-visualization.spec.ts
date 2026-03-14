@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
  * 7. Delete a workflow with two-click confirmation
  */
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 
 test.describe("Workflow YAML Visualization (Issue #56)", () => {
   test.setTimeout(60_000);

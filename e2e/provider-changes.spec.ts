@@ -1,11 +1,13 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * Test provider list with status, @ provider mention, and bottom toolbar
  */
 test.describe("Provider changes", () => {
   test("Test 1: Provider list with status", async ({ page }) => {
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForTimeout(5000); // Auto-connect
 
     // X/Y installed count at top
@@ -34,7 +36,7 @@ test.describe("Provider changes", () => {
   });
 
   test("Test 2: @ provider mention", async ({ page }) => {
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForTimeout(5000);
 
     const editor = page.locator(".tiptap-chat-input, .ProseMirror").first();
@@ -71,7 +73,7 @@ test.describe("Provider changes", () => {
   });
 
   test("Test 3: Bottom toolbar shows @ provider", async ({ page }) => {
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForTimeout(3000);
 
     const toolbar = page.locator('text=@ provider').first();

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 
 test.describe("A2A Protocol API", () => {
   test("agent card discovery endpoint returns valid AgentCard", async ({ request }) => {

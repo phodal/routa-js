@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * MCP Integration Test
  *
@@ -17,7 +19,7 @@ test.describe("MCP Integration in Chat UI", () => {
     page,
   }) => {
     // Step 1: Navigate
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.screenshot({
       path: "test-results/mcp-claude-01-initial.png",
       fullPage: true,
@@ -103,7 +105,7 @@ test.describe("MCP Integration in Chat UI", () => {
   test("Auggie: select provider → new session → send 你有什么工具 → verify response", async ({
     page,
   }) => {
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await expect(
       page.getByRole("button", { name: /Connected|Disconnect/ })
     ).toBeVisible({ timeout: 15_000 });
@@ -171,7 +173,7 @@ test.describe("MCP Integration in Chat UI", () => {
   test("Auggie: select existing session → send 你有什么工具 → verify response", async ({
     page,
   }) => {
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await expect(
       page.getByRole("button", { name: /Connected|Disconnect/ })
     ).toBeVisible({ timeout: 15_000 });
@@ -232,7 +234,7 @@ test.describe("MCP Integration in Chat UI", () => {
   test("GitHub Copilot: select provider → new session → send 你有什么工具 → verify response", async ({
     page,
   }) => {
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await expect(
       page.getByRole("button", { name: /Connected|Disconnect/ })
     ).toBeVisible({ timeout: 15_000 });

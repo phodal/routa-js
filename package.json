@@ -48,6 +48,8 @@
     "test:e2e:specialist": "playwright test e2e/specialist-selection.spec.ts",
     "test:e2e:specialist:headed": "playwright test e2e/specialist-selection.spec.ts --project=chromium-headed",
     "test:e2e:debug": "playwright test --debug",
+    "test:e2e:rust": "PLAYWRIGHT_BASE_URL=http://localhost:3210 playwright test",
+    "test:e2e:rust:headed": "PLAYWRIGHT_BASE_URL=http://localhost:3210 playwright test --project=chromium-headed",
     "test:e2e:tauri": "playwright test --config=playwright.tauri.config.ts e2e/tauri-backend-check.spec.ts",
     "test:e2e:tauri:headed": "playwright test --config=playwright.tauri.config.ts e2e/tauri-backend-check.spec.ts --project=chromium-headed",
     "rust:cov": "./scripts/rust-coverage.sh routa-core summary",

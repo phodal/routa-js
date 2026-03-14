@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * ACP Process Output Terminal Display Test
  *
@@ -21,7 +23,7 @@ test.describe("ACP Process Output Terminal Display", () => {
       consoleLogs.push(`[${msg.type()}] ${msg.text()}`);
     });
 
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await expect(page.locator("h1")).toHaveText("Routa");
 
     // Step 1: Connect
@@ -105,7 +107,7 @@ test.describe("ACP Process Output Terminal Display", () => {
     // This test injects a mock process_output notification to verify
     // the terminal bubble renders correctly
     
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await expect(page.locator("h1")).toHaveText("Routa");
 
     // Inject mock terminal content via page.evaluate

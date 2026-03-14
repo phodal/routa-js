@@ -1,12 +1,14 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 test.describe("ACP Chat with OpenCode", () => {
   test("full flow: connect → new session → send message → streaming response", async ({
     page,
   }) => {
     test.setTimeout(120_000);
 
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await expect(page.locator("h1")).toHaveText("Routa");
 
     // Step 1: Connect

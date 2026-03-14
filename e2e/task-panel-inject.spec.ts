@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * Routa JS Task Panel - Inject simulated task data
  *
@@ -14,7 +16,7 @@ test.describe("Task Panel Inject Test", () => {
 
   test("inject tasks and verify task panel", async ({ page }) => {
     // 1. Navigate to http://localhost:3000
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
 
     // 2. Wait for page to fully load
     await page.waitForTimeout(3000);

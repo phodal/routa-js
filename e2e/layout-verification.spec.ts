@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+
 /**
  * Layout verification at 1920x1080 viewport.
  * Verifies: top bar, left sidebar, chat area, agent selector.
@@ -15,7 +17,7 @@ test.describe("Layout Verification", () => {
     await page.setViewportSize({ width: 1920, height: 1080 });
 
     // 1. Navigate to http://localhost:3000
-    await page.goto("http://localhost:3000");
+    await page.goto(BASE_URL);
     await page.waitForLoadState("domcontentloaded");
 
     // 2. Take screenshot
