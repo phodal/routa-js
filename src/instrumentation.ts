@@ -10,13 +10,9 @@ export async function register() {
     const { startSchedulerService } = await import(
       "./core/scheduling/scheduler-service"
     );
-    const { startBackgroundWorker } = await import(
-      "./core/background-worker"
-    );
     // Delay startup slightly to let the HTTP server become ready
     setTimeout(() => {
       startSchedulerService();
-      startBackgroundWorker();
     }, 5000);
   }
 }

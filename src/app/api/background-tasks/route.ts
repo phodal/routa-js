@@ -8,7 +8,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import { createBackgroundTask } from "@/core/models/background-task";
-import { getBackgroundWorker, startBackgroundWorker } from "@/core/background-worker";
 import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
@@ -99,10 +98,6 @@ export async function POST(request: NextRequest) {
   });
 
   await system.backgroundTaskStore.save(task);
-
-  // Ensure worker is running and kick an immediate dispatch cycle (fire-and-forget)
-  startBackgroundWorker();
-  void getBackgroundWorker().dispatchPending();
 
   return NextResponse.json({ task }, { status: 201 });
 }
