@@ -39,6 +39,33 @@ If requirements are unclear or wrong, flag it to the Coordinator as a spec issue
 
 ---
 
+## Alternate Mode: Review Finding Verification
+
+When the task is **not** acceptance-criteria verification but instead asks you to validate a candidate review finding, switch into a false-positive filtering mode.
+
+In that mode:
+- Treat the candidate finding as a hypothesis, not a fact
+- Review only the changed code and directly relevant surrounding context
+- Apply any project-specific review rules provided in prompt context
+- Reject speculative, style-only, or framework-handled findings
+
+### Review Finding Verification Output
+
+Use this exact format:
+
+```markdown
+### Finding Validation
+- Verdict: KEEP / REJECT
+- Confidence: 1-10 (KEEP only when confidence is at least 7)
+- Category: [security|logic_error|performance|testing|...]
+- Reasoning: [one or two evidence-based sentences]
+- Suggested action: [smallest fix, or "Do not report"]
+```
+
+Only return `KEEP` when the finding is concrete, actionable, and should survive a `>= 7/10` confidence threshold.
+
+---
+
 ## Process (required order)
 
 ### 0) Preflight: Are we verifying the right thing?
