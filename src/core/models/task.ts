@@ -103,6 +103,7 @@ export function createTask(params: {
   status?: TaskStatus;
   codebaseIds?: string[];
   worktreeId?: string;
+  triggerSessionId?: string;
 }): Task {
   const now = new Date();
   return {
@@ -137,6 +138,7 @@ export function createTask(params: {
     sessionId: params.sessionId,
     codebaseIds: params.codebaseIds ?? [],
     worktreeId: params.worktreeId,
+    triggerSessionId: params.triggerSessionId,
     createdAt: now,
     updatedAt: now,
   };

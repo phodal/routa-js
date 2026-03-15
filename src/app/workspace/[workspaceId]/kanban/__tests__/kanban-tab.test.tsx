@@ -116,7 +116,7 @@ describe("KanbanTab lane automation labels", () => {
         boards={[automatedBoard]}
         tasks={[createTask("task-1", "Story One")]}
         sessions={[]}
-        providers={[{ id: "claude", name: "Claude Code" }]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
         specialists={[{ id: "verify", name: "Verifier", role: "GATE" }]}
         codebases={[]}
         onRefresh={vi.fn()}
@@ -177,7 +177,7 @@ describe("KanbanTab card detail manual runs", () => {
         boards={[automatedBoard]}
         tasks={[createTask("task-1", "Story One")]}
         sessions={[]}
-        providers={[{ id: "claude", name: "Claude Code" }]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
         specialists={[{ id: "backlog-refiner", name: "Backlog Refiner", role: "ROUTA" }]}
         codebases={[]}
         onRefresh={vi.fn()}
@@ -218,7 +218,7 @@ describe("KanbanTab session terminal hint", () => {
       connected: true,
       sessionId: null,
       updates: [],
-      providers: [{ id: "claude", name: "Claude Code" }],
+      providers: [{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }],
       selectedProvider: "claude",
       loading: false,
       error: null,
@@ -257,7 +257,7 @@ describe("KanbanTab session terminal hint", () => {
             createdAt: "2025-01-01T00:00:00.000Z",
           },
         ]}
-        providers={[{ id: "claude", name: "Claude Code" }]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
         specialists={[]}
         codebases={[]}
         onRefresh={vi.fn()}
