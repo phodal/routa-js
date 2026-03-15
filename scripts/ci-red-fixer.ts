@@ -20,7 +20,7 @@
  *   GITHUB_REPOSITORY                              # Optional, auto-detected if missing
  */
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
@@ -101,8 +101,16 @@ interface RepairReport {
     | "verification-failed";
 }
 
-function runCommand(command: string, options: { stdio?: "pipe" | "inherit" } = {}): string {
-  const output = execSync(command, {
+interface ExecFileOptions {
+  stdio?: "pipe" | "inherit";
+}
+
+function runExecFile(
+  command: string,
+  args: string[],
+  options: ExecFileOptions = {}
+): string {
+  const output = execFileSync(command, args, {
     encoding: "utf-8",
     cwd: process.cwd(),
     stdio: options.stdio ?? "pipe",
@@ -110,6 +118,53 @@ function runCommand(command: string, options: { stdio?: "pipe" | "inherit" } = {
   });
 
   return typeof output === "string" ? output : "";
+}
+
+function runGh(args: string[], options: ExecFileOptions = {}): string {
+  return runExecFile("gh", args, options);
+}
+
+function runGit(args: string[], options: ExecFileOptions = {}): string {
+  return runExecFile("git", args, options);
+}
+
+function parseValidationCommand(command: string): { executable: string; args: string[] } {
+  switch (command) {
+    case "npm run lint":
+      return { executable: "npm", args: ["run", "lint"] };
+    case "cargo clippy --workspace -- -D warnings":
+      return { executable: "cargo", args: ["clippy", "--workspace", "--", "-D", "warnings"] };
+    case "npm run test:run":
+      return { executable: "npm", args: ["run", "test:run"] };
+    case "cargo test --workspace":
+      return { executable: "cargo", args: ["test", "--workspace"] };
+    case "npm run api:schema:validate":
+      return { executable: "npm", args: ["run", "api:schema:validate"] };
+    case "npm run api:check":
+      return { executable: "npm", args: ["run", "api:check"] };
+    case "npm audit --audit-level=critical":
+      return { executable: "npm", args: ["audit", "--audit-level=critical"] };
+    case "semgrep --config=p/security-audit --config=p/owasp-top-ten --severity=ERROR --error .":
+      return {
+        executable: "semgrep",
+        args: [
+          "--config=p/security-audit",
+          "--config=p/owasp-top-ten",
+          "--severity=ERROR",
+          "--error",
+          ".",
+        ],
+      };
+    case "trivy fs --severity HIGH,CRITICAL --exit-code 0 .":
+      return {
+        executable: "trivy",
+        args: ["fs", "--severity", "HIGH,CRITICAL", "--exit-code", "0", "."],
+      };
+    case "hadolint Dockerfile":
+      return { executable: "hadolint", args: ["Dockerfile"] };
+    default:
+      throw new Error(`Unsupported validation command: ${command}`);
+  }
 }
 
 function writeReport(reportFile: string | undefined, report: RepairReport): void {
@@ -173,7 +228,7 @@ function parseArgs(args: string[]): CliOptions {
 function resolveRepo(): string {
   return (
     process.env.GITHUB_REPOSITORY ||
-    runCommand("gh repo view --json nameWithOwner --jq '.nameWithOwner'").trim()
+    runGh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).trim()
   );
 }
 
@@ -184,18 +239,15 @@ function fetchTargetRun(
   runId?: number
 ): WorkflowRunSummary | null {
   if (runId) {
-    const run = JSON.parse(
-      runCommand(
-        `gh api repos/${repo}/actions/runs/${runId}`
-      )
-    ) as WorkflowRunResponse;
+    const run = JSON.parse(runGh(["api", `repos/${repo}/actions/runs/${runId}`])) as WorkflowRunResponse;
     return normalizeRunSummary(run);
   }
 
   const response = JSON.parse(
-    runCommand(
-      `gh api repos/${repo}/actions/workflows/${workflowFile}/runs?branch=${encodeURIComponent(branch)}&status=completed&per_page=5`
-    )
+    runGh([
+      "api",
+      `repos/${repo}/actions/workflows/${workflowFile}/runs?branch=${encodeURIComponent(branch)}&status=completed&per_page=5`,
+    ])
   ) as WorkflowRunsResponse;
 
   const runs = response.workflow_runs.map(normalizeRunSummary);
@@ -203,16 +255,14 @@ function fetchTargetRun(
 }
 
 function fetchFailedJobs(repo: string, runId: number): WorkflowJobSummary[] {
-  const response = JSON.parse(
-    runCommand(`gh api repos/${repo}/actions/runs/${runId}/jobs?per_page=100`)
-  ) as WorkflowJobsResponse;
+  const response = JSON.parse(runGh(["api", `repos/${repo}/actions/runs/${runId}/jobs?per_page=100`])) as WorkflowJobsResponse;
 
   return pickFailedJobs(response.jobs.map(normalizeJobSummary));
 }
 
 function fetchJobLogExcerpt(repo: string, runId: number, jobId: number): string {
   try {
-    const log = runCommand(`gh run view ${runId} --repo ${repo} --job ${jobId} --log`);
+    const log = runGh(["run", "view", runId.toString(), "--repo", repo, "--job", jobId.toString(), "--log"]);
     return trimLogExcerpt(log);
   } catch (error) {
     return `Unable to fetch logs for job ${jobId}: ${error instanceof Error ? error.message : String(error)}`;
@@ -273,12 +323,13 @@ async function runClaudeRepair(prompt: string, dryRun: boolean): Promise<void> {
 function runVerification(commands: string[]): void {
   for (const command of commands) {
     console.log(`\n🧪 Verifying with: ${command}\n`);
-    runCommand(command, { stdio: "inherit" });
+    const parsed = parseValidationCommand(command);
+    runExecFile(parsed.executable, parsed.args, { stdio: "inherit" });
   }
 }
 
 function listChangedFiles(): string[] {
-  const output = runCommand("git status --short");
+  const output = runGit(["status", "--short"]);
   return output
     .trim()
     .split("\n")

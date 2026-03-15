@@ -96,22 +96,26 @@ jobs:
 
       - name: Run repair
         if: env.ANTHROPIC_API_KEY != '' || github.event.inputs.dry_run == 'true'
+        env:
+          EVENT_NAME_SAFE: ${{ github.event_name }}
+          INPUT_RUN_ID: ${{ github.event.inputs.run_id || '' }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
-          echo "## 🔧 CI Red Fixer" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Branch: ${TARGET_BRANCH}" >> $GITHUB_STEP_SUMMARY
-          echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔧 CI Red Fixer" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: ${TARGET_BRANCH}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Trigger: ${EVENT_NAME_SAFE}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          ARGS="--branch ${TARGET_BRANCH} --report-file /tmp/ci-red-fixer-report.json"
-          if [ -n "${{ github.event.inputs.run_id }}" ]; then
-            ARGS="$ARGS --run-id ${{ github.event.inputs.run_id }}"
+          args=(--branch "$TARGET_BRANCH" --report-file /tmp/ci-red-fixer-report.json)
+          if [ -n "$INPUT_RUN_ID" ]; then
+            args+=(--run-id "$INPUT_RUN_ID")
           fi
-          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
-            ARGS="$ARGS --dry-run"
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
           fi
 
-          npx tsx scripts/ci-red-fixer.ts $ARGS 2>&1 | tee /tmp/ci-red-fixer-output.txt
+          npx tsx scripts/ci-red-fixer.ts "${args[@]}" 2>&1 | tee /tmp/ci-red-fixer-output.txt
 
       - name: Append summary
         if: env.ANTHROPIC_API_KEY != '' || github.event.inputs.dry_run == 'true'
@@ -153,6 +157,8 @@ jobs:
         if: |
           steps.changes.outputs.has_changes == 'true' &&
           github.event.inputs.dry_run != 'true'
+        env:
+          REPAIR_RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
         run: |
           SOURCE_RUN_URL=$(jq -r '.targetRun.htmlUrl // "unknown"' /tmp/ci-red-fixer-report.json)
 
@@ -161,7 +167,7 @@ jobs:
 
           - Repaired latest failed Defense workflow on ${TARGET_BRANCH}
           - Source run: ${SOURCE_RUN_URL}
-          - Repair run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Repair run: ${REPAIR_RUN_URL}
 
           Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
           git push origin HEAD:${TARGET_BRANCH}

@@ -5,7 +5,7 @@
  * All user-controlled input is passed as separate arguments, never interpolated into shell strings.
  */
 
-import { execSync, spawn, type SpawnOptions } from "child_process";
+import { execFileSync, spawn, type SpawnOptions } from "child_process";
 
 /**
  * Validate that a string contains only safe characters for use in commands.
@@ -23,6 +23,10 @@ export function isSafeString(value: string): boolean {
  * @returns true if the URL is safe, false otherwise
  */
 export function isValidGitUrl(url: string): boolean {
+  if (!url || /[\0\r\n]/.test(url) || /\s/.test(url)) {
+    return false;
+  }
+
   // Reject ext:: protocol which allows arbitrary command execution
   if (url.toLowerCase().startsWith("ext::")) {
     return false;
@@ -30,10 +34,16 @@ export function isValidGitUrl(url: string): boolean {
   
   // Allow common Git protocols
   const validProtocols = /^(https?|git|ssh|file):\/\//i;
+  const isScpStyle = /^[^@\s]+@[^:\s]+:[^\s]+$/;
   const isAbsolutePath = /^[/~]/; // Unix absolute paths
   const isWindowsPath = /^[a-zA-Z]:\\/; // Windows paths
   
-  return validProtocols.test(url) || isAbsolutePath.test(url) || isWindowsPath.test(url);
+  return (
+    validProtocols.test(url) ||
+    isScpStyle.test(url) ||
+    isAbsolutePath.test(url) ||
+    isWindowsPath.test(url)
+  );
 }
 
 /**
@@ -57,14 +67,13 @@ export function safeExecSync(
   args: string[],
   options?: { cwd?: string; encoding?: BufferEncoding }
 ): string {
-  // Build the full command with properly escaped arguments
-  const fullCommand = [command, ...args.map(sanitizeShellArg)].join(" ");
-  
-  return execSync(fullCommand, {
+  const output = execFileSync(command, args, {
     encoding: options?.encoding ?? "utf-8",
     cwd: options?.cwd ?? process.cwd(),
     stdio: ["pipe", "pipe", "pipe"],
-  }).toString();
+  });
+
+  return typeof output === "string" ? output : output.toString();
 }
 
 /**
@@ -78,6 +87,8 @@ export function safeSpawn(
   args: string[],
   options?: SpawnOptions
 ) {
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
+  // Centralized process wrapper. Callers must validate command/args and shell stays disabled.
   return spawn(command, args, {
     ...options,
     shell: false, // Never use shell to prevent injection
