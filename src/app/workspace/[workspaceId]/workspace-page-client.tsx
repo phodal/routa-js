@@ -48,7 +48,7 @@ export function WorkspacePageClient({
 
   const workspacesHook = useWorkspaces();
   const acp = useAcp();
-  const { codebases } = useCodebases(workspaceId);
+  const { codebases, fetchCodebases } = useCodebases(workspaceId);
   const agentsHook = useAgentsRpc(workspaceId);
   const notesHook = useNotes(workspaceId);
 
@@ -175,6 +175,13 @@ export function WorkspacePageClient({
     if (ws) router.push(`/workspace/${ws.id}`);
   }, [workspacesHook, router]);
 
+  // Unified refresh handler - updates refreshKey and fetches codebases
+  // Must be defined before early returns to follow React Hooks rules
+  const handleRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    void fetchCodebases();
+  }, [fetchCodebases]);
+
   if (workspacesHook.loading && !isDefaultWorkspace) {
     return (
       <div className="h-screen flex items-center justify-center bg-[#fafafa] dark:bg-[#0a0c12]">
@@ -213,7 +220,7 @@ export function WorkspacePageClient({
           fetch(`/api/notes?noteId=${encodeURIComponent(n.id)}&workspaceId=${encodeURIComponent(workspaceId)}`, { method: "DELETE" })
         )
     );
-    setRefreshKey((k) => k + 1);
+    handleRefresh();
   };
 
   const handleDeleteAllTaskNotes = async () => {
@@ -224,7 +231,7 @@ export function WorkspacePageClient({
           fetch(`/api/notes?noteId=${encodeURIComponent(n.id)}&workspaceId=${encodeURIComponent(workspaceId)}`, { method: "DELETE" })
         )
     );
-    setRefreshKey((k) => k + 1);
+    handleRefresh();
   };
 
   const handleUpdateNoteMetadata = async (noteId: string, metadata: Record<string, unknown>) => {
@@ -260,9 +267,7 @@ export function WorkspacePageClient({
           <div className="mb-8">
             <HomeInput
               workspaceId={workspaceId}
-              onSessionCreated={() => {
-                setRefreshKey((k) => k + 1);
-              }}
+              onSessionCreated={handleRefresh}
             />
           </div>
 
@@ -273,7 +278,7 @@ export function WorkspacePageClient({
                 sessions={sessions}
                 workspaceId={workspaceId}
                 onNavigate={(sessionId) => router.push(`/workspace/${workspaceId}/sessions/${sessionId}`)}
-                onRefresh={() => setRefreshKey((k) => k + 1)}
+                onRefresh={handleRefresh}
               />
             </div>
           )}
@@ -363,7 +368,7 @@ export function WorkspacePageClient({
               providers={acp.providers}
               specialists={specialists}
               codebases={codebases}
-              onRefresh={() => setRefreshKey((k) => k + 1)}
+              onRefresh={handleRefresh}
             />
           )}
 
@@ -439,7 +444,7 @@ export function WorkspacePageClient({
               bgTasks={bgTasks}
               workspaceId={workspaceId}
               workspaces={workspacesHook.workspaces}
-              onRefresh={() => setRefreshKey((k) => k + 1)}
+              onRefresh={handleRefresh}
             />
           )}
 

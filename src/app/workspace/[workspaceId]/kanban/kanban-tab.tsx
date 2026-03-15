@@ -189,6 +189,9 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
   // Replace all repos state
   const [showReplaceAllConfirm, setShowReplaceAllConfirm] = useState(false);
   const [replacingAll, setReplacingAll] = useState(false);
+  // Delete codebase state
+  const [showDeleteCodebaseConfirm, setShowDeleteCodebaseConfirm] = useState(false);
+  const [deletingCodebase, setDeletingCodebase] = useState(false);
   // Live branch info for selected codebase
   const [liveBranchInfo, setLiveBranchInfo] = useState<{ current: string; branches: string[] } | null>(null);
 
@@ -649,6 +652,31 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
     }
   }, [selectedCodebase, editRepoSelection, codebases, onRefresh]);
 
+  // Remove codebase handler
+  const handleRemoveCodebase = useCallback(async () => {
+    if (!selectedCodebase) return;
+    setDeletingCodebase(true);
+    setEditError(null);
+    try {
+      const res = await fetch(
+        `/api/workspaces/${encodeURIComponent(workspaceId)}/codebases/${encodeURIComponent(selectedCodebase.id)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to remove repository");
+      }
+      setShowDeleteCodebaseConfirm(false);
+      setSelectedCodebase(null);
+      setCodebaseWorktrees([]);
+      onRefresh();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to remove repository");
+    } finally {
+      setDeletingCodebase(false);
+    }
+  }, [selectedCodebase, workspaceId, onRefresh]);
+
   // Close modal on Escape key
   useEffect(() => {
     if (!activeTaskId && !activeSessionId && !showSettings && !selectedCodebase) return;
@@ -910,25 +938,40 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                   </div>
                 </div>
               ) : (
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {codebases.map((cb) => (
+                <div className="flex min-w-0 items-center gap-2">
+                  {/* Show default repo badge */}
+                  {defaultCodebase && (
                     <button
-                      key={cb.id}
                       onClick={() => {
-                        setSelectedCodebase(cb);
-                        void fetchCodebaseWorktrees(cb);
+                        setSelectedCodebase(defaultCodebase);
+                        void fetchCodebaseWorktrees(defaultCodebase);
                       }}
-                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 transition-colors hover:border-amber-400 hover:bg-amber-50 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300 dark:hover:bg-amber-900/10"
+                      className="inline-flex max-w-[200px] items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 transition-colors hover:border-amber-400 hover:bg-amber-50 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300 dark:hover:bg-amber-900/10"
                       data-testid="codebase-badge"
+                      title={`${defaultCodebase.label ?? defaultCodebase.repoPath} - ${defaultCodebase.branch ? `@${defaultCodebase.branch}` : ''}`}
                     >
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cb.sourceType === "github" ? "bg-violet-500" : "bg-emerald-500"}`} />
-                      <span className="truncate font-medium">{cb.label ?? cb.repoPath.split("/").pop() ?? cb.repoPath}</span>
-                      {cb.branch && <span className="shrink-0 text-gray-400 dark:text-gray-500">@{cb.branch}</span>}
-                      <span className={`shrink-0 rounded px-1 text-[10px] ${cb.isDefault ? "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
-                        {cb.isDefault ? "default" : cb.sourceType ?? "local"}
-                      </span>
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${defaultCodebase.sourceType === "github" ? "bg-violet-500" : "bg-emerald-500"}`} />
+                      <span className="truncate font-medium">{defaultCodebase.label ?? defaultCodebase.repoPath.split("/").pop() ?? defaultCodebase.repoPath}</span>
+                      {defaultCodebase.branch && <span className="shrink-0 text-gray-400 dark:text-gray-500">@{defaultCodebase.branch}</span>}
                     </button>
-                  ))}
+                  )}
+                  {/* Show count for additional repos */}
+                  {codebases.length > 1 && (
+                    <button
+                      onClick={() => {
+                        // Select first non-default repo
+                        const otherRepo = codebases.find(cb => cb.id !== defaultCodebase?.id);
+                        if (otherRepo) {
+                          setSelectedCodebase(otherRepo);
+                          void fetchCodebaseWorktrees(otherRepo);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-600 transition-colors hover:border-amber-400 hover:bg-amber-50 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-400 dark:hover:bg-amber-900/10"
+                      title={`+${codebases.length - 1} more ${codebases.length - 1 === 1 ? 'repository' : 'repositories'} - click to view all`}
+                    >
+                      <span className="font-medium">+{codebases.length - 1}</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1364,12 +1407,20 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
               </h3>
               <div className="flex items-center gap-2">
                 {!editingCodebase && (
-                  <button
-                    onClick={handleStartEditCodebase}
-                    className="text-sm text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300"
-                  >
-                    Edit
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowDeleteCodebaseConfirm(true)}
+                      className="text-sm text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300"
+                    >
+                      Remove
+                    </button>
+                    <button
+                      onClick={handleStartEditCodebase}
+                      className="text-sm text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300"
+                    >
+                      Edit
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => { setSelectedCodebase(null); setCodebaseWorktrees([]); setEditingCodebase(false); setLiveBranchInfo(null); setRecloneError(null); setRecloneSuccess(null); }}
@@ -1521,6 +1572,53 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Codebase Confirmation Modal */}
+      {showDeleteCodebaseConfirm && selectedCodebase && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 px-4 animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-[#1c1f2e] dark:bg-[#12141c] animate-in zoom-in-95 duration-150">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/20">
+                  <svg className="h-6 w-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Remove Repository
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    Are you sure you want to remove <span className="font-medium text-gray-900 dark:text-gray-100">&quot;{selectedCodebase.label ?? selectedCodebase.repoPath.split("/").pop()}&quot;</span> from this workspace?
+                  </p>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-500">
+                    This will only unlink the repository from this workspace. The repository files will not be deleted from your computer.
+                  </p>
+                </div>
+              </div>
+              {editError && (
+                <div className="mt-3 text-xs text-rose-600 dark:text-rose-400">{editError}</div>
+              )}
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => setShowDeleteCodebaseConfirm(false)}
+                  disabled={deletingCodebase}
+                  className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300 dark:hover:bg-[#191c28]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRemoveCodebase}
+                  disabled={deletingCodebase}
+                  className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-600"
+                >
+                  {deletingCodebase ? "Removing..." : "Remove"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

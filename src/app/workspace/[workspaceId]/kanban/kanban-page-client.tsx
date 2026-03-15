@@ -31,7 +31,7 @@ export function KanbanPageClient() {
       : rawWorkspaceId;
   const acp = useAcp();
   const workspacesHook = useWorkspaces();
-  const { codebases } = useCodebases(workspaceId);
+  const { codebases, fetchCodebases } = useCodebases(workspaceId);
 
   const [boards, setBoards] = useState<KanbanBoardInfo[]>([]);
   const [tasks, setTasks] = useState<TaskInfo[]>([]);
@@ -123,6 +123,12 @@ export function KanbanPageClient() {
     }
   };
 
+  // Unified refresh handler - updates refreshKey and fetches codebases
+  const handleRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    void fetchCodebases();
+  }, [fetchCodebases]);
+
   // Handler for agent input - creates session and sends prompt
   const handleAgentPrompt = useCallback(async (
     promptText: string,
@@ -196,7 +202,7 @@ export function KanbanPageClient() {
             providers={acp.providers}
             specialists={specialists}
             codebases={codebases}
-            onRefresh={() => setRefreshKey((k) => k + 1)}
+            onRefresh={handleRefresh}
             acp={acp}
             onAgentPrompt={handleAgentPrompt}
           />
