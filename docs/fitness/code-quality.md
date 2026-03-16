@@ -48,12 +48,64 @@ metrics:
         echo "No changed TS/JS files"
       else
         printf '%s\n' "$changed_files" | \
-          xargs npx jscpd --min-lines 10 --min-tokens 50 --reporters console --format typescript,javascript 2>&1 || \
+          xargs npx jscpd --min-lines 20 --min-tokens 120 --reporters console --format typescript,javascript 2>&1 || \
           echo "jscpd changed-file check failed"
       fi
     pattern: "Found 0 clones|No duplicates found|No changed TS/JS files"
     hard_gate: false
-    description: "本次变更的 TypeScript/JavaScript 文件不应新增明显重复"
+    description: "本次变更的 TypeScript/JavaScript 文件不应新增大块复制代码"
+
+  - name: ast_grep_structural_smells
+    command: |
+      if ! command -v ast-grep >/dev/null 2>&1 && ! command -v sg >/dev/null 2>&1; then
+        echo "ast-grep not installed"
+      else
+        changed_files=$(git diff --name-only --diff-filter=ACMR HEAD -- src apps 2>/dev/null | \
+          grep -E '\.(ts|tsx|js|jsx)$' | \
+          grep -vE '(^|/)(node_modules|target|\.next|_next|bundled)/' || true)
+        if [ -z "$changed_files" ]; then
+          echo "No changed TS/JS files"
+        else
+          runner=$(command -v ast-grep >/dev/null 2>&1 && echo ast-grep || echo sg)
+          cat <<'EOF' >/tmp/routa-ast-grep-rule.yml
+          id: nested-response-wrapper
+          language: TypeScript
+          rule:
+            any:
+              - pattern: |
+                  try {
+                    $$$BODY
+                  } catch ($ERR) {
+                    return NextResponse.json($$$ARGS)
+                  }
+              - pattern: |
+                  try {
+                    $$$BODY
+                  } catch ($ERR) {
+                    console.error($$$LOG)
+                    return NextResponse.json($$$ARGS)
+                  }
+          EOF
+          printf '%s\n' "$changed_files" | xargs "$runner" scan \
+            --rule /tmp/routa-ast-grep-rule.yml 2>&1 | \
+          awk 'BEGIN {count=0} /^error\[nested-response-wrapper\]/ {count++} END {print "ast_grep_structural_matches:", count}'
+          rm -f /tmp/routa-ast-grep-rule.yml
+        fi
+      fi
+    pattern: "ast_grep_structural_matches: 0|No changed TS/JS files|ast-grep not installed"
+    hard_gate: false
+    description: "用 ast-grep 检查本次变更中新增的可疑结构性包装代码"
+
+  - name: duplicate_function_name
+    command: |
+      git diff --unified=0 HEAD -- src apps 2>/dev/null | \
+        grep -E '^\+[^+].*((export )?(async )?function [A-Za-z0-9_]+|const [A-Za-z0-9_]+ *= *(async )?\()' | \
+        sed -E 's/.*function ([A-Za-z0-9_]+).*/\1/; s/.*const ([A-Za-z0-9_]+) *=.*/\1/' | \
+        sort | uniq -d | wc -l | \
+      awk '{print "duplicate_new_function_names:", $1}'
+    pattern: "duplicate_new_function_names: 0"
+    hard_gate: false
+    description: "本次变更中不应新增重复函数名"
 
   - name: duplicate_code_rust
     command: |
@@ -144,13 +196,15 @@ metrics:
 |--------|------|-----------|------|
 | 文件行数 | 变更文件 ≤1000 行 | ❌ | wc -l |
 | 函数行数 | ≤100 行 | ❌ | grep + 人工 |
-| 重复代码 | 变更文件不新增明显 clone | ❌ | jscpd |
+| 重复代码 | 变更文件不新增大块 clone | ❌ | jscpd |
+| 结构坏味道 | 变更文件中结构型包装重复 = 0 | ❌ | ast-grep |
 | 圈复杂度 | ≤15 | ❌ | ESLint |
 | 深层嵌套 | ≤3 层 | ❌ | grep |
 | ESLint | 0 errors | ✅ | ESLint |
 | Clippy | 0 warnings | ✅ | Clippy |
 | TODO/FIXME | <100 | ❌ | grep |
 | console.log | 变更中新增数 = 0 | ❌ | git diff + grep |
+| 重复函数名 | 变更中新增重复名 = 0 | ❌ | git diff + grep |
 | any 类型 | <50 | ❌ | grep |
 
 ## AI 特有问题
@@ -163,7 +217,12 @@ AI 倾向于生成冗长代码，缺乏抽象能力。
 ### 2. 重复代码
 AI 经常"复制粘贴"式生成，忽略已有实现。
 
-**约束**: 仅检查本次变更文件，避免为压全仓 clone 数做跨语义抽象
+**约束**: 仅检查本次变更文件，且只抓大块复制，避免为压全仓 clone 数做跨语义抽象
+
+### 2.1 结构性重复
+文本重复不一定等于坏设计，真正危险的是成批出现的结构性包装代码。
+
+**约束**: 用 `ast-grep` 只检查本次变更中的高风险结构模式
 
 ### 3. 类型逃逸
 AI 使用 `any` 绕过类型检查。
@@ -183,6 +242,9 @@ npm install -g jscpd
 
 # 运行变更文件重复检测
 git diff --name-only --diff-filter=ACMR HEAD -- src apps
+
+# 运行结构性模式检查（需安装 ast-grep）
+ast-grep scan --help
 
 # 运行 fitness 检查
 python3 docs/fitness/scripts/fitness.py
