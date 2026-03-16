@@ -4,6 +4,7 @@ import { getRoutaSystem } from "@/core/routa-system";
 import { createKanbanBoard } from "@/core/models/kanban";
 import { ensureDefaultBoard } from "@/core/kanban/boards";
 import { getKanbanSessionConcurrencyLimit } from "@/core/kanban/board-session-limits";
+import { getKanbanEventBroadcaster } from "@/core/kanban/kanban-event-broadcaster";
 import { getKanbanSessionQueue } from "@/core/kanban/workflow-orchestrator-singleton";
 
 export const dynamic = "force-dynamic";
@@ -52,5 +53,12 @@ export async function POST(request: NextRequest) {
   if (board.isDefault) {
     await system.kanbanBoardStore.setDefault(workspaceId, board.id);
   }
+  getKanbanEventBroadcaster().notify({
+    workspaceId,
+    entity: "board",
+    action: "created",
+    resourceId: board.id,
+    source: "user",
+  });
   return NextResponse.json({ board }, { status: 201 });
 }

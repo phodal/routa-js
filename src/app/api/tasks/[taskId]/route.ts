@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import { TaskPriority, TaskStatus, type Task } from "@/core/models/task";
 import { columnIdToTaskStatus, taskStatusToColumnId } from "@/core/models/kanban";
+import { getKanbanEventBroadcaster } from "@/core/kanban/kanban-event-broadcaster";
 import { ensureTaskBoardContext } from "@/core/kanban/task-board-context";
 import { updateGitHubIssue } from "@/core/kanban/github-issues";
 import { GitWorktreeService } from "@/core/git/git-worktree-service";
@@ -288,6 +289,13 @@ export async function PATCH(
         nextTask.columnId = "blocked";
         nextTask.lastSyncError = `Worktree creation failed: ${msg}`;
         await system.taskStore.save(nextTask);
+        getKanbanEventBroadcaster().notify({
+          workspaceId: nextTask.workspaceId,
+          entity: "task",
+          action: "updated",
+          resourceId: nextTask.id,
+          source: "user",
+        });
         return NextResponse.json({ task: serializeTask(nextTask) });
       }
     }
@@ -312,6 +320,13 @@ export async function PATCH(
   }
 
   await system.taskStore.save(nextTask);
+  getKanbanEventBroadcaster().notify({
+    workspaceId: nextTask.workspaceId,
+    entity: "task",
+    action: existing.columnId !== nextTask.columnId ? "moved" : "updated",
+    resourceId: nextTask.id,
+    source: "user",
+  });
 
   // Emit column transition event if column changed
   if (body.columnId !== undefined && existing.columnId !== nextTask.columnId && nextTask.boardId && nextTask.columnId) {
@@ -342,6 +357,16 @@ export async function DELETE(
 ) {
   const { taskId } = await params;
   const system = getRoutaSystem();
+  const task = await system.taskStore.get(taskId);
   await system.taskStore.delete(taskId);
+  if (task) {
+    getKanbanEventBroadcaster().notify({
+      workspaceId: task.workspaceId,
+      entity: "task",
+      action: "deleted",
+      resourceId: task.id,
+      source: "user",
+    });
+  }
   return NextResponse.json({ deleted: true });
 }

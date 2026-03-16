@@ -20,10 +20,12 @@ import { ArtifactType } from "../models/artifact";
 import { ToolResult, successResult, errorResult } from "./tool-result";
 import { EventBus } from "../events/event-bus";
 import { emitColumnTransition } from "../kanban/column-transition";
+import { getKanbanEventBroadcaster } from "../kanban/kanban-event-broadcaster";
 
 export class KanbanTools {
   private eventBus?: EventBus;
   private artifactStore?: ArtifactStore;
+  private kanbanBroadcaster = getKanbanEventBroadcaster();
 
   constructor(
     private kanbanBoardStore: KanbanBoardStore,
@@ -62,6 +64,7 @@ export class KanbanTools {
     });
 
     await this.kanbanBoardStore.save(board);
+    this.notifyWorkspaceChanged(board.workspaceId, "board", "created", board.id);
 
     return successResult({
       boardId: board.id,
@@ -155,6 +158,7 @@ export class KanbanTools {
 
     await this.taskStore.save(task);
     this.emitCreatedCardTransition(board, column, task);
+    this.notifyWorkspaceChanged(task.workspaceId, "task", "created", task.id);
 
     return successResult(this.taskToCard(task));
   }
@@ -223,6 +227,7 @@ export class KanbanTools {
     task.updatedAt = new Date();
 
     await this.taskStore.save(task);
+    this.notifyWorkspaceChanged(task.workspaceId, "task", fromColumnId !== params.targetColumnId ? "moved" : "updated", task.id);
 
     // Emit column transition event if column actually changed
     if (this.eventBus && fromColumnId !== params.targetColumnId) {
@@ -260,6 +265,7 @@ export class KanbanTools {
     task.updatedAt = new Date();
 
     await this.taskStore.save(task);
+    this.notifyWorkspaceChanged(task.workspaceId, "task", "updated", task.id);
 
     return successResult(this.taskToCard(task));
   }
@@ -271,6 +277,7 @@ export class KanbanTools {
     }
 
     await this.taskStore.delete(cardId);
+    this.notifyWorkspaceChanged(task.workspaceId, "task", "deleted", cardId);
 
     return successResult({ deleted: true, cardId });
   }
@@ -304,6 +311,7 @@ export class KanbanTools {
     board.updatedAt = new Date();
 
     await this.kanbanBoardStore.save(board);
+    this.notifyWorkspaceChanged(board.workspaceId, "column", "created", newColumn.id);
 
     return successResult({
       columnId: newColumn.id,
@@ -353,6 +361,7 @@ export class KanbanTools {
     board.updatedAt = new Date();
 
     await this.kanbanBoardStore.save(board);
+    this.notifyWorkspaceChanged(board.workspaceId, "column", "deleted", params.columnId);
 
     return successResult({
       deleted: true,
@@ -467,8 +476,24 @@ export class KanbanTools {
       this.emitCreatedCardTransition(board, column, task);
       createdCards.push(this.taskToCard(task));
     }
+    this.notifyWorkspaceChanged(board.workspaceId, "task", "created");
 
     return successResult({ count: createdCards.length, cards: createdCards });
+  }
+
+  private notifyWorkspaceChanged(
+    workspaceId: string,
+    entity: "task" | "board" | "column" | "queue",
+    action: "created" | "updated" | "deleted" | "moved" | "refreshed",
+    resourceId?: string,
+  ) {
+    this.kanbanBroadcaster.notify({
+      workspaceId,
+      entity,
+      action,
+      resourceId,
+      source: "agent",
+    });
   }
 
   private taskToCard(task: Task) {

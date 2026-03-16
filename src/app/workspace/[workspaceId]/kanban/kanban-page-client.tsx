@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAcp } from "@/client/hooks/use-acp";
+import { useKanbanEvents } from "@/client/hooks/use-kanban-events";
 import { useWorkspaces, useCodebases } from "@/client/hooks/use-workspaces";
 import { AppHeader } from "@/client/components/app-header";
 import { KanbanTab } from "./kanban-tab";
+import { scheduleKanbanRefreshBurst } from "./kanban-agent-input";
 import type { KanbanBoardInfo, TaskInfo, SessionInfo } from "../types";
 
 interface SpecialistOption {
@@ -38,6 +40,7 @@ export function KanbanPageClient() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const refreshBurstCleanupRef = useRef<(() => void) | null>(null);
 
   // Auto-connect ACP
   useEffect(() => {
@@ -128,6 +131,24 @@ export function KanbanPageClient() {
     setRefreshKey((k) => k + 1);
     void fetchCodebases();
   }, [fetchCodebases]);
+
+  const handleKanbanInvalidate = useCallback(() => {
+    handleRefresh();
+    refreshBurstCleanupRef.current?.();
+    refreshBurstCleanupRef.current = scheduleKanbanRefreshBurst(handleRefresh);
+  }, [handleRefresh]);
+
+  useKanbanEvents({
+    workspaceId,
+    onInvalidate: handleKanbanInvalidate,
+  });
+
+  useEffect(() => {
+    return () => {
+      refreshBurstCleanupRef.current?.();
+      refreshBurstCleanupRef.current = null;
+    };
+  }, []);
 
   // Handler for agent input - creates session and sends prompt
   const handleAgentPrompt = useCallback(async (

@@ -17,6 +17,7 @@ import {
   shouldCreateGitHubIssueOnTaskCreate,
 } from "@/core/kanban/task-creation-policy";
 import { columnIdToTaskStatus } from "@/core/models/kanban";
+import { getKanbanEventBroadcaster } from "@/core/kanban/kanban-event-broadcaster";
 import { emitColumnTransition } from "@/core/kanban/column-transition";
 
 export const dynamic = "force-dynamic";
@@ -235,6 +236,13 @@ export async function POST(request: NextRequest) {
   });
 
   await system.taskStore.save(task);
+  getKanbanEventBroadcaster().notify({
+    workspaceId: task.workspaceId,
+    entity: "task",
+    action: "created",
+    resourceId: task.id,
+    source: "user",
+  });
 
   const board = await system.kanbanBoardStore.get(task.boardId ?? defaultBoard.id);
   const targetColumn = board?.columns.find((column) => column.id === (task.columnId ?? "backlog"));
@@ -263,7 +271,17 @@ export async function DELETE(request: NextRequest) {
   }
 
   const system = getRoutaSystem();
+  const task = await system.taskStore.get(taskId);
   await system.taskStore.delete(taskId);
+  if (task) {
+    getKanbanEventBroadcaster().notify({
+      workspaceId: task.workspaceId,
+      entity: "task",
+      action: "deleted",
+      resourceId: task.id,
+      source: "user",
+    });
+  }
 
   return NextResponse.json({ deleted: true });
 }

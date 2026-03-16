@@ -5,6 +5,7 @@ import {
   getKanbanSessionConcurrencyLimit,
   setKanbanSessionConcurrencyLimit,
 } from "@/core/kanban/board-session-limits";
+import { getKanbanEventBroadcaster } from "@/core/kanban/kanban-event-broadcaster";
 import { getKanbanSessionQueue } from "@/core/kanban/workflow-orchestrator-singleton";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +87,13 @@ export async function PATCH(
   if (body.isDefault && !existing.isDefault) {
     await system.kanbanBoardStore.setDefault(existing.workspaceId, boardId);
   }
+  getKanbanEventBroadcaster().notify({
+    workspaceId: existing.workspaceId,
+    entity: "board",
+    action: "updated",
+    resourceId: boardId,
+    source: "user",
+  });
 
   const workspace = await system.workspaceStore.get(existing.workspaceId);
   const queue = getKanbanSessionQueue(system);
