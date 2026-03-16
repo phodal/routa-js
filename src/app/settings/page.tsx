@@ -18,7 +18,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SettingsPanel } from "@/client/components/settings-panel";
 
 interface ProviderOption {
@@ -29,6 +29,7 @@ interface ProviderOption {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [providers, setProviders] = useState<ProviderOption[]>([]);
 
   // Fetch providers on mount
@@ -49,11 +50,20 @@ export default function SettingsPage() {
 
   // When the panel is closed, navigate back to home
   const handleClose = () => {
+    const from = searchParams.get("from");
+    if (from && from !== "/settings") {
+      router.push(from);
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
     router.push("/");
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0f1117]">
+    <div className="desktop-theme h-screen flex flex-col bg-[var(--dt-bg-primary)]">
       {/* Render SettingsPanel as always open */}
       <SettingsPanel
         open={true}
@@ -63,4 +73,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
