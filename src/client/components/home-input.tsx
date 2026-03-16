@@ -29,6 +29,8 @@ interface HomeInputProps {
   workspaceId?: string;
   /** Visual style variant */
   variant?: "default" | "hero";
+  /** Hide helper rails for compact surfaces such as desktop home */
+  compact?: boolean;
   /** Called when workspace selection changes */
   onWorkspaceChange?: (workspaceId: string | null) => void;
   onSessionCreated?: (sessionId: string) => void;
@@ -45,6 +47,7 @@ interface HomeInputProps {
 export function HomeInput({
   workspaceId: propWorkspaceId,
   variant = "default",
+  compact = false,
   onWorkspaceChange,
   onSessionCreated,
   externalPendingSkill,
@@ -474,54 +477,55 @@ export function HomeInput({
         </div>
       </div>
 
-      {/* ─── Mode Tips ──────────────────────────────────────────────── */}
-      <div className="mt-1.5 px-1 min-h-[20px]">
-        {repoSelection?.path && (
-          <div className="mb-1 flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-            <span className="font-medium text-gray-500 dark:text-gray-400">
-              Repo path
-            </span>
-            <span className="font-mono truncate" title={repoSelection.path}>
-              {repoSelection.path}
-            </span>
-          </div>
-        )}
-        {selectedSpecialistId ? (
-          (() => {
-            const spec = specialists.find((s) => s.id === selectedSpecialistId);
-            return (
-              <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-                <span className="w-2 h-2 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                  <svg className="w-1 h-1 text-violet-500" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" /></svg>
-                </span>
-                <span className="text-violet-600 dark:text-violet-400 font-medium">{spec?.name}</span>
-                {spec?.role && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="font-mono text-[9px]">{spec.role}</span></>}
-              </div>
-            );
-          })()
-        ) : selectedRole === "ROUTA" ? (
-          <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <svg className="w-1 h-1 text-amber-500" fill="currentColor" viewBox="0 0 8 8">
-                <circle cx="4" cy="4" r="3" />
-              </svg>
-            </span>
-            <span>适合复杂任务 · 自动拆解需求并分配给多个专属 Agent</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-              <svg className="w-1 h-1 text-violet-500" fill="currentColor" viewBox="0 0 8 8">
-                <circle cx="4" cy="4" r="3" />
-              </svg>
-            </span>
-            <span>适合简单快速任务 · 单 Agent 直接执行</span>
-          </div>
-        )}
-      </div>
+      {!compact && (
+        <div className="mt-1.5 px-1 min-h-[20px]">
+          {repoSelection?.path && (
+            <div className="mb-1 flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+              <span className="font-medium text-gray-500 dark:text-gray-400">
+                Repo path
+              </span>
+              <span className="font-mono truncate" title={repoSelection.path}>
+                {repoSelection.path}
+              </span>
+            </div>
+          )}
+          {selectedSpecialistId ? (
+            (() => {
+              const spec = specialists.find((s) => s.id === selectedSpecialistId);
+              return (
+                <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+                  <span className="w-2 h-2 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                    <svg className="w-1 h-1 text-violet-500" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" /></svg>
+                  </span>
+                  <span className="text-violet-600 dark:text-violet-400 font-medium">{spec?.name}</span>
+                  {spec?.role && <><span className="text-gray-300 dark:text-gray-700">·</span><span className="font-mono text-[9px]">{spec.role}</span></>}
+                </div>
+              );
+            })()
+          ) : selectedRole === "ROUTA" ? (
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+              <span className="w-2 h-2 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <svg className="w-1 h-1 text-amber-500" fill="currentColor" viewBox="0 0 8 8">
+                  <circle cx="4" cy="4" r="3" />
+                </svg>
+              </span>
+              <span>适合复杂任务 · 自动拆解需求并分配给多个专属 Agent</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+              <span className="w-2 h-2 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                <svg className="w-1 h-1 text-violet-500" fill="currentColor" viewBox="0 0 8 8">
+                  <circle cx="4" cy="4" r="3" />
+                </svg>
+              </span>
+              <span>适合简单快速任务 · 单 Agent 直接执行</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── Skills — horizontal scroll row ─────────────────────── */}
-      {displaySkills && displaySkills.length > 0 && (
+      {!compact && displaySkills && displaySkills.length > 0 && (
         <div className="mt-2 -mx-0.5">
           <div className="flex gap-1.5 overflow-x-auto pb-0 scrollbar-none" style={{ scrollbarWidth: "none" }}>
             {displaySkills.map((skill) => (
