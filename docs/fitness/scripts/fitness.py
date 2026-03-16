@@ -45,12 +45,11 @@ def run_metric(metric: dict, dry_run: bool = False, verbose: bool = False) -> tu
         env.setdefault("CARGO_HOME", str(Path.home() / ".cargo"))
 
         result = subprocess.run(
-            command,
+            ["/bin/bash", "-lc", command],
             capture_output=True,
             text=True,
             timeout=300,
-            shell=True,
-            executable="/bin/bash",
+            shell=False,
             env=env,
         )
         output = result.stdout + result.stderr
