@@ -1040,7 +1040,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                   value={acp?.selectedProvider ?? ""}
                   onChange={(event) => acp?.setProvider(event.target.value)}
                   disabled={!acp?.connected || availableProviders.length === 0}
-                  className="w-32 shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
+                  className="h-10 w-32 shrink-0 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition-colors focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/15 disabled:opacity-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
                   aria-label="KanbanTask Agent provider"
                   data-testid="kanban-agent-provider"
                 >
@@ -1050,7 +1050,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                     </option>
                   ))}
                 </select>
-                <div className="relative min-w-0 flex-1">
+                <div className="group relative flex min-w-0 flex-1 items-center rounded-xl border border-gray-200 bg-white shadow-sm transition-colors focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/15 dark:border-gray-700 dark:bg-[#12141c]">
                   <input
                     type="text"
                     value={agentInput}
@@ -1063,14 +1063,23 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                     }}
                     placeholder={acp?.connected ? "Describe work to plan in Kanban..." : "Connecting..."}
                     disabled={agentLoading || !acp?.connected}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-16 text-sm text-gray-800 placeholder-gray-400 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400/50 disabled:opacity-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200 dark:placeholder-gray-500"
+                    className="h-10 w-full rounded-l-xl bg-transparent px-3 pr-1 text-sm text-gray-800 placeholder-gray-400 outline-none disabled:opacity-50 dark:text-gray-200 dark:placeholder-gray-500"
                   />
                   <button
                     onClick={() => void handleAgentSubmit()}
                     disabled={!agentInput.trim() || agentLoading || !acp?.connected}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md bg-amber-500 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="mr-1 inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-amber-500/20 bg-gradient-to-r from-amber-500 to-orange-500 px-3 text-xs font-semibold text-white shadow-sm transition-all hover:from-amber-600 hover:to-orange-500 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:shadow-none dark:disabled:border-gray-700 dark:disabled:bg-[#1a1d29] dark:disabled:text-gray-500"
                   >
-                    {agentLoading ? "..." : "Send"}
+                    {agentLoading ? (
+                      "..."
+                    ) : (
+                      <>
+                        <span>Send</span>
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                        </svg>
+                      </>
+                    )}
                   </button>
                 </div>
                 {agentSessionId && (
@@ -1086,7 +1095,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             {(repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
               <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
                 <span className="font-medium">Repo health</span>
@@ -1138,19 +1147,21 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                 </div>
               )}
             </div>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
-              title="Board settings"
-            >
-              Settings
-            </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
-            >
-              Manual
-            </button>
+            <div className="inline-flex items-center rounded-xl border border-gray-200 bg-white p-0.5 shadow-sm dark:border-gray-700 dark:bg-[#12141c]">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="rounded-[10px] px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#191c28]"
+                title="Board settings"
+              >
+                Settings
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="rounded-[10px] bg-gradient-to-r from-amber-500 to-orange-500 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:from-amber-600 hover:to-orange-500"
+              >
+                Manual
+              </button>
+            </div>
           </div>
         </div>
       </div>
