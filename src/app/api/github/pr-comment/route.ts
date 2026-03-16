@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { postPRComment, postPRReview, getPRFiles, getPRDetails } from "@/core/github";
+import { getPRDetails, getPRFiles, postPRComment, postPRReview } from "@/core/github/github-pr-comment";
 
 export async function POST(request: NextRequest) {
   try {
@@ -98,4 +98,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

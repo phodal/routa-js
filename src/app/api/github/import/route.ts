@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { importGitHubRepo, GitHubWorkspaceError } from "@/core/github";
+import { GitHubWorkspaceError, importGitHubRepo } from "@/core/github/github-workspace";
 import { parseGitHubUrl } from "@/core/git/git-utils";
 
 export const dynamic = "force-dynamic";

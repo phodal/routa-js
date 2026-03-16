@@ -25,7 +25,7 @@ import {
   getBranchInfo,
   checkoutBranch,
 } from "@/core/git";
-import { importGitHubRepo } from "@/core/github";
+import { importGitHubRepo } from "@/core/github/github-workspace";
 
 function getGitHubToken(): string | undefined {
   return process.env.GITHUB_TOKEN || process.env.GH_TOKEN;

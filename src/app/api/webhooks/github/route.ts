@@ -18,9 +18,6 @@ import { getRoutaSystem } from "@/core/routa-system";
 
 export const dynamic = "force-dynamic";
 
-// Disable Next.js body parsing so we can read the raw buffer for signature verification.
-export const config = { api: { bodyParser: false } };
-
 export async function POST(request: NextRequest) {
   try {
     const eventType = request.headers.get("x-github-event");

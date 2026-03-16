@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCachedWorkspace } from "@/core/github";
+import { getCachedWorkspace } from "@/core/github/github-workspace";
 
 export const dynamic = "force-dynamic";
 
