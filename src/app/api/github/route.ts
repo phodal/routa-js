@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { listActiveWorkspaces } from "@/core/github";
+import { listActiveWorkspaces } from "@/core/github/github-workspace";
 
 export const dynamic = "force-dynamic";
 

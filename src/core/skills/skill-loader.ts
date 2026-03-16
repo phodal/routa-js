@@ -17,7 +17,6 @@
  *   - metadata (optional): string-to-string map
  */
 
-import * as path from "path";
 import matter from "gray-matter";
 import { getServerBridge } from "@/core/platform";
 
@@ -52,6 +51,29 @@ const GLOBAL_SKILL_DIRS = [
   ".gemini/skills",
 ];
 
+const PATH_SEPARATOR = process.platform === "win32" ? "\\" : "/";
+
+function joinFsPath(...segments: string[]): string {
+  return segments.reduce((accumulator, segment, index) => {
+    if (!segment) {
+      return accumulator;
+    }
+
+    if (index === 0) {
+      return segment.replace(/[\\/]+$/g, "") || segment;
+    }
+
+    const normalized = segment.replace(/^[\\/]+|[\\/]+$/g, "");
+    if (!normalized) {
+      return accumulator;
+    }
+
+    return accumulator
+      ? `${accumulator}${PATH_SEPARATOR}${normalized}`
+      : normalized;
+  }, "");
+}
+
 /**
  * Discover all skills from project and global directories
  */
@@ -63,7 +85,7 @@ export function discoverSkills(projectDir?: string): SkillDefinition[] {
   // Project-local skills
   if (projectDir) {
     for (const searchDir of SKILL_SEARCH_DIRS) {
-      const dir = path.join(projectDir, searchDir);
+      const dir = joinFsPath(projectDir, searchDir);
       const found = loadSkillsFromDir(dir);
       for (const skill of found) {
         if (!seen.has(skill.name)) {
@@ -78,7 +100,7 @@ export function discoverSkills(projectDir?: string): SkillDefinition[] {
   const homeDir = bridge.env.getEnv("HOME") ?? bridge.env.getEnv("USERPROFILE") ?? bridge.env.homeDir();
   if (homeDir) {
     for (const globalDir of GLOBAL_SKILL_DIRS) {
-      const dir = path.join(homeDir, globalDir);
+      const dir = joinFsPath(homeDir, globalDir);
       const found = loadSkillsFromDir(dir);
       for (const skill of found) {
         if (!seen.has(skill.name)) {
@@ -108,7 +130,7 @@ export function discoverSkillsFromPath(repoDir: string): SkillDefinition[] {
   ];
 
   for (const searchDir of searchDirs) {
-    const dir = path.join(repoDir, searchDir);
+    const dir = joinFsPath(repoDir, searchDir);
     const found = loadSkillsFromDir(dir);
     for (const skill of found) {
       if (!seen.has(skill.name)) {
@@ -137,7 +159,7 @@ function loadSkillsFromDir(dir: string): SkillDefinition[] {
     for (const entry of entries) {
       if (!entry.isDirectory) continue;
 
-      const skillPath = path.join(dir, entry.name, "SKILL.md");
+      const skillPath = joinFsPath(dir, entry.name, "SKILL.md");
       if (bridge.fs.existsSync(skillPath)) {
         try {
           const skill = loadSkillFile(skillPath, entry.name);
@@ -150,10 +172,10 @@ function loadSkillsFromDir(dir: string): SkillDefinition[] {
       } else {
         // Check for nested skill directories (e.g. skills/claude.ai/<name>/SKILL.md)
         try {
-          const subEntries = bridge.fs.readDirSync(path.join(dir, entry.name));
+          const subEntries = bridge.fs.readDirSync(joinFsPath(dir, entry.name));
           for (const subEntry of subEntries) {
             if (!subEntry.isDirectory) continue;
-            const nestedPath = path.join(
+            const nestedPath = joinFsPath(
               dir,
               entry.name,
               subEntry.name,

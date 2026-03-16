@@ -20,7 +20,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
-import * as path from "path";
 import * as os from "os";
 import { getDatabase, getDatabaseDriver } from "@/core/db";
 import { PgSkillStore } from "@/core/db/pg-skill-store";
@@ -34,6 +33,28 @@ const DEFAULT_SEARCH_LIMIT = 30;
 const DEFAULT_GITHUB_REPO = "openai/skills";
 const DEFAULT_GITHUB_PATH = "skills/.curated";
 const DEFAULT_REF = "main";
+const PATH_SEPARATOR = process.platform === "win32" ? "\\" : "/";
+
+function joinFsPath(...segments: string[]): string {
+  return segments.reduce((accumulator, segment, index) => {
+    if (!segment) {
+      return accumulator;
+    }
+
+    if (index === 0) {
+      return segment.replace(/[\\/]+$/g, "") || segment;
+    }
+
+    const normalized = segment.replace(/^[\\/]+|[\\/]+$/g, "");
+    if (!normalized) {
+      return accumulator;
+    }
+
+    return accumulator
+      ? `${accumulator}${PATH_SEPARATOR}${normalized}`
+      : normalized;
+  }, "");
+}
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -73,11 +94,11 @@ function getSkillsDestDir(): string {
   if (isServerless) {
     // On serverless, use /tmp which is the only writable location
     // Note: This is ephemeral and won't persist across invocations
-    return path.join(os.tmpdir(), ".codex/skills");
+    return joinFsPath(os.tmpdir(), ".codex/skills");
   }
 
   // On local/traditional servers, use the home directory
-  return path.join(os.homedir(), ".codex/skills");
+  return joinFsPath(os.homedir(), ".codex/skills");
 }
 
 async function githubFetch(url: string): Promise<Response> {
@@ -95,10 +116,10 @@ async function githubFetch(url: string): Promise<Response> {
 function getInstalledSkillNamesFromFs(): Set<string> {
   const installed = new Set<string>();
   const skillDirs = [
-    path.join(process.cwd(), ".agents/skills"),
-    path.join(process.cwd(), ".codex/skills"),
-    path.join(os.homedir(), ".codex/skills"),
-    path.join(os.homedir(), ".agents/skills"),
+    joinFsPath(process.cwd(), ".agents/skills"),
+    joinFsPath(process.cwd(), ".codex/skills"),
+    joinFsPath(os.homedir(), ".codex/skills"),
+    joinFsPath(os.homedir(), ".agents/skills"),
   ];
 
   for (const dir of skillDirs) {
@@ -399,7 +420,7 @@ async function handleSkillsShInstall(body: {
     }
     const [owner, repoName] = parts;
 
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "routa-catalog-"));
+    const tmpDir = fs.mkdtempSync(joinFsPath(os.tmpdir(), "routa-catalog-"));
 
     try {
       const zipUrl = `https://codeload.github.com/${owner}/${repoName}/zip/main`;
@@ -430,7 +451,7 @@ async function handleSkillsShInstall(body: {
         continue;
       }
 
-      const repoRoot = path.join(tmpDir, topDirs[0].name);
+      const repoRoot = joinFsPath(tmpDir, topDirs[0].name);
 
       // Search for each skill in common skill directories
       // Note: "." is for repos where skills are at root level (e.g., mindrally/skills)
@@ -444,7 +465,7 @@ async function handleSkillsShInstall(body: {
       ];
 
       for (const skillName of skillNames) {
-        const destDir = path.join(destBase, skillName);
+        const destDir = joinFsPath(destBase, skillName);
         if (fs.existsSync(destDir)) {
           errors.push(`Already installed: ${skillName}`);
           continue;
@@ -454,11 +475,11 @@ async function handleSkillsShInstall(body: {
 
         // Search in all common locations
         for (const searchDir of searchDirs) {
-          const candidate = path.join(repoRoot, searchDir, skillName);
+          const candidate = joinFsPath(repoRoot, searchDir, skillName);
           if (
             fs.existsSync(candidate) &&
             fs.statSync(candidate).isDirectory() &&
-            fs.existsSync(path.join(candidate, "SKILL.md"))
+            fs.existsSync(joinFsPath(candidate, "SKILL.md"))
           ) {
             foundSrc = candidate;
             break;
@@ -537,7 +558,7 @@ async function handleGithubInstall(body: {
   }
 
   const zipBuffer = Buffer.from(await zipResponse.arrayBuffer());
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "routa-catalog-"));
+  const tmpDir = fs.mkdtempSync(joinFsPath(os.tmpdir(), "routa-catalog-"));
 
   try {
     const AdmZip = (await import("adm-zip")).default;
@@ -555,7 +576,7 @@ async function handleGithubInstall(body: {
       );
     }
 
-    const repoRoot = path.join(tmpDir, topDirs[0].name);
+    const repoRoot = joinFsPath(tmpDir, topDirs[0].name);
     const destBase = getSkillsDestDir();
     try {
       fs.mkdirSync(destBase, { recursive: true });
@@ -572,19 +593,19 @@ async function handleGithubInstall(body: {
 
     for (const skillName of skillNames) {
       try {
-        const skillSrc = path.join(repoRoot, catalogPath, skillName);
+        const skillSrc = joinFsPath(repoRoot, catalogPath, skillName);
 
         if (!fs.existsSync(skillSrc) || !fs.statSync(skillSrc).isDirectory()) {
           errors.push(`Skill not found in catalog: ${skillName}`);
           continue;
         }
 
-        if (!fs.existsSync(path.join(skillSrc, "SKILL.md"))) {
+        if (!fs.existsSync(joinFsPath(skillSrc, "SKILL.md"))) {
           errors.push(`No SKILL.md in ${skillName}`);
           continue;
         }
 
-        const destDir = path.join(destBase, skillName);
+        const destDir = joinFsPath(destBase, skillName);
         if (fs.existsSync(destDir)) {
           errors.push(`Already installed: ${skillName}`);
           continue;
@@ -616,8 +637,8 @@ function copyDirRecursive(src: string, dest: string): void {
   fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
+    const srcPath = joinFsPath(src, entry.name);
+    const destPath = joinFsPath(dest, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === ".git" || entry.name === "node_modules") continue;
       copyDirRecursive(srcPath, destPath);
@@ -635,7 +656,7 @@ function readDirAsFileEntries(dir: string, basePath = ""): SkillFileEntry[] {
   const items = fs.readdirSync(dir, { withFileTypes: true });
 
   for (const item of items) {
-    const itemPath = path.join(dir, item.name);
+    const itemPath = joinFsPath(dir, item.name);
     const relativePath = basePath ? `${basePath}/${item.name}` : item.name;
 
     if (item.isDirectory()) {
@@ -718,7 +739,7 @@ async function handleSkillsShInstallToDb(body: {
     }
     const [owner, repoName] = parts;
 
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "routa-catalog-db-"));
+    const tmpDir = fs.mkdtempSync(joinFsPath(os.tmpdir(), "routa-catalog-db-"));
 
     try {
       const zipUrl = `https://codeload.github.com/${owner}/${repoName}/zip/main`;
@@ -744,7 +765,7 @@ async function handleSkillsShInstallToDb(body: {
         continue;
       }
 
-      const repoRoot = path.join(tmpDir, topDirs[0].name);
+      const repoRoot = joinFsPath(tmpDir, topDirs[0].name);
       // Note: "." is for repos where skills are at root level (e.g., mindrally/skills)
       const searchDirs = [".", "skills", ".agents/skills", ".opencode/skills", ".claude/skills", ".codex/skills"];
 
@@ -758,9 +779,9 @@ async function handleSkillsShInstallToDb(body: {
 
         let foundSrc: string | null = null;
         for (const searchDir of searchDirs) {
-          const candidate = path.join(repoRoot, searchDir, skillName);
+          const candidate = joinFsPath(repoRoot, searchDir, skillName);
           if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory() &&
-              fs.existsSync(path.join(candidate, "SKILL.md"))) {
+              fs.existsSync(joinFsPath(candidate, "SKILL.md"))) {
             foundSrc = candidate;
             break;
           }
@@ -839,7 +860,7 @@ async function handleGithubInstallToDb(body: {
   }
 
   const zipBuffer = Buffer.from(await zipResponse.arrayBuffer());
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "routa-catalog-db-"));
+    const tmpDir = fs.mkdtempSync(joinFsPath(os.tmpdir(), "routa-catalog-db-"));
 
   try {
     const AdmZip = (await import("adm-zip")).default;
@@ -851,7 +872,7 @@ async function handleGithubInstallToDb(body: {
       return NextResponse.json({ error: "Unexpected archive layout" }, { status: 500 });
     }
 
-    const repoRoot = path.join(tmpDir, topDirs[0].name);
+    const repoRoot = joinFsPath(tmpDir, topDirs[0].name);
     const db = getDatabase();
     const skillStore = new PgSkillStore(db);
 
@@ -866,12 +887,12 @@ async function handleGithubInstallToDb(body: {
           continue;
         }
 
-        const skillSrc = path.join(repoRoot, catalogPath, skillName);
+        const skillSrc = joinFsPath(repoRoot, catalogPath, skillName);
         if (!fs.existsSync(skillSrc) || !fs.statSync(skillSrc).isDirectory()) {
           errors.push(`Skill not found in catalog: ${skillName}`);
           continue;
         }
-        if (!fs.existsSync(path.join(skillSrc, "SKILL.md"))) {
+        if (!fs.existsSync(joinFsPath(skillSrc, "SKILL.md"))) {
           errors.push(`No SKILL.md in ${skillName}`);
           continue;
         }
