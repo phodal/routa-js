@@ -1,0 +1,105 @@
+name: 'Issue Triage'
+
+on:
+  issues:
+    types: [opened]
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to triage'
+        required: true
+        type: number
+      dry_run:
+        description: 'Dry run (no comments/labels)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage-issue:
+    name: 'Triage Community Issue'
+    runs-on: ubuntu-latest
+
+    # Only run for issues NOT created by the repo owner (community issues)
+    # Always run for manual workflow_dispatch
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.issue.user.login != github.repository_owner
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine issue number
+        id: issue
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            echo "number=$INPUT_ISSUE_NUMBER" >> $GITHUB_OUTPUT
+            echo "dry_run=$INPUT_DRY_RUN" >> $GITHUB_OUTPUT
+          else
+            echo "number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+            echo "dry_run=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync GitHub issues into local docs/issues cache
+        run: |
+          echo "### Local issue sync" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          npx tsx scripts/sync-github-issues.ts --state all 2>&1 | tee /tmp/issue-sync-output.txt
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -80 /tmp/issue-sync-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Triage Issue
+        id: triage
+        run: |
+          ISSUE_NUMBER="${{ steps.issue.outputs.number }}"
+          DRY_RUN="${{ steps.issue.outputs.dry_run }}"
+
+          echo "## 🏷️ Issue Triage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Triaging issue #${ISSUE_NUMBER}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Build command arguments
+          ARGS="--issue $ISSUE_NUMBER --skip-sync"
+          if [ "$DRY_RUN" == "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+
+          # Run the issue triage script
+          npx tsx scripts/issue-triage.ts $ARGS 2>&1 | tee /tmp/triage-output.txt
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Triage Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -200 /tmp/triage-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
