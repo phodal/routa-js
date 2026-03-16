@@ -25,6 +25,7 @@ pub mod provider_models;
 pub mod providers;
 pub mod rpc;
 pub mod schedules;
+pub mod sandbox;
 pub mod sessions;
 pub mod shared_sessions;
 pub mod skills;
@@ -82,6 +83,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/a2ui", a2ui::router())
         .nest("/api/traces", traces::router())
         .nest("/api/schedules", schedules::router())
+        .nest("/api/sandboxes", sandbox::router())
         .nest("/api/specialists", specialists::router())
         .nest("/api/memory", memory::router())
         .nest("/api/debug", debug::router())

@@ -9,6 +9,7 @@ use crate::acp::{
 };
 use crate::db::Database;
 use crate::events::EventBus;
+use crate::sandbox::SandboxManager;
 use crate::skills::SkillRegistry;
 use crate::store::{
     AcpSessionStore, AgentStore, CodebaseStore, ConversationStore, KanbanStore, NoteStore,
@@ -44,6 +45,7 @@ pub struct AppStateInner {
     pub acp_runtime_manager: AcpRuntimeManager,
     pub acp_warmup_service: AcpWarmupService,
     pub docker_state: DockerState,
+    pub sandbox_manager: SandboxManager,
 }
 
 pub type AppState = Arc<AppStateInner>;
@@ -76,6 +78,7 @@ impl AppStateInner {
             acp_runtime_manager,
             acp_warmup_service,
             docker_state: DockerState::default(),
+            sandbox_manager: SandboxManager::new(),
         }
     }
 }

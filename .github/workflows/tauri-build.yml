@@ -88,9 +88,16 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      - name: Create placeholder frontend directory
+      - name: Create placeholder frontend directory (Unix)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p apps/desktop/src-tauri/frontend
+          echo "Placeholder for Tauri build" > apps/desktop/src-tauri/frontend/.placeholder
+
+      - name: Create placeholder frontend directory (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path apps/desktop/src-tauri/frontend
           echo "Placeholder for Tauri build" > apps/desktop/src-tauri/frontend/.placeholder
 
       - name: Prepare frontend for Tauri bundling

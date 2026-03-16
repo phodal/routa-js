@@ -456,6 +456,66 @@ components:
           type: boolean
           const: true
 
+    # ── Sandbox schemas ──
+    SandboxInfo:
+      type: object
+      required: [id, name, status, lang, createdAt, lastActiveAt]
+      properties:
+        id:
+          type: string
+          description: Docker container ID
+        name:
+          type: string
+          description: Docker container name
+        status:
+          type: string
+          description: Container status (e.g. "running")
+        lang:
+          type: string
+          description: Programming language (e.g. "python")
+        port:
+          type: integer
+          description: Host port mapped to the in-sandbox server
+        createdAt:
+          type: string
+          format: date-time
+        lastActiveAt:
+          type: string
+          format: date-time
+
+    CreateSandboxRequest:
+      type: object
+      required: [lang]
+      properties:
+        lang:
+          type: string
+          description: Language for the sandbox kernel (currently only "python")
+          example: python
+
+    ExecuteRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: Source code to execute in the sandbox
+
+    SandboxOutputEvent:
+      type: object
+      description: |
+        A single streaming output event. Exactly one of text, image, or error
+        will be present in each line of the NDJSON stream.
+      properties:
+        text:
+          type: string
+          description: Stdout output text
+        image:
+          type: string
+          description: Base64-encoded PNG image
+        error:
+          type: string
+          description: Error traceback
+
     Worktree:
       type: object
       required: [id, codebaseId, workspaceId, worktreePath, branch, baseBranch, status, createdAt, updatedAt]
@@ -3515,6 +3575,137 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeletedResponse"
+
+  # ── Sandboxes ──
+  /api/sandboxes:
+    get:
+      operationId: listSandboxes
+      summary: List all active sandbox containers
+      responses:
+        "200":
+          description: Sandbox list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sandboxes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SandboxInfo"
+    post:
+      operationId: createSandbox
+      summary: Create a new sandbox container
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSandboxRequest"
+      responses:
+        "201":
+          description: Created sandbox info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxInfo"
+        "400":
+          description: Unsupported language
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sandboxes/{id}:
+    get:
+      operationId: getSandbox
+      summary: Get sandbox info by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sandbox info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxInfo"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSandbox
+      summary: Stop and remove a sandbox container
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deletion confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sandboxes/{id}/execute:
+    post:
+      operationId: executeSandboxCode
+      summary: Execute code in a sandbox and stream results as NDJSON
+      description: |
+        Accepts a code string and streams back newline-delimited JSON objects
+        representing the execution output. Each line is one of:
+          {"text": "..."}    — stdout output
+          {"image": "..."}   — base64-encoded PNG from display output
+          {"error": "..."}   — execution error / traceback
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteRequest"
+      responses:
+        "200":
+          description: NDJSON stream of SandboxOutputEvent objects
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+        "400":
+          description: Empty code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Sandbox not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ── Specialists ──
   /api/specialists:

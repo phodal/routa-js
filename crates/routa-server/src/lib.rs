@@ -25,6 +25,7 @@ pub use routa_core::mcp;
 pub use routa_core::models;
 pub use routa_core::orchestration;
 pub use routa_core::rpc;
+pub use routa_core::sandbox;
 pub use routa_core::shell_env;
 pub use routa_core::skills;
 pub use routa_core::state;
@@ -155,15 +156,10 @@ pub async fn start_server_with_state(
             // For Next.js static export with dynamic routes, we need custom fallback logic.
             // Next.js generates placeholder files for dynamic routes:
             // - workspace/__placeholder__.html (for /workspace/[workspaceId])
-            // - workspace/__placeholder__/kanban.html (for /workspace/[workspaceId]/kanban)
             // - workspace/__placeholder__/sessions/__placeholder__.html (for /workspace/[workspaceId]/sessions/[sessionId])
-            //
-            // For static routes, Next.js generates direct HTML files:
-            // - traces.html, mcp-tools.html, settings.html, etc.
             //
             // Additionally, Next.js client navigation requests .txt RSC payload files:
             // - workspace/default/sessions/abc123.txt → workspace/__placeholder__/sessions/__placeholder__.txt
-            // - workspace/default/kanban.txt → workspace/__placeholder__/kanban.txt
             //
             // We match the URL pattern and serve the corresponding placeholder file.
             let static_dir_clone = static_dir.clone();
@@ -178,7 +174,6 @@ pub async fn start_server_with_state(
 
                         // Determine which file to serve based on the route pattern.
                         let (target_file, content_type) = if path.starts_with("/workspace/") {
-                            // Handle dynamic workspace routes
                             // Strip .txt extension if present to analyze the path
                             let clean_path = path.trim_end_matches(".txt");
                             let segments: Vec<&str> = clean_path
@@ -203,12 +198,6 @@ pub async fn start_server_with_state(
                                     ),
                                     content,
                                 )
-                            } else if segments.len() == 2 && segments[1] == "kanban" {
-                                // /workspace/{workspaceId}/kanban[.txt]
-                                (
-                                    format!("workspace/__placeholder__/kanban.{}", ext),
-                                    content,
-                                )
                             } else if !segments.is_empty() {
                                 // /workspace/{workspaceId}[.txt]
                                 (format!("workspace/__placeholder__.{}", ext), content)
@@ -216,15 +205,7 @@ pub async fn start_server_with_state(
                                 ("index.html".to_string(), "text/html; charset=utf-8")
                             }
                         } else {
-                            // Handle static routes (traces, mcp-tools, settings, etc.)
-                            // Try to serve the corresponding .html file
-                            let clean_path = path.trim_start_matches('/').trim_end_matches('/');
-                            if !clean_path.is_empty() && !clean_path.contains("..") {
-                                // For paths like /traces, /mcp-tools, /settings, etc.
-                                (format!("{}.html", clean_path), "text/html; charset=utf-8")
-                            } else {
-                                ("index.html".to_string(), "text/html; charset=utf-8")
-                            }
+                            ("index.html".to_string(), "text/html; charset=utf-8")
                         };
 
                         let file_path = std::path::Path::new(&static_dir).join(&target_file);
