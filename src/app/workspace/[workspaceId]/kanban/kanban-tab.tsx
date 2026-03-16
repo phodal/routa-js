@@ -10,6 +10,7 @@ import { KanbanCard } from "./kanban-card";
 import { KanbanSettingsModal, type ColumnAutomationConfig } from "./kanban-settings-modal";
 import { KanbanCardDetail } from "./kanban-card-detail";
 import { buildKanbanTaskAgentPrompt, scheduleKanbanRefreshBurst } from "./kanban-agent-input";
+import { KanbanBgAgentPanel } from "./kanban-bg-agent-panel";
 import { ChatPanel } from "@/client/components/chat-panel";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
 
@@ -171,6 +172,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  const [bgAgentPanelOpen, setBgAgentPanelOpen] = useState(false);
   const [detailSplitRatio, setDetailSplitRatio] = useState(0.48);
   const [isDraggingDetailSplit, setIsDraggingDetailSplit] = useState(false);
 
@@ -205,6 +207,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
   const [deleteConfirmTask, setDeleteConfirmTask] = useState<TaskInfo | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const detailSplitContainerRef = useRef<HTMLDivElement | null>(null);
+  const bgAgentPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -221,6 +224,30 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
     if (!localStorageApi || typeof localStorageApi.setItem !== "function") return;
     localStorageApi.setItem(KANBAN_DETAIL_SPLIT_RATIO_KEY, String(detailSplitRatio));
   }, [detailSplitRatio]);
+
+  useEffect(() => {
+    if (!bgAgentPanelOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const panel = bgAgentPanelRef.current;
+      if (!panel) return;
+      if (panel.contains(event.target as Node)) return;
+      setBgAgentPanelOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setBgAgentPanelOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [bgAgentPanelOpen]);
 
   useEffect(() => {
     if (!isDraggingDetailSplit) return;
@@ -893,8 +920,37 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
 
   if (!board) {
     return (
-      <div className="rounded-2xl border border-gray-200/60 dark:border-[#1c1f2e] bg-white dark:bg-[#12141c] p-6 text-sm text-gray-500 dark:text-gray-400">
-        No board available yet.
+      <div className="flex h-full flex-col space-y-4">
+        <div className="flex justify-end">
+          <div ref={bgAgentPanelRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setBgAgentPanelOpen((current) => !current)}
+              data-testid="kanban-bg-agent-toggle"
+              aria-expanded={bgAgentPanelOpen}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
+            >
+              <svg
+                className={`h-3.5 w-3.5 text-gray-400 transition-transform ${bgAgentPanelOpen ? "rotate-90" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              Background Agents
+            </button>
+            {bgAgentPanelOpen && (
+              <div className="absolute right-0 top-full z-30 mt-2 w-[min(72rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-2xl shadow-2xl">
+                <KanbanBgAgentPanel workspaceId={workspaceId} />
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-gray-200/60 bg-white p-6 text-sm text-gray-500 dark:border-[#1c1f2e] dark:bg-[#12141c] dark:text-gray-400">
+          No board available yet.
+        </div>
       </div>
     );
   }
@@ -1057,6 +1113,31 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                 ))}
               </select>
             )}
+            <div ref={bgAgentPanelRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setBgAgentPanelOpen((current) => !current)}
+                data-testid="kanban-bg-agent-toggle"
+                aria-expanded={bgAgentPanelOpen}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
+              >
+                <svg
+                  className={`h-3.5 w-3.5 text-gray-400 transition-transform ${bgAgentPanelOpen ? "rotate-90" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                Background Agents
+              </button>
+              {bgAgentPanelOpen && (
+                <div className="absolute right-0 top-full z-30 mt-2 w-[min(72rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-2xl shadow-2xl">
+                  <KanbanBgAgentPanel workspaceId={workspaceId} />
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setShowSettings(true)}
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
@@ -1093,7 +1174,6 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
           />
         </div>
       )}
-
       <div className="flex-1 min-h-0 flex gap-4">
         <div className={`${agentPanelOpen && agentSessionId ? "min-w-0 flex-1" : "w-full"} flex min-h-0 flex-col`}>
           <div className="flex-1 min-h-0 overflow-auto pb-2">
