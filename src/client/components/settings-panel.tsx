@@ -10,6 +10,8 @@ import { WorkflowPanel } from "./workflow-panel";
 import {
   loadCustomAcpProviders,
   saveCustomAcpProviders,
+  loadDisabledProviders,
+  saveDisabledProviders,
   type CustomAcpProvider,
 } from "../utils/custom-acp-providers";
 
@@ -1017,6 +1019,102 @@ function CustomAcpProvidersSection() {
   );
 }
 
+// ─── Disabled Providers Section ───────────────────────────────────────────────
+
+interface DisabledProvidersSectionProps {
+  allProviders: { id: string; name: string; status?: string }[];
+}
+
+function DisabledProvidersSection({ allProviders }: DisabledProvidersSectionProps) {
+  const [disabledIds, setDisabledIds] = useState<string[]>(() => loadDisabledProviders());
+
+  const handleToggle = (providerId: string) => {
+    const newDisabledIds = disabledIds.includes(providerId)
+      ? disabledIds.filter((id) => id !== providerId)
+      : [...disabledIds, providerId];
+
+    setDisabledIds(newDisabledIds);
+    saveDisabledProviders(newDisabledIds);
+
+    // Notify user to refresh the page to see changes
+    if (typeof window !== "undefined") {
+      // Trigger a custom event that the useAcp hook can listen to
+      window.dispatchEvent(new CustomEvent("routa:providers-changed"));
+    }
+  };
+
+  const sectionHeadCls = "text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2";
+
+  return (
+    <div className="px-4 py-4 space-y-3 border-t border-gray-200 dark:border-gray-700">
+      <div>
+        <p className={sectionHeadCls}>Disabled Providers</p>
+        <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-3">
+          Disable providers that cause errors (e.g., 403 Forbidden) to prevent them from appearing in provider lists.
+          Changes take effect after refreshing the page.
+        </p>
+      </div>
+
+      {allProviders.length === 0 ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No providers available.</p>
+      ) : (
+        <div className="space-y-2 max-h-60 overflow-y-auto">
+          {allProviders.map((provider) => {
+            const isDisabled = disabledIds.includes(provider.id);
+            return (
+              <div
+                key={provider.id}
+                className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130]"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <input
+                    type="checkbox"
+                    checked={isDisabled}
+                    onChange={() => handleToggle(provider.id)}
+                    className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+                      {provider.name}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono truncate">
+                      {provider.id}
+                    </p>
+                  </div>
+                </div>
+                {provider.status && (
+                  <span
+                    className={`ml-2 px-2 py-0.5 text-[10px] rounded shrink-0 ${
+                      provider.status === "available"
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                    }`}
+                  >
+                    {provider.status}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {disabledIds.length > 0 && (
+        <div className="mt-3 p-2.5 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+          <div className="flex items-start gap-2">
+            <svg className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-[11px] text-yellow-700 dark:text-yellow-300">
+              {disabledIds.length} provider{disabledIds.length > 1 ? "s" : ""} disabled. Refresh the page to apply changes.
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MCP Servers Tab ─────────────────────────────────────────────────────────
 
 type McpServerType = "stdio" | "http" | "sse";
@@ -1760,6 +1858,9 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
                 <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Provider Credentials</p>
                 <DockerOpenCodeSection />
               </div>
+
+              {/* Disabled Providers */}
+              <DisabledProvidersSection allProviders={providers} />
             </div>
           )}
           {activeTab === "agents" && (

@@ -25,7 +25,7 @@ import {
   shouldSuppressTeardownError,
   toErrorMessage,
 } from "../utils/diagnostics";
-import { loadCustomAcpProviders, type CustomAcpProvider } from "../utils/custom-acp-providers";
+import { loadCustomAcpProviders, loadDisabledProviders, type CustomAcpProvider } from "../utils/custom-acp-providers";
 import { loadDockerOpencodeAuthJson } from "../components/settings-panel";
 
 /** Convert a custom ACP provider to AcpProviderInfo for the provider list. */
@@ -97,8 +97,6 @@ export interface UseAcpActions {
     skillContext?: { skillName: string; skillContent: string },
   ) => Promise<void>;
   respondToUserInput: (toolCallId: string, response: Record<string, unknown>) => Promise<void>;
-  writeTerminal: (terminalId: string, data: string) => Promise<void>;
-  resizeTerminal: (terminalId: string, cols: number, rows: number) => Promise<void>;
   cancel: () => Promise<void>;
   disconnect: () => void;
   /** Clear auth error (e.g., when user dismisses the popup) */
@@ -182,7 +180,12 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
 
       // Merge in user-defined custom ACP providers
       const customProviders = loadCustomAcpProviders().map(toAcpProviderInfo);
-      const allLocalProviders = [...localProviders, ...customProviders];
+
+      // Filter out disabled providers
+      const disabledProviders = loadDisabledProviders();
+      const allLocalProviders = [...localProviders, ...customProviders].filter(
+        (p) => !disabledProviders.includes(p.id)
+      );
 
       client.onUpdate((update) => {
         setState((s) => ({
@@ -210,11 +213,18 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         // Only update local providers (source === 'static'), keep existing registry providers
         // Re-merge custom providers (they are always "available")
         const customProvs = loadCustomAcpProviders().map(toAcpProviderInfo);
+
+        // Filter out disabled providers
+        const disabledProvs = loadDisabledProviders();
+        const filteredLocalProviders = [...checkedLocalProviders, ...customProvs].filter(
+          (p) => !disabledProvs.includes(p.id)
+        );
+
         setState((s) => {
           const existingRegistry = s.providers.filter((p) => p.source === "registry");
           return {
             ...s,
-            providers: [...checkedLocalProviders, ...customProvs, ...existingRegistry],
+            providers: [...filteredLocalProviders, ...existingRegistry],
           };
         });
       }).catch((err) => {
@@ -231,7 +241,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         if (tearingDownRef.current) return;
         // loadRegistryProviders returns ALL providers (local + registry)
         // Filter to get only registry providers to avoid duplicates
-        const registryProviders = allProviders.filter((p) => p.source === "registry");
+        const disabledProvs = loadDisabledProviders();
+        const registryProviders = allProviders
+          .filter((p) => p.source === "registry")
+          .filter((p) => !disabledProvs.includes(p.id));
         if (registryProviders.length > 0) {
           setState((s) => {
             // Keep only local providers from current state, add new registry providers
@@ -246,7 +259,10 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           // This updates the status from "checking" to "available" or "unavailable"
           client.listProviders(true, true).then((checkedAllProviders) => {
             if (tearingDownRef.current) return;
-            const checkedRegistry = checkedAllProviders.filter((p) => p.source === "registry");
+            const disabledProvs = loadDisabledProviders();
+            const checkedRegistry = checkedAllProviders
+              .filter((p) => p.source === "registry")
+              .filter((p) => !disabledProvs.includes(p.id));
             if (checkedRegistry.length > 0) {
               setState((s) => {
                 const localProviders = s.providers.filter((p) => p.source === "static");
@@ -506,38 +522,6 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     }
   }, []);
 
-  const writeTerminal = useCallback(async (terminalId: string, data: string): Promise<void> => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    if (!client || !sessionId || !terminalId || !data) return;
-
-    try {
-      await client.writeTerminal(sessionId, terminalId, data);
-    } catch (err) {
-      logRuntime("error", "useAcp.writeTerminal", "Failed to write terminal input", err);
-      setState((s) => ({
-        ...s,
-        error: toErrorMessage(err) || "Failed to write terminal input",
-      }));
-    }
-  }, []);
-
-  const resizeTerminal = useCallback(async (
-    terminalId: string,
-    cols: number,
-    rows: number,
-  ): Promise<void> => {
-    const client = clientRef.current;
-    const sessionId = sessionIdRef.current;
-    if (!client || !sessionId || !terminalId) return;
-
-    try {
-      await client.resizeTerminal(sessionId, terminalId, cols, rows);
-    } catch (err) {
-      logRuntime("warn", "useAcp.resizeTerminal", "Failed to resize terminal", err);
-    }
-  }, []);
-
   const disconnect = useCallback(() => {
     clientRef.current?.disconnect();
     clientRef.current = null;
@@ -575,8 +559,6 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     prompt,
     promptSession,
     respondToUserInput,
-    writeTerminal,
-    resizeTerminal,
     cancel,
     disconnect,
     clearAuthError,
