@@ -64,7 +64,7 @@ function QueueStatusBadge({
 
   return (
     <span
-      className={`group inline-flex h-6 items-center rounded-full px-2 text-[11px] ${className}`}
+      className={`group inline-flex h-7 items-center rounded-full px-2 text-[11px] ${className}`}
       title={tooltip}
     >
       {label} {count}
@@ -421,11 +421,11 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
       data-testid="kanban-page-header"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex min-h-7 items-center gap-2">
           <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
           </svg>
-          <h1 className="text-[13px] font-medium text-gray-900 dark:text-gray-100">Kanban Board</h1>
+          <h1 className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">Kanban Board</h1>
           {tasks.length > 0 && (
             <span className="text-[11px] text-gray-500 dark:text-gray-400" data-testid="kanban-task-count">({tasks.length} tasks)</span>
           )}
@@ -434,9 +434,9 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {board && (
             <>
-              <span className="inline-flex h-6 items-center rounded-full bg-gray-100 px-2 text-[11px] dark:bg-[#191c28]">
-                Limit {board.sessionConcurrencyLimit ?? 1}
-              </span>
+          <span className="inline-flex h-7 items-center rounded-full bg-gray-100 px-2.5 text-[11px] dark:bg-[#191c28]">
+            Limit {board.sessionConcurrencyLimit ?? 1}
+          </span>
               <QueueStatusBadge
                 label="Running"
                 count={boardQueue?.runningCount ?? 0}
@@ -453,7 +453,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
           )}
 
           {(repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
-            <div className="inline-flex h-6 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
+            <div className="inline-flex h-7 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
               <span className="font-medium">Kanban Health</span>
               {repoHealth.missingRepoTasks > 0 && (
                 <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
@@ -472,7 +472,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
               <select
                 value={selectedBoardId ?? ""}
                 onChange={(event) => setSelectedBoardId(event.target.value)}
-                className="h-8 min-h-8 rounded-md border border-gray-200 bg-white px-3 text-[12px] text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
+                className="h-7 min-h-7 rounded-md border border-gray-200 bg-white px-2.5 text-[12px] text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
             >
               {boards.map((item) => (
                 <option key={item.id} value={item.id}>{item.name}</option>
@@ -485,7 +485,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
               onClick={() => setBgAgentPanelOpen((current) => !current)}
               data-testid="kanban-bg-agent-toggle"
               aria-expanded={bgAgentPanelOpen}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 bg-white px-2.5 text-[12px] text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
+              className="inline-flex h-7 items-center gap-2 rounded-md border border-gray-200 bg-white px-2.5 text-[12px] text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
             >
               <svg
                 className={`h-3.5 w-3.5 text-gray-400 transition-transform ${bgAgentPanelOpen ? "rotate-90" : ""}`}
@@ -506,20 +506,18 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
           </div>
           <button
             onClick={() => setShowSettings(true)}
-            className="inline-flex h-8 items-center rounded-md border border-gray-200 bg-white px-2.5 text-[12px] text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
+            className="inline-flex h-7 items-center rounded-md border border-gray-200 bg-white px-2.5 text-[12px] text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
             title="Board settings"
           >
             Settings
           </button>
           <button
             onClick={onRefresh}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1f232f] dark:hover:text-gray-200"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1f232f] dark:hover:text-gray-200"
             title="Refresh"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 0 1 13.28-5.7" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M20 12a8 8 0 0 1-13.28 5.7" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 0 0 16 0M20 12l-1-1M20 12l-1 1" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.581m15.356 2A8.001 8.001 0 004.581 9m0 0H9m11 11v-5h-.582m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
         </div>
