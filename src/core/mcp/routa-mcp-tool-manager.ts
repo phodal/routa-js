@@ -113,6 +113,8 @@ export class RoutaMcpToolManager {
       // Kanban tools (2) - needed for card-assigned agents to update their cards
       this.registerUpdateCard(server);
       this.registerMoveCard(server);
+      this.registerRequestPreviousLaneHandoff(server);
+      this.registerSubmitLaneHandoff(server);
       // Artifact tools (6) - critical for multi-agent coordination and desk check workflow
       this.registerRequestArtifact(server);
       this.registerProvideArtifact(server);
@@ -175,6 +177,8 @@ export class RoutaMcpToolManager {
     this.registerSearchCards(server);
     this.registerListCardsByColumn(server);
     this.registerDecomposeTasks(server);
+    this.registerRequestPreviousLaneHandoff(server);
+    this.registerSubmitLaneHandoff(server);
     // Artifact tools
     this.registerRequestArtifact(server);
     this.registerProvideArtifact(server);
@@ -1135,6 +1139,64 @@ Note: taskId must be a UUID from create_task, not a task name.`,
       }
     );
   }
+
+  private registerRequestPreviousLaneHandoff(server: McpServer) {
+    server.tool(
+      "request_previous_lane_handoff",
+      "Request runtime help from the immediately previous Kanban lane for the same card. Use this when review needs environment preparation or setup context from dev.",
+      {
+        taskId: z.string().describe("Card/task ID"),
+        requestType: z.enum(["environment_preparation", "runtime_context", "clarification", "rerun_command"])
+          .describe("Type of help needed from the previous lane"),
+        request: z.string().describe("Concrete request for the previous lane session"),
+      },
+      async (params) => {
+        if (!this.kanbanTools) {
+          return this.toMcpResult({ success: false, error: "Kanban tools not available." });
+        }
+        if (!this.sessionId) {
+          return this.toMcpResult({ success: false, error: "Current ACP session is not available for lane handoff." });
+        }
+        const result = await this.kanbanTools.requestPreviousLaneHandoff({
+          taskId: params.taskId,
+          requestType: params.requestType,
+          request: params.request,
+          sessionId: this.sessionId,
+        });
+        return this.toMcpResult(result);
+      }
+    );
+  }
+
+  private registerSubmitLaneHandoff(server: McpServer) {
+    server.tool(
+      "submit_lane_handoff",
+      "Submit the result of a lane handoff request after preparing environment or runtime context for another Kanban lane.",
+      {
+        taskId: z.string().describe("Card/task ID"),
+        handoffId: z.string().describe("Lane handoff request ID"),
+        status: z.enum(["completed", "blocked", "failed"]).describe("Outcome of the handoff support work"),
+        summary: z.string().describe("Concise summary of what was prepared or why it is blocked"),
+      },
+      async (params) => {
+        if (!this.kanbanTools) {
+          return this.toMcpResult({ success: false, error: "Kanban tools not available." });
+        }
+        if (!this.sessionId) {
+          return this.toMcpResult({ success: false, error: "Current ACP session is not available for lane handoff." });
+        }
+        const result = await this.kanbanTools.submitLaneHandoff({
+          taskId: params.taskId,
+          handoffId: params.handoffId,
+          status: params.status,
+          summary: params.summary,
+          sessionId: this.sessionId,
+        });
+        return this.toMcpResult(result);
+      }
+    );
+  }
+
   private registerDecomposeTasks(server: McpServer) {
     server.tool(
       "decompose_tasks",

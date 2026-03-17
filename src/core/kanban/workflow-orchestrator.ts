@@ -12,6 +12,7 @@ import type { TaskStore } from "../store/task-store";
 import type { KanbanColumnAutomation } from "../models/kanban";
 import { columnIdToTaskStatus } from "../models/kanban";
 import type { ColumnTransitionData } from "./column-transition";
+import { markTaskLaneSessionStatus } from "./task-lane-history";
 
 /** Represents an active column automation in progress */
 export interface ActiveAutomation {
@@ -178,6 +179,18 @@ export class KanbanWorkflowOrchestrator {
 
       const success = event.type !== AgentEventType.AGENT_FAILED && event.type !== AgentEventType.AGENT_TIMEOUT && event.data?.success !== false;
       automation.status = success ? "completed" : "failed";
+      if (task) {
+        markTaskLaneSessionStatus(
+          task,
+          sessionId,
+          event.type === AgentEventType.AGENT_TIMEOUT
+            ? "timed_out"
+            : success
+              ? "completed"
+              : "failed",
+        );
+        await this.taskStore.save(task);
+      }
 
       // Auto-advance if configured and successful
       if (success && automation.automation.autoAdvanceOnSuccess) {

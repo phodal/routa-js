@@ -17,6 +17,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { KanbanColumn } from "../models/kanban";
+import type { TaskLaneHandoff, TaskLaneSession } from "../models/task";
 
 // ─── Workspaces ─────────────────────────────────────────────────────
 
@@ -83,6 +84,8 @@ export const tasks = pgTable("tasks", {
   triggerSessionId: text("trigger_session_id"),
   /** All session IDs that have been associated with this task (history) */
   sessionIds: jsonb("session_ids").$type<string[]>().default([]),
+  laneSessions: jsonb("lane_sessions").$type<TaskLaneSession[]>().default([]),
+  laneHandoffs: jsonb("lane_handoffs").$type<TaskLaneHandoff[]>().default([]),
   githubId: text("github_id"),
   githubNumber: integer("github_number"),
   githubUrl: text("github_url"),

@@ -29,6 +29,8 @@ const ESSENTIAL_TOOL_NAMES = new Set([
   // Kanban tools - needed for card-assigned agents to update their cards
   "update_card",
   "move_card",
+  "request_previous_lane_handoff",
+  "submit_lane_handoff",
 ]);
 
 export async function executeMcpTool(
@@ -445,6 +447,29 @@ export async function executeMcpTool(
           workspaceId: (args.workspaceId as string) ?? workspace,
           tasks: args.tasks as { title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent"; labels?: string[] }[],
           columnId: (args.columnId as string | undefined) ?? (args.column as string | undefined),
+        })
+      );
+    case "request_previous_lane_handoff":
+      if (!kanbanTools) return formatResult({ success: false, error: "Kanban tools not available." });
+      if (!args.sessionId) return formatResult({ success: false, error: "Current ACP session is required for lane handoff." });
+      return formatResult(
+        await kanbanTools.requestPreviousLaneHandoff({
+          taskId: args.taskId as string,
+          requestType: args.requestType as "environment_preparation" | "runtime_context" | "clarification" | "rerun_command",
+          request: args.request as string,
+          sessionId: args.sessionId as string,
+        })
+      );
+    case "submit_lane_handoff":
+      if (!kanbanTools) return formatResult({ success: false, error: "Kanban tools not available." });
+      if (!args.sessionId) return formatResult({ success: false, error: "Current ACP session is required for lane handoff." });
+      return formatResult(
+        await kanbanTools.submitLaneHandoff({
+          taskId: args.taskId as string,
+          handoffId: args.handoffId as string,
+          status: args.status as "completed" | "blocked" | "failed",
+          summary: args.summary as string,
+          sessionId: args.sessionId as string,
         })
       );
 
@@ -959,6 +984,33 @@ export function getMcpToolDefinitions(toolMode: ToolMode = "essential") {
           position: { type: "number", description: "Position within the column (optional)" },
         },
         required: ["cardId", "targetColumnId"],
+      },
+    },
+    {
+      name: "request_previous_lane_handoff",
+      description: "Ask the immediately previous Kanban lane to prepare environment, provide runtime context, or rerun a focused command for this card.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string", description: "Card/task ID" },
+          requestType: { type: "string", enum: ["environment_preparation", "runtime_context", "clarification", "rerun_command"] },
+          request: { type: "string", description: "Concrete request for the previous lane" },
+        },
+        required: ["taskId", "requestType", "request"],
+      },
+    },
+    {
+      name: "submit_lane_handoff",
+      description: "Submit the result of a lane handoff request after preparing runtime support for another Kanban lane.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string", description: "Card/task ID" },
+          handoffId: { type: "string", description: "Lane handoff request ID" },
+          status: { type: "string", enum: ["completed", "blocked", "failed"] },
+          summary: { type: "string", description: "Concise summary of what was prepared or why it is blocked" },
+        },
+        required: ["taskId", "handoffId", "status", "summary"],
       },
     },
   ];

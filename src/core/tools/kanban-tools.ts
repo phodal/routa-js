@@ -15,12 +15,27 @@ import { KanbanBoardStore } from "../store/kanban-board-store";
 import { TaskStore } from "../store/task-store";
 import { ArtifactStore } from "../store/artifact-store";
 import { createKanbanBoard, KanbanColumn, columnIdToTaskStatus } from "../models/kanban";
-import { createTask, Task, TaskPriority } from "../models/task";
+import {
+  createTask,
+  Task,
+  TaskLaneHandoffRequestType,
+  TaskLaneHandoffStatus,
+  TaskPriority,
+} from "../models/task";
 import { ArtifactType } from "../models/artifact";
 import { ToolResult, successResult, errorResult } from "./tool-result";
 import { EventBus } from "../events/event-bus";
 import { emitColumnTransition } from "../kanban/column-transition";
 import { getKanbanEventBroadcaster } from "../kanban/kanban-event-broadcaster";
+import { markTaskLaneSessionStatus } from "../kanban/task-lane-history";
+import {
+  createTaskLaneHandoff,
+  getPreviousLaneSession,
+  getTaskLaneHandoff,
+  getTaskLaneSession,
+  upsertTaskLaneHandoff,
+} from "../kanban/task-lane-history";
+import { getInternalApiOrigin } from "../kanban/agent-trigger";
 
 export class KanbanTools {
   private eventBus?: EventBus;
@@ -218,6 +233,7 @@ export class KanbanTools {
       if (!task.sessionIds.includes(task.triggerSessionId)) {
         task.sessionIds.push(task.triggerSessionId);
       }
+      markTaskLaneSessionStatus(task, task.triggerSessionId, "transitioned");
       task.triggerSessionId = undefined;
     }
 
@@ -268,6 +284,117 @@ export class KanbanTools {
     this.notifyWorkspaceChanged(task.workspaceId, "task", "updated", task.id);
 
     return successResult(this.taskToCard(task));
+  }
+
+  async requestPreviousLaneHandoff(params: {
+    taskId: string;
+    requestType: TaskLaneHandoffRequestType;
+    request: string;
+    sessionId: string;
+  }): Promise<ToolResult> {
+    const task = await this.taskStore.get(params.taskId);
+    if (!task) {
+      return errorResult(`Card not found: ${params.taskId}`);
+    }
+    if (!task.boardId) {
+      return errorResult(`Card ${params.taskId} is not associated with a board`);
+    }
+
+    const board = await this.kanbanBoardStore.get(task.boardId);
+    if (!board) {
+      return errorResult(`Board not found: ${task.boardId}`);
+    }
+
+    const currentLaneSession = getTaskLaneSession(task, params.sessionId);
+    const previousLaneSession = getPreviousLaneSession(task, board, task.columnId);
+    if (!previousLaneSession?.sessionId) {
+      return errorResult(`No previous lane session found for card ${params.taskId}`);
+    }
+
+    const handoff = createTaskLaneHandoff({
+      id: uuidv4(),
+      fromSessionId: params.sessionId,
+      toSessionId: previousLaneSession.sessionId,
+      fromColumnId: currentLaneSession?.columnId ?? task.columnId,
+      toColumnId: previousLaneSession.columnId,
+      requestType: params.requestType,
+      request: params.request,
+    });
+    upsertTaskLaneHandoff(task, handoff);
+    await this.taskStore.save(task);
+
+    try {
+      await this.promptSession(
+        previousLaneSession.sessionId,
+        task.workspaceId,
+        this.buildPreviousLaneHandoffPrompt({
+          task,
+          handoffId: handoff.id,
+          requestType: params.requestType,
+          request: params.request,
+          requestingColumnId: handoff.fromColumnId,
+          requestingSessionId: params.sessionId,
+        }),
+      );
+      handoff.status = "delivered";
+      await this.taskStore.save(task);
+      this.notifyWorkspaceChanged(task.workspaceId, "task", "updated", task.id);
+      return successResult({
+        handoffId: handoff.id,
+        status: handoff.status,
+        targetSessionId: previousLaneSession.sessionId,
+        targetColumnId: previousLaneSession.columnId,
+      });
+    } catch (error) {
+      handoff.status = "failed";
+      await this.taskStore.save(task);
+      return errorResult(error instanceof Error ? error.message : "Failed to deliver handoff request");
+    }
+  }
+
+  async submitLaneHandoff(params: {
+    taskId: string;
+    handoffId: string;
+    status: Exclude<TaskLaneHandoffStatus, "requested" | "delivered">;
+    summary: string;
+    sessionId: string;
+  }): Promise<ToolResult> {
+    const task = await this.taskStore.get(params.taskId);
+    if (!task) {
+      return errorResult(`Card not found: ${params.taskId}`);
+    }
+
+    const handoff = getTaskLaneHandoff(task, params.handoffId);
+    if (!handoff) {
+      return errorResult(`Lane handoff not found: ${params.handoffId}`);
+    }
+    if (handoff.toSessionId !== params.sessionId) {
+      return errorResult(`Lane handoff ${params.handoffId} is not assigned to this session`);
+    }
+
+    handoff.status = params.status;
+    handoff.responseSummary = params.summary;
+    handoff.respondedAt = new Date().toISOString();
+    await this.taskStore.save(task);
+    this.notifyWorkspaceChanged(task.workspaceId, "task", "updated", task.id);
+
+    if (handoff.fromSessionId && handoff.fromSessionId !== params.sessionId) {
+      try {
+        await this.promptSession(
+          handoff.fromSessionId,
+          task.workspaceId,
+          this.buildHandoffResponsePrompt(task, handoff),
+        );
+      } catch {
+        // Keep the durable task record even if the origin session is no longer available.
+      }
+    }
+
+    return successResult({
+      handoffId: handoff.id,
+      status: handoff.status,
+      respondedAt: handoff.respondedAt,
+    });
   }
 
   async deleteCard(cardId: string): Promise<ToolResult> {
@@ -510,6 +637,100 @@ export class KanbanTools {
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     };
+  }
+
+  private async promptSession(
+    sessionId: string,
+    workspaceId: string,
+    prompt: string,
+  ): Promise<void> {
+    const response = await fetch(`${getInternalApiOrigin()}/api/acp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: uuidv4(),
+        method: "session/prompt",
+        params: {
+          sessionId,
+          workspaceId,
+          prompt: [{ type: "text", text: prompt }],
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`session/prompt HTTP ${response.status}`);
+    }
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      return;
+    }
+
+    await response.arrayBuffer();
+  }
+
+  private buildPreviousLaneHandoffPrompt(params: {
+    task: Task;
+    handoffId: string;
+    requestType: TaskLaneHandoffRequestType;
+    request: string;
+    requestingColumnId?: string;
+    requestingSessionId: string;
+  }): string {
+    return [
+      `You have received a lane handoff request for card ${params.task.id}: ${params.task.title}.`,
+      "",
+      `Requesting lane: ${params.requestingColumnId ?? "unknown"}`,
+      `Request type: ${this.formatHandoffRequestType(params.requestType)}`,
+      `Request: ${params.request}`,
+      "",
+      "Complete only the requested support work for this card.",
+      "If runtime setup or environment preparation is needed, perform it in this session.",
+      "Use update_card, provide_artifact, capture_screenshot, or other task-scoped tools as needed.",
+      `When done or blocked, call submit_lane_handoff with taskId: "${params.task.id}", handoffId: "${params.handoffId}", and a concise summary.`,
+      `This request originated from session ${params.requestingSessionId.slice(0, 8)}.`,
+    ].join("\n");
+  }
+
+  private buildHandoffResponsePrompt(
+    task: Task,
+    handoff: NonNullable<ReturnType<typeof getTaskLaneHandoff>>,
+  ): string {
+    return [
+      `Lane handoff update for card ${task.id}: ${task.title}.`,
+      "",
+      `Request type: ${this.formatHandoffRequestType(handoff.requestType)}`,
+      `Status: ${handoff.status}`,
+      `Original request: ${handoff.request}`,
+      handoff.responseSummary ? `Response: ${handoff.responseSummary}` : "Response: no summary provided",
+      "",
+      "Continue your current lane work using this updated runtime context.",
+    ].join("\n");
+  }
+
+  private formatHandoffRequestType(requestType: TaskLaneHandoffRequestType): string {
+    switch (requestType) {
+      case "environment_preparation":
+        return "Environment preparation";
+      case "runtime_context":
+        return "Runtime context";
+      case "clarification":
+        return "Clarification";
+      case "rerun_command":
+        return "Rerun command";
+      default:
+        return requestType;
+    }
   }
 
   private async resolveBoard(workspaceId: string, boardId?: string) {

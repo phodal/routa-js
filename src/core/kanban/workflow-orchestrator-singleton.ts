@@ -18,6 +18,7 @@ import { resolveEffectiveTaskAutomation } from "./effective-task-automation";
 import { getInternalApiOrigin, triggerAssignedTaskAgent } from "./agent-trigger";
 import { KanbanSessionQueue } from "./kanban-session-queue";
 import { getKanbanSessionConcurrencyLimit as getBoardSessionConcurrencyLimit } from "./board-session-limits";
+import { upsertTaskLaneSession } from "./task-lane-history";
 
 // Use globalThis to survive HMR in Next.js dev mode
 const GLOBAL_KEY = "__routa_workflow_orchestrator__";
@@ -184,6 +185,17 @@ async function startKanbanTaskSession(
     if (!nextTask.sessionIds.includes(triggerResult.sessionId)) {
       nextTask.sessionIds.push(triggerResult.sessionId);
     }
+    const currentColumn = board?.columns.find((column) => column.id === nextTask.columnId);
+    upsertTaskLaneSession(nextTask, {
+      sessionId: triggerResult.sessionId,
+      columnId: nextTask.columnId,
+      columnName: currentColumn?.name,
+      provider: effectiveAutomation.providerId,
+      role: effectiveAutomation.role,
+      specialistId: effectiveAutomation.specialistId,
+      specialistName: effectiveAutomation.specialistName,
+      status: "running",
+    });
     nextTask.lastSyncError = undefined;
     if (nextTask.worktreeId) {
       await system.worktreeStore.assignSession(nextTask.worktreeId, triggerResult.sessionId);

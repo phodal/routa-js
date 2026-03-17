@@ -112,6 +112,9 @@ function initializeSqliteTables(db: SqliteDatabase): void {
       assigned_specialist_id TEXT,
       assigned_specialist_name TEXT,
       trigger_session_id TEXT,
+      session_ids TEXT DEFAULT '[]',
+      lane_sessions TEXT DEFAULT '[]',
+      lane_handoffs TEXT DEFAULT '[]',
       github_id TEXT,
       github_number INTEGER,
       github_url TEXT,
@@ -153,6 +156,8 @@ function initializeSqliteTables(db: SqliteDatabase): void {
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN codebase_ids TEXT DEFAULT '[]'`);
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN worktree_id TEXT`);
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN session_ids TEXT DEFAULT '[]'`);
+  runAddColumn(sql`ALTER TABLE tasks ADD COLUMN lane_sessions TEXT DEFAULT '[]'`);
+  runAddColumn(sql`ALTER TABLE tasks ADD COLUMN lane_handoffs TEXT DEFAULT '[]'`);
 
   db.run(sql`
     CREATE TABLE IF NOT EXISTS notes (

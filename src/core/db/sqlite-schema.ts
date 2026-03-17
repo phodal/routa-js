@@ -19,6 +19,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import type { KanbanColumn } from "../models/kanban";
+import type { TaskLaneHandoff, TaskLaneSession } from "../models/task";
 
 // ─── Workspaces ─────────────────────────────────────────────────────
 
@@ -85,6 +86,8 @@ export const tasks = sqliteTable("tasks", {
   triggerSessionId: text("trigger_session_id"),
   /** All session IDs that have been associated with this task (history) */
   sessionIds: text("session_ids", { mode: "json" }).$type<string[]>().default([]),
+  laneSessions: text("lane_sessions", { mode: "json" }).$type<TaskLaneSession[]>().default([]),
+  laneHandoffs: text("lane_handoffs", { mode: "json" }).$type<TaskLaneHandoff[]>().default([]),
   githubId: text("github_id"),
   githubNumber: integer("github_number"),
   githubUrl: text("github_url"),

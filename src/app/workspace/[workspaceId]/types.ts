@@ -31,6 +31,32 @@ export interface TaskInfo {
   triggerSessionId?: string;
   /** All session IDs that have been associated with this task (history) */
   sessionIds?: string[];
+  laneSessions?: Array<{
+    sessionId: string;
+    routaAgentId?: string;
+    columnId?: string;
+    columnName?: string;
+    provider?: string;
+    role?: string;
+    specialistId?: string;
+    specialistName?: string;
+    status: "running" | "completed" | "failed" | "timed_out" | "transitioned";
+    startedAt: string;
+    completedAt?: string;
+  }>;
+  laneHandoffs?: Array<{
+    id: string;
+    fromSessionId: string;
+    toSessionId: string;
+    fromColumnId?: string;
+    toColumnId?: string;
+    requestType: "environment_preparation" | "runtime_context" | "clarification" | "rerun_command";
+    request: string;
+    status: "requested" | "delivered" | "completed" | "blocked" | "failed";
+    requestedAt: string;
+    respondedAt?: string;
+    responseSummary?: string;
+  }>;
   githubId?: string;
   githubNumber?: number;
   githubUrl?: string;

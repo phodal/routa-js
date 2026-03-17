@@ -308,6 +308,8 @@ function serializeTask(task: Task) {
     assignedSpecialistName: task.assignedSpecialistName,
     triggerSessionId: task.triggerSessionId,
     sessionIds: task.sessionIds ?? [],
+    laneSessions: task.laneSessions ?? [],
+    laneHandoffs: task.laneHandoffs ?? [],
     githubId: task.githubId,
     githubNumber: task.githubNumber,
     githubUrl: task.githubUrl,

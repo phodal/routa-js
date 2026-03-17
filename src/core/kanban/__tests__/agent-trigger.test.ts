@@ -80,6 +80,42 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("provide_artifact");
     expect(prompt).toContain("capture_screenshot");
   });
+
+  it("adds previous-lane handoff guidance for review sessions", () => {
+    const task = createTask({
+      id: "task-4",
+      title: "Review running app",
+      objective: "Verify the feature in review",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "review",
+    });
+    task.laneSessions = [
+      {
+        sessionId: "session-dev-1",
+        columnId: "dev",
+        columnName: "Dev",
+        provider: "opencode",
+        role: "DEVELOPER",
+        status: "completed",
+        startedAt: "2026-03-17T00:00:00.000Z",
+      },
+    ];
+
+    const prompt = buildTaskPrompt(task, [
+      { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+      { id: "dev", name: "Dev", position: 1, stage: "dev" },
+      { id: "review", name: "Review", position: 2, stage: "review" },
+      { id: "done", name: "Done", position: 3, stage: "done" },
+    ], {
+      currentSessionId: "session-review-1",
+    });
+
+    expect(prompt).toContain("## Lane Handoff Context");
+    expect(prompt).toContain("request_previous_lane_handoff");
+    expect(prompt).toContain("Previous lane session");
+    expect(prompt).toContain("Dev");
+  });
 });
 
 describe("resolveKanbanAutomationProvider", () => {

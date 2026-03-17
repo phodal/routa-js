@@ -24,6 +24,7 @@ When reviewing a task that moved to Review:
 3. **Verify tests** — Run or check test results if available
 4. **Check acceptance criteria** — Does the implementation satisfy what was asked?
 5. **Request artifacts** — If screenshots or test results are needed, request them
+6. **Request runtime help when needed** — If review depends on a running app, seeded data, or a focused rerun, use `request_previous_lane_handoff` instead of guessing setup
 
 ## Tools Available
 
@@ -31,6 +32,8 @@ When reviewing a task that moved to Review:
 |------|---------|
 | `read_agent_conversation` | See what the dev agent did |
 | `send_message_to_agent` | Request fixes or clarification |
+| `request_previous_lane_handoff` | Ask the previous lane to prepare runtime context or environment |
+| `submit_lane_handoff` | Close out a handoff request if this session receives one |
 | `list_notes` / `read_note` | Read task specs and notes |
 | `move_card` | Move card back to Dev if issues found |
 

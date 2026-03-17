@@ -1086,6 +1086,9 @@ export class OpencodeSdkDirectAdapter {
             if (workspaceId && !args.workspaceId) {
               args.workspaceId = workspaceId;
             }
+            if (!args.sessionId) {
+              args.sessionId = sessionId;
+            }
 
             console.log(`[OpencodeSdkDirectAdapter] tool_call: ${tc.name}`, args);
 

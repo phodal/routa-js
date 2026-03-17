@@ -27,6 +27,54 @@ export enum VerificationVerdict {
   BLOCKED = "BLOCKED",
 }
 
+export type TaskLaneSessionStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "timed_out"
+  | "transitioned";
+
+export type TaskLaneHandoffRequestType =
+  | "environment_preparation"
+  | "runtime_context"
+  | "clarification"
+  | "rerun_command";
+
+export type TaskLaneHandoffStatus =
+  | "requested"
+  | "delivered"
+  | "completed"
+  | "blocked"
+  | "failed";
+
+export interface TaskLaneSession {
+  sessionId: string;
+  routaAgentId?: string;
+  columnId?: string;
+  columnName?: string;
+  provider?: string;
+  role?: string;
+  specialistId?: string;
+  specialistName?: string;
+  status: TaskLaneSessionStatus;
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface TaskLaneHandoff {
+  id: string;
+  fromSessionId: string;
+  toSessionId: string;
+  fromColumnId?: string;
+  toColumnId?: string;
+  requestType: TaskLaneHandoffRequestType;
+  request: string;
+  status: TaskLaneHandoffStatus;
+  requestedAt: string;
+  respondedAt?: string;
+  responseSummary?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -49,6 +97,10 @@ export interface Task {
   triggerSessionId?: string;
   /** All session IDs that have been associated with this task (history) */
   sessionIds: string[];
+  /** Durable per-lane session history for Kanban workflow handoff */
+  laneSessions: TaskLaneSession[];
+  /** Adjacent-lane handoff requests and responses */
+  laneHandoffs: TaskLaneHandoff[];
   githubId?: string;
   githubNumber?: number;
   githubUrl?: string;
@@ -125,6 +177,8 @@ export function createTask(params: {
     assignedSpecialistId: params.assignedSpecialistId,
     assignedSpecialistName: params.assignedSpecialistName,
     sessionIds: [],
+    laneSessions: [],
+    laneHandoffs: [],
     githubId: params.githubId,
     githubNumber: params.githubNumber,
     githubUrl: params.githubUrl,

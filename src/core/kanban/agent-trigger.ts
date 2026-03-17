@@ -5,6 +5,23 @@ import { AgentEventType, type EventBus } from "../events/event-bus";
 import { isClaudeCodeSdkConfigured } from "../acp/claude-code-sdk-adapter";
 import { formatArtifactSummary, resolveKanbanTransitionArtifacts } from "./transition-artifacts";
 
+function formatHandoffRequestType(
+  value: "environment_preparation" | "runtime_context" | "clarification" | "rerun_command",
+): string {
+  switch (value) {
+    case "environment_preparation":
+      return "Environment preparation";
+    case "runtime_context":
+      return "Runtime context";
+    case "clarification":
+      return "Clarification";
+    case "rerun_command":
+      return "Rerun command";
+    default:
+      return value;
+  }
+}
+
 export function getInternalApiOrigin(): string {
   const configuredOrigin = process.env.ROUTA_INTERNAL_API_ORIGIN
     ?? process.env.ROUTA_BASE_URL
@@ -19,11 +36,24 @@ export function getInternalApiOrigin(): string {
   return `http://127.0.0.1:${port}`;
 }
 
-export function buildTaskPrompt(task: Task, boardColumns: KanbanColumn[] = []): string {
+export function buildTaskPrompt(
+  task: Task,
+  boardColumns: KanbanColumn[] = [],
+  options?: { currentSessionId?: string },
+): string {
   const labels = task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : "Labels: none";
   const currentColumnId = task.columnId ?? "backlog";
   const isBacklogPlanning = currentColumnId === "backlog";
   const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, currentColumnId);
+  const orderedColumns = boardColumns.slice().sort((left, right) => left.position - right.position);
+  const currentColumnIndex = orderedColumns.findIndex((column) => column.id === currentColumnId);
+  const previousColumn = currentColumnIndex > 0 ? orderedColumns[currentColumnIndex - 1] : undefined;
+  const previousLaneSession = previousColumn
+    ? [...(task.laneSessions ?? [])].reverse().find((entry) => entry.columnId === previousColumn.id)
+    : undefined;
+  const pendingLaneHandoffs = options?.currentSessionId
+    ? (task.laneHandoffs ?? []).filter((handoff) => handoff.toSessionId === options.currentSessionId && !handoff.respondedAt)
+    : [];
 
   // Determine the next column for move_card guidance
   const columnOrder = ["backlog", "todo", "dev", "review", "done"];
@@ -51,6 +81,8 @@ export function buildTaskPrompt(task: Task, boardColumns: KanbanColumn[] = []): 
         "- **list_artifacts**: Check whether the required artifacts already exist for this card",
         "- **provide_artifact**: Save test results, code diffs, or other evidence as structured Kanban artifacts",
         "- **capture_screenshot**: Capture and store a screenshot artifact when visual proof is required",
+        "- **request_previous_lane_handoff**: Ask the immediately previous lane to prepare environment, rerun a command, or clarify setup for this card",
+        "- **submit_lane_handoff**: Finish a lane handoff request after you complete the requested support work",
         `- **move_card**: Move this card to the next column when your work is complete. Use cardId: "${task.id}", targetColumnId: "${nextColumnId ?? "done"}"`,
       ];
   const moveInstruction = nextColumnId
@@ -74,7 +106,10 @@ export function buildTaskPrompt(task: Task, boardColumns: KanbanColumn[] = []): 
         "3. Keep changes focused on this task",
         `4. ${moveInstruction}`,
         "5. If the next transition requires artifacts, verify them with `list_artifacts` and create missing evidence with `provide_artifact` or `capture_screenshot` before moving the card.",
-        "6. Do not call `report_to_parent`; this Kanban automation session is managed directly by the workflow",
+        currentColumnId === "review"
+          ? "6. If verification depends on runtime setup from dev, use `request_previous_lane_handoff` instead of guessing the environment."
+          : "6. If another lane requests support from this session, complete the requested runtime help and then call `submit_lane_handoff`.",
+        "7. Do not call `report_to_parent`; this Kanban automation session is managed directly by the workflow",
       ];
 
   const artifactGateSection = [
@@ -90,6 +125,28 @@ export function buildTaskPrompt(task: Task, boardColumns: KanbanColumn[] = []): 
     "Use `list_artifacts` to confirm what already exists, then use `provide_artifact` or `capture_screenshot` to fill gaps.",
     "",
   ];
+
+  const laneHandoffSection = !isBacklogPlanning && (previousLaneSession || pendingLaneHandoffs.length > 0)
+    ? [
+        "## Lane Handoff Context",
+        "",
+        previousLaneSession
+          ? `**Previous lane session:** ${previousLaneSession.columnName ?? previousLaneSession.columnId ?? "unknown"} · ${previousLaneSession.provider ?? "unknown provider"} · ${previousLaneSession.role ?? "unknown role"}`
+          : "**Previous lane session:** none recorded",
+        previousLaneSession
+          ? "Use `request_previous_lane_handoff` if you need environment preparation, runtime context, or a focused rerun from the previous lane."
+          : "No previous lane session is available for handoff.",
+        ...(pendingLaneHandoffs.length > 0
+          ? pendingLaneHandoffs.flatMap((handoff, index) => ([
+              "",
+              `Pending handoff ${index + 1}: ${formatHandoffRequestType(handoff.requestType)}`,
+              handoff.request,
+              `Respond with \`submit_lane_handoff\` using handoffId: "${handoff.id}".`,
+            ]))
+          : []),
+        "",
+      ]
+    : [];
 
   return [
     `You are assigned to Kanban task: ${task.title}`,
@@ -112,6 +169,7 @@ export function buildTaskPrompt(task: Task, boardColumns: KanbanColumn[] = []): 
     task.objective,
     "",
     ...artifactGateSection,
+    ...laneHandoffSection,
     "## Available MCP Tools",
     "",
     "You have access to the following MCP tools for task management:",
@@ -184,7 +242,7 @@ export async function triggerAssignedTaskAgent(params: {
           workspaceId,
           provider,
           cwd,
-          prompt: [{ type: "text", text: buildTaskPrompt(task, boardColumns) }],
+          prompt: [{ type: "text", text: buildTaskPrompt(task, boardColumns, { currentSessionId: sessionId }) }],
         },
       }),
     });

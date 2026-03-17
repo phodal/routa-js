@@ -57,17 +57,6 @@ function formatSessionTimestamp(value: string | undefined): string {
   return date.toLocaleString();
 }
 
-function resolveTimelineColumns(boardColumns: KanbanColumnInfo[], currentColumnId: string | undefined, runCount: number): KanbanColumnInfo[] {
-  if (runCount === 0 || boardColumns.length === 0) return [];
-  const orderedColumns = boardColumns.slice().sort((left, right) => left.position - right.position);
-  const currentIndex = orderedColumns.findIndex((column) => column.id === (currentColumnId ?? "backlog"));
-  if (currentIndex === -1) {
-    return orderedColumns.slice(Math.max(0, orderedColumns.length - runCount));
-  }
-  const startIndex = Math.max(0, currentIndex + 1 - runCount);
-  return orderedColumns.slice(startIndex, currentIndex + 1);
-}
-
 export function KanbanCardDetail({
   task,
   boardColumns,
@@ -200,11 +189,15 @@ export function KanbanCardDetail({
 
         <SessionHistorySection
           task={task}
-          boardColumns={boardColumns ?? []}
           specialists={specialists}
           sessions={sessions ?? []}
           currentSessionId={task.triggerSessionId}
           onSelectSession={onSelectSession}
+          compact={compactMode}
+        />
+
+        <HandoffSection
+          task={task}
           compact={compactMode}
         />
 
@@ -374,7 +367,6 @@ function LaneAutomationSection({
 
 function SessionHistorySection({
   task,
-  boardColumns,
   specialists,
   sessions,
   currentSessionId,
@@ -382,17 +374,19 @@ function SessionHistorySection({
   compact = false,
 }: {
   task: TaskInfo;
-  boardColumns: KanbanColumnInfo[];
   specialists: SpecialistOption[];
   sessions: SessionInfo[];
   currentSessionId?: string;
   onSelectSession?: (sessionId: string) => void;
   compact?: boolean;
 }) {
-  const orderedSessionIds = Array.from(new Set([
-    ...(task.sessionIds ?? []),
-    ...(currentSessionId ? [currentSessionId] : []),
-  ]));
+  const laneSessions = task.laneSessions ?? [];
+  const orderedSessionIds = laneSessions.length > 0
+    ? laneSessions.map((entry) => entry.sessionId)
+    : Array.from(new Set([
+        ...(task.sessionIds ?? []),
+        ...(currentSessionId ? [currentSessionId] : []),
+      ]));
 
   if (orderedSessionIds.length === 0) {
     return (
@@ -403,7 +397,7 @@ function SessionHistorySection({
   }
 
   const sessionMap = new Map(sessions.map((session) => [session.sessionId, session]));
-  const timelineColumns = resolveTimelineColumns(boardColumns, task.columnId, orderedSessionIds.length);
+  const laneSessionMap = new Map(laneSessions.map((entry) => [entry.sessionId, entry]));
 
   return (
     <DetailSection
@@ -420,10 +414,12 @@ function SessionHistorySection({
         {orderedSessionIds.map((sessionId, index) => {
           const session = sessionMap.get(sessionId);
           const isCurrent = sessionId === currentSessionId;
-          const timelineColumn = timelineColumns[index];
-          const laneSpecialist = timelineColumn
-            ? getSpecialistName(timelineColumn.automation?.specialistId, timelineColumn.automation?.specialistName, specialists)
-            : "Unknown";
+          const laneSession = laneSessionMap.get(sessionId);
+          const laneSpecialist = getSpecialistName(
+            laneSession?.specialistId,
+            laneSession?.specialistName,
+            specialists,
+          );
 
           return (
             <button
@@ -439,14 +435,19 @@ function SessionHistorySection({
                 <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-700 dark:bg-gray-800 dark:text-gray-300">
                   Run {index + 1}
                 </span>
-                {timelineColumn && (
+                {laneSession?.columnName && (
                   <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
-                    {timelineColumn.name}
+                    {laneSession.columnName}
                   </span>
                 )}
                 {isCurrent && (
                   <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-800/40 dark:text-amber-200">
                     Active
+                  </span>
+                )}
+                {laneSession?.status && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+                    {laneSession.status}
                   </span>
                 )}
               </div>
@@ -456,7 +457,7 @@ function SessionHistorySection({
                     {session?.name ?? session?.provider ?? "ACP Session"}
                   </div>
                   <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {(session?.provider ?? "Unknown provider")} · {(session?.role ?? "Unknown role")} · {laneSpecialist}
+                    {(laneSession?.provider ?? session?.provider ?? "Unknown provider")} · {(laneSession?.role ?? session?.role ?? "Unknown role")} · {laneSpecialist}
                   </div>
                   <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
                     {formatSessionTimestamp(session?.createdAt)}
@@ -473,6 +474,58 @@ function SessionHistorySection({
             </button>
           );
         })}
+      </div>
+    </DetailSection>
+  );
+}
+
+function HandoffSection({
+  task,
+  compact = false,
+}: {
+  task: TaskInfo;
+  compact?: boolean;
+}) {
+  const handoffs = task.laneHandoffs ?? [];
+  if (handoffs.length === 0) {
+    return null;
+  }
+
+  const orderedHandoffs = handoffs.slice().sort((left, right) => (
+    new Date(right.requestedAt).getTime() - new Date(left.requestedAt).getTime()
+  ));
+
+  return (
+    <DetailSection
+      title="Lane Handoffs"
+      description={compact ? undefined : "Requests and responses exchanged between adjacent Kanban lanes."}
+      compact={compact}
+    >
+      <div className="space-y-2">
+        {orderedHandoffs.map((handoff) => (
+          <div
+            key={handoff.id}
+            className={`rounded-2xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-[#0d1018] ${compact ? "px-3 py-2" : "px-3 py-3"}`}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                {handoff.requestType.replace(/_/g, " ")}
+              </span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                {handoff.status}
+              </span>
+            </div>
+            <div className="mt-2 text-sm text-gray-800 dark:text-gray-200">{handoff.request}</div>
+            {handoff.responseSummary && (
+              <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
+                {handoff.responseSummary}
+              </div>
+            )}
+            <div className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+              Requested {formatSessionTimestamp(handoff.requestedAt)}{handoff.respondedAt ? ` · Responded ${formatSessionTimestamp(handoff.respondedAt)}` : ""}
+            </div>
+          </div>
+        ))}
       </div>
     </DetailSection>
   );
