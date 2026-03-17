@@ -148,6 +148,20 @@ export function buildTaskPrompt(
       ]
     : [];
 
+  const devVerificationSection = currentColumnId === "dev"
+    ? [
+        "## Dev Verification Safety",
+        "",
+        "Verify frontend changes against the current task worktree and the preview process started for this session.",
+        "Do not assume `http://localhost:3000` is the right preview target unless this session started that exact server for the current worktree.",
+        "Do not use broad process-kill commands such as `pkill -f \"next dev\"` or otherwise stop shared developer servers.",
+        "If you start a temporary preview server, stop only the exact process started for this session, preferably via its recorded PID. Do not use `ps | grep | xargs kill`, `killall`, or broad `pkill` patterns for cleanup.",
+        "If the UI depends on env vars or setup, start verification with those exact env vars, mention them in `update_card`, and attach evidence from that configured run.",
+        "If safe runtime verification is blocked, use `request_previous_lane_handoff` for environment preparation or runtime context instead of looping on restarts.",
+        "",
+      ]
+    : [];
+
   return [
     `You are assigned to Kanban task: ${task.title}`,
     "",
@@ -170,6 +184,7 @@ export function buildTaskPrompt(
     "",
     ...artifactGateSection,
     ...laneHandoffSection,
+    ...devVerificationSection,
     "## Available MCP Tools",
     "",
     "You have access to the following MCP tools for task management:",

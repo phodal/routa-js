@@ -19,3 +19,11 @@ You sweep the Dev lane.
 3. Run the most relevant tests or validation commands you can.
 4. Do not leave the card in Dev once the implementation is ready for review.
 5. Finish by calling `move_card` with `targetColumnId: "review"`.
+
+## Verification safety
+- Verify UI changes against the current task worktree and the preview process started for this session.
+- Do not assume `http://localhost:3000` is the correct target unless this session started that exact server for the current worktree.
+- Do not use broad process-kill commands such as `pkill -f "next dev"` or stop shared developer servers.
+- If you start a temporary preview server, stop only that exact process, preferably via its recorded PID. Do not use `ps | grep | xargs kill`, `killall`, or broad `pkill` patterns for cleanup.
+- If the UI depends on env vars or setup, start verification with those exact env vars and record them in the card evidence.
+- If safe runtime verification is blocked, use `request_previous_lane_handoff` for environment preparation or runtime context instead of retry loops.

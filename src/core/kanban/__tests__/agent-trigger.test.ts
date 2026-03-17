@@ -45,6 +45,11 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("move_card");
     expect(prompt).toContain("targetColumnId: \"review\"");
     expect(prompt).toContain("Do not call `report_to_parent`");
+    expect(prompt).toContain("## Dev Verification Safety");
+    expect(prompt).toContain("Do not assume `http://localhost:3000` is the right preview target");
+    expect(prompt).toContain("`pkill -f \"next dev\"`");
+    expect(prompt).toContain("Do not use `ps | grep | xargs kill`, `killall`, or broad `pkill` patterns for cleanup");
+    expect(prompt).toContain("If the UI depends on env vars or setup");
     expect(prompt).not.toContain("Tool: report_to_parent");
   });
 
