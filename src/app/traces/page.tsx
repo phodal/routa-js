@@ -217,32 +217,38 @@ function TracePageContent() {
       titleBarRight={(
         <Link
           href="/"
-          className="px-2.5 py-1 rounded text-[11px] text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)] transition-colors"
+          className="rounded px-2.5 py-1 text-[11px] text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
           title="Back to Home"
         >
           Home
         </Link>
       )}
     >
-      <div className="h-full flex flex-col bg-[var(--dt-bg-primary)] overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary" data-testid="traces-page-shell">
         {/* Header */}
-        <div className="shrink-0 px-4 py-3 border-b border-[var(--dt-border)] flex items-center justify-between">
+        <div
+          className="shrink-0 flex items-center justify-between border-b border-desktop-border px-4 py-3"
+          data-testid="traces-page-header"
+        >
           <div className="flex items-center gap-2 min-w-0">
-            <svg className="w-4 h-4 text-[var(--dt-text-secondary)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="w-4 h-4 shrink-0 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
             </svg>
             <div className="min-w-0">
-              <h1 className="text-[13px] font-semibold text-[var(--dt-text-primary)]">
+              <h1 className="text-[13px] font-semibold text-desktop-text-primary">
                 Agent Trace Viewer
               </h1>
-              <p className="text-[11px] text-[var(--dt-text-secondary)]">
+              <p className="text-[11px] text-desktop-text-secondary">
                 Browse and analyze agent execution traces
               </p>
             </div>
             {selectedSessionId && (
-              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[var(--dt-text-secondary)] border border-[var(--dt-border)]">
+              <div
+                className="inline-flex items-center gap-1.5 rounded border border-desktop-border px-2 py-1 text-[10px] text-desktop-text-secondary"
+                data-testid="traces-selected-session"
+              >
                 <span>Session:</span>
-                <code className="font-mono text-[var(--dt-text-primary)]">{selectedSessionId.slice(0, 8)}…</code>
+                <code className="font-mono text-desktop-text-primary">{selectedSessionId.slice(0, 8)}…</code>
               </div>
             )}
           </div>
@@ -250,25 +256,25 @@ function TracePageContent() {
             {selectedSessionId && (
               <button
                 onClick={copyCurrentUrl}
-                className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-[var(--dt-text-secondary)] bg-[var(--dt-bg-secondary)] hover:bg-[var(--dt-bg-active)]/70 transition-colors"
+                className="group flex items-center gap-1.5 rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70"
                 title="Copy shareable URL"
               >
                 <span>Copy link</span>
-                <svg className="w-3.5 h-3.5 text-[var(--dt-text-secondary)] group-hover:text-[var(--dt-text-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-3.5 h-3.5 text-desktop-text-secondary group-hover:text-desktop-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </button>
             )}
             <button
               onClick={() => setShowSidebar(!showSidebar)}
-              className="px-2.5 py-1.5 text-[11px] font-medium rounded-md text-[var(--dt-text-secondary)] bg-[var(--dt-bg-secondary)] hover:bg-[var(--dt-bg-active)]/70 transition-colors"
+              className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70"
             >
               {showSidebar ? "Hide Sessions" : "Show Sessions"}
             </button>
             <button
               onClick={fetchSessions}
               disabled={loading}
-              className="px-2.5 py-1.5 text-[11px] font-medium rounded-md text-[var(--dt-text-secondary)] bg-[var(--dt-bg-secondary)] hover:bg-[var(--dt-bg-active)]/70 disabled:opacity-50 transition-colors"
+              className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 disabled:opacity-50"
             >
               {loading ? "Loading..." : "Refresh"}
             </button>
@@ -277,19 +283,22 @@ function TracePageContent() {
 
         {/* View tab switcher */}
         <div className="shrink-0 px-4 pt-2">
-          <div className="inline-flex items-center rounded-md border border-[var(--dt-border)] bg-[var(--dt-bg-secondary)] p-0.5">
+          <div
+            className="inline-flex items-center rounded-md border border-desktop-border bg-desktop-bg-secondary p-0.5"
+            data-testid="traces-view-tabs"
+          >
             {([
-              { key: "chat" as ViewTab, label: "Chat", color: "bg-[#0e639c]" },
-              { key: "event-bridge" as ViewTab, label: "Trace", color: "bg-[#5a5a5a]" },
-              { key: "ag-ui" as ViewTab, label: "Trace(AG-UI)", color: "bg-[#7a5af8]" },
+              { key: "chat" as ViewTab, label: "Chat", color: "bg-desktop-trace-chat" },
+              { key: "event-bridge" as ViewTab, label: "Trace", color: "bg-desktop-trace-event-bridge" },
+              { key: "ag-ui" as ViewTab, label: "Trace(AG-UI)", color: "bg-desktop-trace-ag-ui" },
             ]).map(({ key, label, color }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
                 className={`px-3 py-1.5 rounded-sm text-[11px] font-semibold tracking-wide transition-all ${
                   activeTab === key
-                    ? `${color} text-white`
-                    : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
+                    ? `${color} text-desktop-accent-text`
+                    : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
                 }`}
               >
                 {label}
@@ -302,12 +311,12 @@ function TracePageContent() {
         <div className="flex-1 flex min-h-0">
           {/* Session Sidebar */}
           {showSidebar && (
-            <aside className="w-80 border-r border-[var(--dt-border)] bg-[var(--dt-bg-primary)] flex flex-col">
-              <div className="px-4 py-3 border-b border-[var(--dt-border)]">
-                <h2 className="text-xs font-semibold text-[var(--dt-text-primary)]">
+            <aside className="flex w-80 flex-col border-r border-desktop-border bg-desktop-bg-primary">
+              <div className="border-b border-desktop-border px-4 py-3">
+                <h2 className="text-xs font-semibold text-desktop-text-primary">
                   Sessions
                 </h2>
-                <p className="text-[11px] text-[var(--dt-text-secondary)] mt-0.5">
+                <p className="mt-0.5 text-[11px] text-desktop-text-secondary">
                   {sessions.length} session{sessions.length !== 1 ? "s" : ""} found
                 </p>
               </div>
@@ -315,12 +324,12 @@ function TracePageContent() {
               <div className="flex-1 overflow-y-auto">
                 {loading && sessions.length === 0 ? (
                   <div className="p-4 text-center">
-                    <p className="text-xs text-[var(--dt-text-secondary)]">Loading sessions...</p>
+                    <p className="text-xs text-desktop-text-secondary">Loading sessions...</p>
                   </div>
                 ) : sessions.length === 0 ? (
                   <div className="p-4 text-center">
                     <svg
-                      className="w-12 h-12 text-[var(--dt-text-primary)] mx-auto mb-3"
+                      className="mx-auto mb-3 h-12 w-12 text-desktop-text-primary"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -332,13 +341,13 @@ function TracePageContent() {
                         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                    <p className="text-xs text-[var(--dt-text-secondary)]">No sessions found</p>
-                    <p className="text-[10px] text-[var(--dt-text-muted)] mt-1">
+                    <p className="text-xs text-desktop-text-secondary">No sessions found</p>
+                    <p className="mt-1 text-[10px] text-desktop-text-muted">
                       Start a conversation to create traces
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-[var(--dt-border)]">
+                  <div className="divide-y divide-desktop-border">
                     {(() => {
                       // Separate top-level (parent) sessions from child sessions
                       const parentSessions = sessions.filter((s) => !s.parentSessionId);
@@ -358,33 +367,33 @@ function TracePageContent() {
                           GATE: "bg-green-900/30 text-green-200",
                           DEVELOPER: "bg-purple-900/30 text-purple-200",
                         };
-                        const roleClass = session.role ? (roleColor[session.role] ?? "bg-gray-800 text-[var(--dt-text-muted)]") : "";
+                        const roleClass = session.role ? (roleColor[session.role] ?? "bg-gray-800 text-desktop-text-muted") : "";
 
                         return (
                           <div key={session.sessionId}>
                             <button
                               onClick={() => handleSessionSelect(session.sessionId)}
-                              className={`w-full px-4 py-3 text-left hover:bg-[var(--dt-bg-active)]/70 transition-colors ${
+                              className={`w-full px-4 py-3 text-left transition-colors hover:bg-desktop-bg-active/70 ${
                                 isChild ? "pl-8 py-2" : ""
                               } ${
                                 selectedSessionId === session.sessionId
-                                  ? "bg-[var(--dt-bg-active)] border-l-2 border-[var(--dt-accent)]"
+                                  ? "border-l-2 border-desktop-accent bg-desktop-bg-active"
                                   : ""
                               }`}
                             >
                               <div className="flex items-start justify-between gap-2 mb-1">
-                                <span className="text-xs font-medium text-[var(--dt-text-primary)] truncate">
+                                <span className="truncate text-xs font-medium text-desktop-text-primary">
                                   {session.name || (
                                     <code className="font-mono">
                                       {session.sessionId.slice(0, 8)}…
                                     </code>
                                   )}
                                 </span>
-                                <span className="text-[10px] font-medium text-[var(--dt-text-secondary)] shrink-0">
+                                <span className="shrink-0 text-[10px] font-medium text-desktop-text-secondary">
                                   {session.count}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-[10px] text-[var(--dt-text-secondary)] flex-wrap">
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-desktop-text-secondary">
                                 <span>{formatTimestamp(session.lastTimestamp)}</span>
                                 {session.role && (
                                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${roleClass}`}>
@@ -392,7 +401,7 @@ function TracePageContent() {
                                   </span>
                                 )}
                                 {session.provider && (
-                                  <span className="px-1.5 py-0.5 rounded bg-[var(--dt-bg-secondary)] text-[var(--dt-text-secondary)] text-[10px]">
+                                  <span className="rounded bg-desktop-bg-secondary px-1.5 py-0.5 text-[10px] text-desktop-text-secondary">
                                     {session.provider}
                                   </span>
                                 )}
@@ -400,7 +409,7 @@ function TracePageContent() {
                             </button>
                             {/* Child sessions indented under parent */}
                             {!isChild && childSessionMap.has(session.sessionId) && (
-                              <div className="border-l-2 border-[var(--dt-border)] ml-4">
+                              <div className="ml-4 border-l-2 border-desktop-border">
                                 {(childSessionMap.get(session.sessionId) ?? []).map((child) => renderSession(child, true))}
                               </div>
                             )}
@@ -423,7 +432,7 @@ function TracePageContent() {
           )}
 
           {/* Trace Panel */}
-          <main className="flex-1 min-w-0 bg-[var(--dt-bg-primary)]">
+          <main className="flex-1 min-w-0 bg-desktop-bg-primary">
             {selectedSessionId ? (
               <>
                 {activeTab === "chat" && (
@@ -440,7 +449,7 @@ function TracePageContent() {
               <div className="h-full flex items-center justify-center p-8">
                 <div className="text-center">
                   <svg
-                    className="w-16 h-16 text-[var(--dt-text-primary)] mx-auto mb-4"
+                    className="mx-auto mb-4 h-16 w-16 text-desktop-text-primary"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -452,10 +461,10 @@ function TracePageContent() {
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  <p className="text-[13px] text-[var(--dt-text-secondary)] mb-2">
+                  <p className="mb-2 text-[13px] text-desktop-text-secondary">
                     No session selected
                   </p>
-                  <p className="text-xs text-[var(--dt-text-muted)]">
+                  <p className="text-xs text-desktop-text-muted">
                     Select a session from the sidebar to view traces
                   </p>
                 </div>
@@ -472,10 +481,10 @@ function TracePageContent() {
 export default function TracePage() {
   return (
     <Suspense fallback={
-      <div className="desktop-theme h-screen flex items-center justify-center bg-[var(--dt-bg-primary)]">
+      <div className="desktop-theme flex h-screen items-center justify-center bg-desktop-bg-primary">
         <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-[var(--dt-accent)] border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-sm text-[var(--dt-text-secondary)]">Loading...</p>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-desktop-accent border-t-transparent" />
+          <p className="text-sm text-desktop-text-secondary">Loading...</p>
         </div>
       </div>
     }>

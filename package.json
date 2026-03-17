@@ -45,6 +45,8 @@
     "test:run": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --project=chromium-headed",
+    "test:e2e:desktop-shell": "playwright test e2e/desktop-shell-visual.spec.ts e2e/layout-verification.spec.ts --project=chromium",
+    "test:e2e:desktop-shell:update": "playwright test e2e/desktop-shell-visual.spec.ts --project=chromium --update-snapshots",
     "test:e2e:specialist": "playwright test e2e/specialist-selection.spec.ts",
     "test:e2e:specialist:headed": "playwright test e2e/specialist-selection.spec.ts --project=chromium-headed",
     "test:e2e:debug": "playwright test --debug",

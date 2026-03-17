@@ -176,8 +176,8 @@ export function WorkspacePageClient({
 
   if (workspacesHook.loading && !isDefaultWorkspace) {
     return (
-      <div className="desktop-theme h-screen flex items-center justify-center bg-[var(--dt-bg-primary)]">
-        <div className="flex items-center gap-3 text-[var(--dt-text-secondary)]">
+      <div className="desktop-theme flex h-screen items-center justify-center bg-desktop-bg-primary">
+        <div className="flex items-center gap-3 text-desktop-text-secondary">
           <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -237,7 +237,7 @@ export function WorkspacePageClient({
       onWorkspaceSelect={handleWorkspaceSelect}
       onWorkspaceCreate={handleWorkspaceCreate}
     >
-      <div className="h-full flex flex-col bg-[var(--dt-bg-primary)] overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary" data-testid="workspace-page-shell">
         {/* Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-4 py-4">
@@ -270,15 +270,15 @@ export function WorkspacePageClient({
             </div>
 
             {/* Tab Bar - VS Code style */}
-            <div className="flex items-center gap-0 mb-4 border-b border-[var(--dt-border)]">
+            <div className="mb-4 flex items-center gap-0 border-b border-desktop-border" data-testid="workspace-tab-bar">
               <DesktopTabButton active={activeTab === "kanban"} onClick={() => setActiveTab("kanban")}>
-                Kanban {tasks.length > 0 && <span className="ml-1 text-[10px] opacity-60">({tasks.length})</span>}
+                Kanban {tasks.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({tasks.length})</span>}
               </DesktopTabButton>
               <DesktopTabButton active={activeTab === "notes"} onClick={() => setActiveTab("notes")}>
-                Notes {notesHook.notes.length > 0 && <span className="ml-1 text-[10px] opacity-60">({notesHook.notes.length})</span>}
+                Notes {notesHook.notes.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({notesHook.notes.length})</span>}
               </DesktopTabButton>
               <DesktopTabButton active={activeTab === "activity"} onClick={() => setActiveTab("activity")}>
-                Activity {bgTasks.length > 0 && <span className="ml-1 text-[10px] opacity-60">({bgTasks.length})</span>}
+                Activity {bgTasks.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({bgTasks.length})</span>}
               </DesktopTabButton>
             </div>
 
@@ -298,13 +298,13 @@ export function WorkspacePageClient({
 
             {activeTab === "notes" && (
               <div>
-            <div className="flex items-center gap-2 mb-3">
+                <div className="mb-3 flex items-center gap-2">
                   <button
                     onClick={() => setNotesSubFilter("general")}
                     className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
                       notesSubFilter === "general"
-                      ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)]"
-                      : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
+                      ? "bg-desktop-bg-active text-desktop-accent"
+                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
                     }`}
                   >
                     Workspace Notes
@@ -316,8 +316,8 @@ export function WorkspacePageClient({
                     onClick={() => setNotesSubFilter("tasks")}
                     className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
                       notesSubFilter === "tasks"
-                      ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)]"
-                      : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
+                      ? "bg-desktop-bg-active text-desktop-accent"
+                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
                     }`}
                   >
                     Task Notes
@@ -388,12 +388,12 @@ export function WorkspacePageClient({
 
 function DesktopTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
+      <button
       onClick={onClick}
       className={`px-3 py-1.5 text-[12px] font-medium transition-colors ${
         active
-          ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)] border-b-2 border-b-[var(--dt-accent)]"
-          : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
+          ? "border-b-2 border-b-desktop-accent bg-desktop-bg-active text-desktop-accent"
+          : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
       }`}
     >
       {children}
@@ -422,9 +422,9 @@ function CompactStat({
   return (
     <div className="flex items-center gap-2">
       <span className={`text-sm font-semibold tabular-nums ${colorMap[color]}`}>{value}</span>
-      <span className="text-[11px] text-[var(--dt-text-muted)]">
+      <span className="text-[11px] text-desktop-text-muted">
         {label}
-        {sub && <span className="ml-1 text-[var(--dt-text-muted)]">· {sub}</span>}
+        {sub && <span className="ml-1 text-desktop-text-muted">· {sub}</span>}
       </span>
     </div>
   );
@@ -443,15 +443,15 @@ function OverlayModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
       <div
-        className="relative w-full max-w-5xl h-[80vh] bg-[var(--dt-bg-secondary)] border border-[var(--dt-border)] rounded shadow-2xl overflow-hidden"
+        className="relative h-[80vh] w-full max-w-5xl overflow-hidden rounded border border-desktop-border bg-desktop-bg-secondary shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="h-9 px-3 border-b border-[var(--dt-border)] flex items-center justify-between bg-[var(--dt-bg-tertiary)]">
-          <span className="text-[12px] font-medium text-[var(--dt-text-primary)]">{title}</span>
+        <div className="flex h-9 items-center justify-between border-b border-desktop-border bg-desktop-bg-tertiary px-3">
+          <span className="text-[12px] font-medium text-desktop-text-primary">{title}</span>
           <button
             type="button"
             onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--dt-bg-active)] text-[var(--dt-text-secondary)] hover:text-[var(--dt-accent-text)] transition-colors"
+            className="flex h-6 w-6 items-center justify-center rounded text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-accent-text"
             title="Close (Esc)"
             aria-label="Close"
           >

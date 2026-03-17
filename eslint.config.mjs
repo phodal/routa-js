@@ -4,6 +4,58 @@ import reactPlugin from "eslint-plugin-react";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
 import nextPlugin from "@next/eslint-plugin-next";
 
+const desktopShellColorGuardFiles = [
+  "src/client/components/desktop-layout.tsx",
+  "src/client/components/desktop-app-shell.tsx",
+  "src/client/components/desktop-sidebar.tsx",
+  "src/client/components/desktop-nav-rail.tsx",
+];
+
+const rawColorPattern =
+  /#[\da-fA-F]{3,8}\b|rgba?\(|hsla?\(|(?:^|\s)(?:dark:)?(?:bg|text|border|ring|fill|stroke|from|via|to)-(?:black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-[0-9]{2,3})?(?:\/[0-9]{1,3})?)/;
+
+const noHardcodedDesktopShellColorsRule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Require desktop shell components to use shared design-system tokens instead of hardcoded colors.",
+    },
+    schema: [],
+    messages: {
+      hardcodedColor:
+        "Desktop shell components must use shared desktop tokens or theme utilities instead of hardcoded colors: {{snippet}}",
+    },
+  },
+  create(context) {
+    const reportIfNeeded = (node, value) => {
+      if (!value || !rawColorPattern.test(value)) {
+        return;
+      }
+
+      const snippet = value.trim().replace(/\s+/g, " ").slice(0, 120);
+      context.report({
+        node,
+        messageId: "hardcodedColor",
+        data: {
+          snippet,
+        },
+      });
+    };
+
+    return {
+      Literal(node) {
+        if (typeof node.value !== "string") {
+          return;
+        }
+        reportIfNeeded(node, node.value);
+      },
+      TemplateElement(node) {
+        reportIfNeeded(node, node.value.cooked ?? node.value.raw);
+      },
+    };
+  },
+};
+
 const eslintConfig = [
   {
     ignores: [
@@ -93,6 +145,19 @@ const eslintConfig = [
       react: {
         version: "detect",
       },
+    },
+  },
+  {
+    files: desktopShellColorGuardFiles,
+    plugins: {
+      routa: {
+        rules: {
+          "no-hardcoded-desktop-shell-colors": noHardcodedDesktopShellColorsRule,
+        },
+      },
+    },
+    rules: {
+      "routa/no-hardcoded-desktop-shell-colors": "error",
     },
   },
   // Relax rules for test files

@@ -94,16 +94,22 @@ export function DesktopAppShell({
   };
 
   return (
-    <div className="desktop-theme h-screen flex flex-col bg-[var(--dt-bg-primary)] overflow-hidden">
+    <div
+      className="desktop-theme h-screen flex flex-col overflow-hidden bg-desktop-bg-primary"
+      data-testid="desktop-shell-root"
+    >
       {/* Title Bar - compact, native feel */}
-      <header className="h-9 shrink-0 flex items-center bg-[var(--dt-bg-tertiary)] border-b border-[var(--dt-border)] select-none">
+      <header
+        className="h-9 shrink-0 flex items-center border-b border-desktop-border bg-desktop-bg-tertiary select-none"
+        data-testid="desktop-shell-header"
+      >
         {/* Drag region for window - macOS traffic lights area */}
         <div className="w-20 h-full app-drag-region" />
 
         {/* Logo + App Name */}
         <div className="flex items-center gap-2 px-2">
           <Image src="/logo.svg" alt="Routa" width={16} height={16} className="rounded" />
-          <span className="text-[11px] font-medium text-[var(--dt-text-primary)]">Routa</span>
+          <span className="text-[11px] font-medium text-desktop-text-primary">Routa</span>
         </div>
 
         {/* Workspace Switcher or Title */}
@@ -111,9 +117,9 @@ export function DesktopAppShell({
           {workspaceSwitcher ?? (
             <Link
               href={`/workspace/${workspaceId}`}
-              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-[var(--dt-text-primary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)] transition-colors"
-              >
-              <svg className="w-3 h-3 text-[var(--dt-text-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-desktop-text-primary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+            >
+              <svg className="w-3 h-3 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
               </svg>
               <span className="max-w-[120px] truncate">{workspaceTitle ?? workspaceId}</span>
@@ -133,9 +139,12 @@ export function DesktopAppShell({
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0" data-testid="desktop-shell-body">
         {/* Left Sidebar Navigation */}
-        <aside className="w-12 shrink-0 flex flex-col bg-[var(--dt-bg-secondary)] border-r border-[var(--dt-border)] h-full">
+        <aside
+          className="h-full w-12 shrink-0 flex flex-col border-r border-desktop-border bg-desktop-bg-secondary"
+          data-testid="desktop-shell-sidebar"
+        >
           {/* Primary Navigation */}
           <nav className="flex-1 flex flex-col items-center py-2 gap-0.5">
             {navItems.map((item) => {
@@ -147,15 +156,15 @@ export function DesktopAppShell({
                   className={`
                     relative w-10 h-10 flex items-center justify-center rounded-md transition-colors
                     ${active
-                      ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)]"
-                      : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
+                      ? "bg-desktop-bg-active text-desktop-accent"
+                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
                     }
                   `}
                   title={item.label}
                 >
                   {/* Active indicator */}
                   {active && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[var(--dt-accent)] rounded-r" />
+                    <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-desktop-accent" />
                   )}
                   {item.icon}
                 </Link>
@@ -164,7 +173,7 @@ export function DesktopAppShell({
           </nav>
 
           {/* Divider */}
-          <div className="mx-2 border-t border-[var(--dt-border)]" />
+          <div className="mx-2 border-t border-desktop-border" />
 
           {/* Secondary Actions */}
           <div className="flex flex-col items-center py-2 gap-0.5">
@@ -173,8 +182,8 @@ export function DesktopAppShell({
               className={`
                 w-10 h-10 flex items-center justify-center rounded-md transition-colors
                 ${pathname === "/settings"
-                  ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)]"
-                  : "text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70"
+                  ? "bg-desktop-bg-active text-desktop-accent"
+                  : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
                 }
               `}
               title="Settings"
@@ -188,7 +197,7 @@ export function DesktopAppShell({
         </aside>
 
         {/* Content */}
-      <main className="flex-1 min-w-0 bg-[var(--dt-bg-primary)] overflow-hidden">
+      <main className="flex-1 min-w-0 overflow-hidden bg-desktop-bg-primary" data-testid="desktop-shell-main">
         {children}
       </main>
     </div>

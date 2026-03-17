@@ -1,0 +1,229 @@
+@theme inline {
+  --color-desktop-bg-primary: var(--dt-bg-primary);
+  --color-desktop-bg-secondary: var(--dt-bg-secondary);
+  --color-desktop-bg-tertiary: var(--dt-bg-tertiary);
+  --color-desktop-bg-active: var(--dt-bg-active);
+  --color-desktop-border: var(--dt-border);
+  --color-desktop-border-light: var(--dt-border-light);
+  --color-desktop-text-primary: var(--dt-text-primary);
+  --color-desktop-text-secondary: var(--dt-text-secondary);
+  --color-desktop-text-muted: var(--dt-text-muted);
+  --color-desktop-accent: var(--dt-accent);
+  --color-desktop-accent-strong: var(--dt-accent-strong);
+  --color-desktop-accent-text: var(--dt-accent-text);
+  --color-desktop-trace-chat: var(--dt-trace-chat);
+  --color-desktop-trace-event-bridge: var(--dt-trace-event-bridge);
+  --color-desktop-trace-ag-ui: var(--dt-trace-ag-ui);
+}
+
+/* Desktop App Styles (Tauri) */
+
+.app-drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.app-drag-region button,
+.app-drag-region a,
+.app-drag-region input,
+.app-drag-region select {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.desktop-theme {
+  --dt-bg-primary: #f2f2f7;
+  --dt-bg-secondary: #efeff2;
+  --dt-bg-tertiary: #f8f8f8;
+  --dt-bg-active: #dce8ff;
+  --dt-border: #c4c7cc;
+  --dt-border-light: #d9d9dd;
+  --dt-text-primary: #3c3c43;
+  --dt-text-secondary: #6e6e73;
+  --dt-text-muted: #858585;
+  --dt-accent: #0a84ff;
+  --dt-accent-strong: #007acc;
+  --dt-accent-text: #ffffff;
+  --dt-trace-chat: #0e639c;
+  --dt-trace-event-bridge: #5a5a5a;
+  --dt-trace-ag-ui: #7a5af8;
+  --dt-scrollbar-thumb: rgb(121 121 121 / 40%);
+  --dt-scrollbar-thumb-hover: rgb(121 121 121 / 60%);
+  --dt-button-primary: #0e639c;
+  --dt-button-secondary: #3c3c3c;
+  --dt-button-secondary-hover: #4c4c4c;
+  --dt-input-bg: #3c3c3c;
+  --dt-panel-bg: #252526;
+  --dt-panel-header-bg: #323233;
+  --dt-list-item-hover: #2a2a2a;
+  --dt-badge-bg: #4d4d4d;
+  --dt-badge-warning-bg: #cca700;
+  --dt-badge-success-bg: #3fb950;
+}
+
+@media (prefers-color-scheme: dark) {
+  .desktop-theme {
+    --dt-bg-primary: #1e1e1e;
+    --dt-bg-secondary: #252526;
+    --dt-bg-tertiary: #323233;
+    --dt-bg-active: #37373d;
+    --dt-border: #333333;
+    --dt-border-light: #2c2c2c;
+    --dt-text-primary: #cccccc;
+    --dt-text-secondary: #858585;
+    --dt-text-muted: #7a7a7a;
+    --dt-accent: #007acc;
+    --dt-accent-strong: #1177bb;
+    --dt-accent-text: #ffffff;
+    --dt-button-primary: #1177bb;
+    --dt-button-secondary: #3c3c3c;
+    --dt-button-secondary-hover: #4c4c4c;
+    --dt-input-bg: #3c3c3c;
+    --dt-panel-bg: #252526;
+    --dt-panel-header-bg: #323233;
+    --dt-list-item-hover: #2a2a2a;
+  }
+}
+
+.desktop-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.desktop-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.desktop-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--dt-scrollbar-thumb);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.desktop-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--dt-scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.desktop-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.desktop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 400;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.desktop-btn-primary {
+  background: var(--dt-button-primary);
+  color: var(--dt-accent-text);
+}
+
+.desktop-btn-primary:hover {
+  background: var(--dt-accent-strong);
+}
+
+.desktop-btn-secondary {
+  background: var(--dt-button-secondary);
+  color: var(--dt-text-primary);
+}
+
+.desktop-btn-secondary:hover {
+  background: var(--dt-button-secondary-hover);
+}
+
+.desktop-input {
+  background: var(--dt-input-bg);
+  border: 1px solid var(--dt-input-bg);
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--dt-text-primary);
+  outline: none;
+  transition: border-color 0.1s;
+}
+
+.desktop-input:focus {
+  border-color: var(--dt-accent);
+}
+
+.desktop-input::placeholder {
+  color: var(--dt-text-secondary);
+}
+
+.desktop-panel {
+  background: var(--dt-panel-bg);
+  border: 1px solid var(--dt-input-bg);
+  border-radius: 0;
+}
+
+.desktop-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--dt-panel-header-bg);
+  border-bottom: 1px solid var(--dt-input-bg);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dt-text-primary);
+}
+
+.desktop-list-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--dt-text-primary);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.desktop-list-item:hover {
+  background: var(--dt-list-item-hover);
+}
+
+.desktop-list-item.active {
+  background: var(--dt-bg-active);
+}
+
+.desktop-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 9px;
+  background: var(--dt-badge-bg);
+  color: var(--dt-text-primary);
+}
+
+.desktop-badge-accent {
+  background: var(--dt-accent);
+  color: var(--dt-accent-text);
+}
+
+.desktop-badge-warning {
+  background: var(--dt-badge-warning-bg);
+  color: var(--dt-bg-primary);
+}
+
+.desktop-badge-success {
+  background: var(--dt-badge-success-bg);
+  color: var(--dt-bg-primary);
+}

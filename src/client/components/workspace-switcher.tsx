@@ -59,29 +59,29 @@ export function WorkspaceSwitcher({
   // Desktop theme styles
   if (desktop || compact) {
     return (
-      <div className="relative" ref={dropdownRef}>
+      <div className="relative" ref={dropdownRef} data-testid="desktop-workspace-switcher">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/70 transition-colors"
+          className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-desktop-text-primary transition-colors hover:bg-desktop-bg-active/70"
           title={active?.title ?? "Select workspace"}
         >
-          <svg className="w-3 h-3 text-[var(--dt-text-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-3 h-3 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
           </svg>
           <span className="max-w-[120px] truncate">
             {loading ? "..." : (active?.title ?? "Select")}
           </span>
-          <svg className={`w-2.5 h-2.5 text-[var(--dt-text-secondary)] transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className={`w-2.5 h-2.5 text-desktop-text-secondary transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
 
         {open && (
-          <div className="absolute top-full left-0 mt-1 w-52 bg-[var(--dt-bg-secondary)] border border-[var(--dt-border)] shadow-xl z-50">
+          <div className="absolute top-full left-0 z-50 mt-1 w-52 border border-desktop-border bg-desktop-bg-secondary shadow-xl">
             <div className="py-1 max-h-52 overflow-y-auto">
               {workspaces.length === 0 && (
-                <div className="px-3 py-2 text-[11px] text-[var(--dt-text-secondary)] text-center">No workspaces yet</div>
+                <div className="px-3 py-2 text-center text-[11px] text-desktop-text-secondary">No workspaces yet</div>
               )}
               {workspaces.map((ws) => (
                 <button
@@ -90,16 +90,16 @@ export function WorkspaceSwitcher({
                   onClick={() => { onSelect(ws.id); setOpen(false); }}
                     className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-[11px] transition-colors ${
                       ws.id === activeWorkspaceId
-                      ? "text-[var(--dt-accent)] bg-[var(--dt-bg-active)]"
-                      : "text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]/60"
+                      ? "bg-desktop-bg-active text-desktop-accent"
+                      : "text-desktop-text-primary hover:bg-desktop-bg-active/60"
                     }`}
                   >
-                  <svg className="w-3 h-3 shrink-0 text-[var(--dt-text-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-3 h-3 shrink-0 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
                   </svg>
                   <span className="truncate flex-1">{ws.title}</span>
                   {ws.id === activeWorkspaceId && (
-                    <svg className="w-3 h-3 text-[var(--dt-accent)] shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-3 h-3 shrink-0 text-desktop-accent" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   )}
@@ -107,7 +107,7 @@ export function WorkspaceSwitcher({
               ))}
             </div>
 
-            <div className="border-t border-[var(--dt-border)] p-1.5">
+            <div className="border-t border-desktop-border p-1.5">
               {creating ? (
                 <div className="flex gap-1">
                   <input
@@ -117,12 +117,12 @@ export function WorkspaceSwitcher({
                     onChange={(e) => setNewTitle(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") setCreating(false); }}
                     placeholder="Workspace name..."
-                    className="flex-1 px-2 py-1 text-[11px] bg-[var(--dt-bg-primary)] border border-[var(--dt-border)] text-[var(--dt-text-primary)] focus:border-[var(--dt-accent)] outline-none placeholder:text-[var(--dt-text-secondary)]"
+                    className="flex-1 border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-primary outline-none placeholder:text-desktop-text-secondary focus:border-desktop-accent"
                   />
                   <button
                     type="button"
                     onClick={handleCreate}
-                    className="px-2 py-1 text-[11px] font-medium text-[var(--dt-accent-text)] bg-[var(--dt-accent)] hover:bg-[var(--dt-accent-strong)] transition-colors"
+                    className="bg-desktop-accent px-2 py-1 text-[11px] font-medium text-desktop-accent-text transition-colors hover:bg-desktop-accent-strong"
                   >
                     Create
                   </button>
@@ -131,7 +131,7 @@ export function WorkspaceSwitcher({
                 <button
                   type="button"
                   onClick={() => setCreating(true)}
-                  className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--dt-accent)] hover:bg-[var(--dt-bg-active)]/70 transition-colors"
+                  className="flex w-full items-center gap-1.5 px-2 py-1 text-[11px] text-desktop-accent transition-colors hover:bg-desktop-bg-active/70"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
