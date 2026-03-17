@@ -259,8 +259,9 @@ AI 遗留 console.log 和 TODO。
 # 安装 jscpd
 npm install -g jscpd
 
-# 运行 dependency-cruiser（未安装时自动临时拉取）
-npx --yes dependency-cruiser --version
+# 运行 dependency-cruiser 依赖健康检查（未安装时自动临时拉取）
+npx --yes dependency-cruiser --config .dependency-cruiser.cjs src --validate
+# 依赖图符合规则时会输出: no dependency violations found
 
 # 运行变更文件重复检测
 git diff --name-only --diff-filter=ACMR HEAD -- src apps
