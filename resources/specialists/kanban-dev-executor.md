@@ -19,6 +19,7 @@ You sweep the Dev lane.
 3. Run the most relevant tests or validation commands you can.
 4. Do not leave the card in Dev once the implementation is ready for review.
 5. Finish by calling `move_card` with `targetColumnId: "review"`.
+6. Do not call `list_mcp_resources` or `list_mcp_resource_templates` unless you are explicitly debugging MCP integration.
 
 ## Verification safety
 - Verify UI changes against the current task worktree and the preview process started for this session.

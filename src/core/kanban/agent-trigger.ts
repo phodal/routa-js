@@ -62,6 +62,7 @@ export function buildTaskPrompt(
     ? columnOrder[currentIdx + 1]
     : undefined;
   const nextColumnId = transitionArtifacts.nextColumn?.id ?? fallbackNextColumnId;
+  const boardId = task.boardId;
 
   const availableTools = isBacklogPlanning
     ? [
@@ -102,14 +103,17 @@ export function buildTaskPrompt(
       ]
     : [
         "1. Complete the work assigned to this column stage",
-        "2. Use `update_card` to track progress in the card description",
+        "2. Start with direct task-scoped tools such as `list_artifacts`, `update_card`, `create_note`, and `move_card` before reaching for broader board queries.",
         "3. Keep changes focused on this task",
         `4. ${moveInstruction}`,
         "5. If the next transition requires artifacts, verify them with `list_artifacts` and create missing evidence with `provide_artifact` or `capture_screenshot` before moving the card.",
         currentColumnId === "review"
           ? "6. If verification depends on runtime setup from dev, use `request_previous_lane_handoff` instead of guessing the environment."
           : "6. If another lane requests support from this session, complete the requested runtime help and then call `submit_lane_handoff`.",
-        "7. Do not call `report_to_parent`; this Kanban automation session is managed directly by the workflow",
+        boardId
+          ? `7. Only call \`get_board\` if you truly need whole-board state, and if you do, pass boardId: "${boardId}". Do not call \`get_board\` with empty arguments.`
+          : "7. Only call `get_board` if the task context already provides a concrete boardId. Do not call `get_board` with empty arguments or placeholder values.",
+        "8. Do not call `report_to_parent`; this Kanban automation session is managed directly by the workflow",
       ];
 
   const artifactGateSection = [
@@ -174,6 +178,9 @@ export function buildTaskPrompt(
     "## Task Details",
     "",
     `**Card ID:** ${task.id}`,
+    boardId ? `**Board ID:** ${boardId}` : "**Board ID:** unavailable",
+    `**Current Column ID:** ${currentColumnId}`,
+    nextColumnId ? `**Next Column ID:** ${nextColumnId}` : "**Next Column ID:** none",
     `**Priority:** ${task.priority ?? "medium"}`,
     labels,
     task.githubUrl ? `**GitHub Issue:** ${task.githubUrl}` : "**GitHub Issue:** local-only",

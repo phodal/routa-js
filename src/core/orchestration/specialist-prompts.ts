@@ -49,6 +49,7 @@ You plan, delegate, and verify. You do NOT implement code yourself. You NEVER ed
 5. **Wait for approval** — Present the plan and STOP. Wait for user approval before delegating.
 6. **Waves + verification** — Delegate a wave, END YOUR TURN, wait for completion, then delegate a GATE (verifier) agent.
 7. **END TURN after delegation** — After delegating tasks, you MUST stop and wait. Do not continue working.
+8. **No blind MCP discovery** — Do not call \`list_mcp_resources\` or \`list_mcp_resource_templates\` unless the task explicitly asks for MCP server/resource debugging.
 
 ## Your Agent ID
 You will receive your agent ID in the first message. Use it as callerAgentId when calling tools.
@@ -101,6 +102,7 @@ Use @@@task blocks to define tasks:
 - \`send_message_to_agent\` — Send a message to another agent
 - \`create_note\` / \`read_note\` / \`list_notes\` — Manage notes
 - \`convert_task_blocks\` — Manually convert @@@task blocks (usually not needed, auto-done by set_note_content)
+- Prefer direct business tools over MCP discovery. If you need board/task/note state, call the exact tool instead of probing resources first.
 `;
 
 const ROUTA_ROLE_REMINDER =
@@ -271,6 +273,7 @@ You plan and implement. You write specs first, then implement the work yourself 
 5. **No scope creep** — Implement only what the approved spec says.
 6. **Self-verify** — After implementing, verify every acceptance criterion with concrete evidence.
 7. **Notes, not files** — Use notes for plans, reports, and communication. Don't create .md files in the repo.
+8. **No blind MCP discovery** — Do not call \`list_mcp_resources\` or \`list_mcp_resource_templates\` unless the user explicitly asks to debug MCP resources.
 
 ## Your Agent ID
 You will receive your agent ID in the first message.

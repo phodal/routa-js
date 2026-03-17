@@ -42,8 +42,13 @@ describe("buildTaskPrompt", () => {
     const prompt = buildTaskPrompt(task);
 
     expect(prompt).toContain("Complete the work assigned to this column stage");
+    expect(prompt).toContain("Start with direct task-scoped tools such as `list_artifacts`, `update_card`, `create_note`, and `move_card`");
     expect(prompt).toContain("move_card");
     expect(prompt).toContain("targetColumnId: \"review\"");
+    expect(prompt).toContain("**Board ID:** board-1");
+    expect(prompt).toContain("**Current Column ID:** dev");
+    expect(prompt).toContain("**Next Column ID:** review");
+    expect(prompt).toContain("Only call `get_board` if you truly need whole-board state, and if you do, pass boardId: \"board-1\"");
     expect(prompt).toContain("Do not call `report_to_parent`");
     expect(prompt).toContain("## Dev Verification Safety");
     expect(prompt).toContain("Do not assume `http://localhost:3000` is the right preview target");
@@ -51,6 +56,22 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("Do not use `ps | grep | xargs kill`, `killall`, or broad `pkill` patterns for cleanup");
     expect(prompt).toContain("If the UI depends on env vars or setup");
     expect(prompt).not.toContain("Tool: report_to_parent");
+  });
+
+  it("does not invent a placeholder board id when the task has no board", () => {
+    const task = createTask({
+      id: "task-3",
+      title: "Investigate flaky review check",
+      objective: "Stabilize the review workflow",
+      workspaceId: "default",
+      columnId: "review",
+    });
+
+    const prompt = buildTaskPrompt(task);
+
+    expect(prompt).toContain("**Board ID:** unavailable");
+    expect(prompt).toContain("Only call `get_board` if the task context already provides a concrete boardId.");
+    expect(prompt).not.toContain('boardId: "unknown"');
   });
 
   it("injects required artifact gates from the next transition into the prompt", () => {
