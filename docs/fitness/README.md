@@ -13,20 +13,26 @@
 ## Quick Start
 
 ```bash
+# 安装（首次）
+pip install -e tools/routa-fitness
+
 # 快速检查（仅 fast tier，<30s）
-python3 docs/fitness/scripts/fitness.py --tier fast
+routa-fitness run --tier fast
 
 # 标准检查（fast + normal tier，<5min）
-python3 docs/fitness/scripts/fitness.py --tier normal
+routa-fitness run --tier normal
 
 # 完整检查（所有 tier，<15min）
-python3 docs/fitness/scripts/fitness.py
+routa-fitness run
 
 # 并行执行（加速）
-python3 docs/fitness/scripts/fitness.py --parallel
+routa-fitness run --parallel
 
 # 仅查看会执行什么（不实际运行）
-python3 docs/fitness/scripts/fitness.py --dry-run
+routa-fitness run --dry-run
+
+# 校验维度权重
+routa-fitness validate
 ```
 
 ### Tier 分层
@@ -44,11 +50,11 @@ python3 docs/fitness/scripts/fitness.py --dry-run
 ## Flow
 
 ```
-1. AGENTS.md           → 项目概述 + Fitness 入口
-2. README.md           → 规则手册（本文件）
-3. unit-test.md        → 单元测试证据（含 frontmatter）
-4. rust-api-test.md    → API 契约证据（含 frontmatter）
-5. scripts/fitness.py  → 解析 frontmatter，执行检查
+1. AGENTS.md                        → 项目概述 + Fitness 入口
+2. README.md                        → 规则手册（本文件）
+3. unit-test.md                     → 单元测试证据（含 frontmatter）
+4. rust-api-test.md                 → API 契约证据（含 frontmatter）
+5. tools/routa-fitness/             → 解析 frontmatter，执行检查（Python 模块）
 ```
 
 ## Score Model
@@ -132,7 +138,7 @@ Fitness = Σ (Weight_i × Score_i) / 100
 - `README.md`：规则手册（本文件）。
 - `unit-test.md`：单元测试证据，frontmatter 定义 metrics。
 - `rust-api-test.md`：API 契约证据，frontmatter 定义 metrics。
-- `scripts/fitness.py`：解析 frontmatter，执行命令，输出结果。
+- `tools/routa-fitness/`：解析 frontmatter，执行命令，输出结果（`routa-fitness` CLI）。
 - 所有测试改动必须同步更新证据文件。
 
 ## Core principle
@@ -213,4 +219,22 @@ claude -p "e2e-test.md 的 frontmatter 定义了哪些 metrics？"
 
 # 测试 AI 是否能执行检查
 claude -p "请执行 fitness 检查的 dry-run"
+```
+
+## 模块架构
+
+执行引擎位于 `tools/routa-fitness/`，按《Building Evolutionary Architectures》概念分层：
+
+```
+routa_fitness/
+  model.py          → 领域模型 (Tier, Metric, Dimension, FitnessReport)
+  evidence.py       → 从本目录 *.md 加载 frontmatter → Dimension
+  runners/shell.py  → Shell 命令执行
+  runners/graph.py  → 代码图探针 (可选, 需 code-review-graph)
+  scoring.py        → 加权评分
+  governance.py     → 策略过滤 (tier, hard gate)
+  reporters/        → 终端 / JSON 输出
+  structure/        → 代码图集成层 (Protocol + Adapter)
+  cli.py            → CLI 入口
+  server.py         → MCP server (可选)
 ```

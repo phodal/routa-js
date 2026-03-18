@@ -29,9 +29,11 @@
 Before any PR, verify fitness using [docs/fitness/README.md](docs/fitness/README.md):
 
 ```bash
-python3 docs/fitness/scripts/fitness.py --dry-run
-python3 docs/fitness/scripts/fitness.py
+routa-fitness run --dry-run
+routa-fitness run
 ```
+
+> Install: `pip install -e tools/routa-fitness`
 
 ## After generating or modifying code
 

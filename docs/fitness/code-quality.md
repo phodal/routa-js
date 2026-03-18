@@ -283,7 +283,7 @@ git diff --name-only --diff-filter=ACMR HEAD -- src apps
 ast-grep scan --help
 
 # 运行 fitness 检查
-python3 docs/fitness/scripts/fitness.py
+routa-fitness run
 ```
 
 ## 相关文件

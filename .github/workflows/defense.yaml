@@ -182,11 +182,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install PyYAML
-        run: pip install pyyaml
+      - name: Install routa-fitness
+        run: pip install -e tools/routa-fitness
 
       - name: Run fitness check (dry-run)
-        run: python3 docs/fitness/scripts/fitness.py --dry-run
+        run: routa-fitness run --dry-run
 
       - name: Summary
         run: |

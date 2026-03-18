@@ -65,6 +65,9 @@ RUN npm ci --legacy-peer-deps
 # ── Layer 3: Copy full source ────────────────────────────────────────────
 COPY . .
 
+# ── Install routa-fitness ───────────────────────────────────────────────
+RUN pip3 install --break-system-packages -e tools/routa-fitness
+
 # ── Default: run all fitness checks ─────────────────────────────────────
 COPY docker/fitness-entrypoint.sh /usr/local/bin/fitness-entrypoint.sh
 RUN chmod +x /usr/local/bin/fitness-entrypoint.sh

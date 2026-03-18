@@ -122,7 +122,7 @@ npm run lint:css
 npm run test:e2e:desktop-shell
 npm run test:accessibility
 npm run test:performance
-python3 docs/fitness/scripts/fitness.py --dry-run
+routa-fitness run --dry-run
 ```
 
 ## 已知边界
