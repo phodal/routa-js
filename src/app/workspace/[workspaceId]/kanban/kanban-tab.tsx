@@ -1463,24 +1463,6 @@ export function KanbanTab({
                     {activeTaskId ? `Task: ${activeTaskId}` : activeSessionId}
                   </div>
                 </div>
-              <div className="flex items-center gap-2">
-                {activeSessionId && (
-                  <a
-                    href={`/workspace/${workspaceId}/sessions/${activeSessionId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
-                  >
-                    Open full page
-                  </a>
-                )}
-                <button
-                  onClick={closeTaskDetail}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
-                >
-                  Close
-                </button>
-              </div>
             </div>
             <div ref={detailSplitContainerRef} className="flex h-[calc(88vh-48px)]">
               {/* Left: Card Detail (if activeTaskId exists) */}
