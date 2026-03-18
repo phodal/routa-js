@@ -92,4 +92,28 @@ describe("KanbanCard artifact gate status", () => {
     expect(screen.getByTestId("kanban-card-artifact-gate").textContent).toContain("Review ready");
     expect(screen.getByTestId("kanban-card-artifact-count").textContent).toContain("2 artifacts");
   });
+
+  it("renders live session tail as a single-line preview", () => {
+    render(
+      <KanbanCard
+        task={buildTask()}
+        boardColumns={boardColumns}
+        liveMessageTail="Updated parser; now handling edge-case whitespace and retry flow."
+        availableProviders={[]}
+        specialists={[]}
+        codebases={[]}
+        allCodebaseIds={[]}
+        worktreeCache={{}}
+        onDragStart={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onDelete={vi.fn()}
+        onPatchTask={vi.fn()}
+        onRetryTrigger={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Live Session")).toBeTruthy();
+    expect(screen.getByTestId("kanban-card-live-tail").textContent).toContain("Updated parser;");
+  });
 });

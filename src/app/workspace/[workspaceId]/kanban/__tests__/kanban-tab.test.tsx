@@ -704,6 +704,58 @@ describe("KanbanCardDetail repository health", () => {
   });
 });
 
+describe("KanbanTab live session tail", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("polls active trigger session history and shows the latest tail on the card", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/sessions/session-123/history?consolidated=true") {
+        return {
+          ok: true,
+          json: async () => ({
+            history: [
+              { update: { sessionUpdate: "agent_message", content: { type: "text", text: "Done. Added live tail support." } } },
+            ],
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected fetch: GET ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[{
+          ...createTask("task-1", "Story One"),
+          triggerSessionId: "session-123",
+        }]}
+        sessions={[{
+          sessionId: "session-123",
+          cwd: "/tmp/project",
+          workspaceId: "workspace-1",
+          provider: "claude",
+          acpStatus: "ready",
+          createdAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        providers={[]}
+        specialists={[]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/sessions/session-123/history?consolidated=true", { cache: "no-store" });
+      expect(screen.getByTestId("kanban-card-live-tail").textContent).toContain("Added live tail support.");
+    });
+  });
+});
+
 describe("KanbanTab agent prompt flow", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -50,6 +50,46 @@ interface KanbanTabProps {
 const KANBAN_DETAIL_SPLIT_RATIO_KEY = "routa:kanban-detail-split-ratio";
 const MIN_DETAIL_SPLIT_RATIO = 0.32;
 const MAX_DETAIL_SPLIT_RATIO = 0.72;
+const LIVE_SESSION_TAIL_POLL_MS = 2500;
+
+function extractHistoryText(content: unknown): string | null {
+  if (typeof content === "string") return content.trim() || null;
+  if (!content || typeof content !== "object") return null;
+
+  const record = content as Record<string, unknown>;
+  if (typeof record.text === "string" && record.text.trim()) return record.text.trim();
+
+  if (Array.isArray(record.content)) {
+    const parts = record.content
+      .map((item) => (typeof item === "object" && item !== null && typeof (item as { text?: unknown }).text === "string"
+        ? (item as { text: string }).text
+        : ""))
+      .filter(Boolean);
+    if (parts.length > 0) return parts.join("").trim() || null;
+  }
+
+  return null;
+}
+
+function extractSessionLiveTail(history: unknown): string | null {
+  if (!Array.isArray(history) || history.length === 0) return null;
+
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (!entry || typeof entry !== "object") continue;
+    const update = (entry as { update?: unknown }).update;
+    if (!update || typeof update !== "object") continue;
+    const updateRecord = update as Record<string, unknown>;
+    const updateType = updateRecord.sessionUpdate;
+    if (updateType !== "agent_message" && updateType !== "agent_message_chunk" && updateType !== "user_message") {
+      continue;
+    }
+    const text = extractHistoryText(updateRecord.content);
+    if (text) return text.replace(/\s+/g, " ").trim();
+  }
+
+  return null;
+}
 
 function QueueStatusBadge({
   label,
@@ -184,6 +224,7 @@ export function KanbanTab({
 
   // Worktree cache: worktreeId -> WorktreeInfo
   const [worktreeCache, setWorktreeCache] = useState<Record<string, WorktreeInfo>>({});
+  const [liveSessionTails, setLiveSessionTails] = useState<Record<string, string>>({});
 
   // Settings state - column automation rules (initialized from board columns)
   const [columnAutomation, setColumnAutomation] = useState<Record<string, ColumnAutomationConfig>>({});
@@ -579,6 +620,17 @@ export function KanbanTab({
     () => new Map(sessions.map((session) => [session.sessionId, session])),
     [sessions],
   );
+  const activeLiveSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const task of boardTasks) {
+      if (!task.triggerSessionId) continue;
+      const session = sessionMap.get(task.triggerSessionId);
+      if (!session) continue;
+      if (session.acpStatus !== "ready" && session.acpStatus !== "connecting") continue;
+      ids.add(task.triggerSessionId);
+    }
+    return Array.from(ids);
+  }, [boardTasks, sessionMap]);
   const agentSession = agentSessionId ? sessionMap.get(agentSessionId) : undefined;
   const kanbanRepoSelection = useMemo<RepoSelection | null>(() => {
     if (!defaultCodebase) return null;
@@ -664,6 +716,65 @@ export function KanbanTab({
 
     return scheduleKanbanRefreshBurst(onRefresh);
   }, [agentPanelOpen, agentSessionId, onRefresh]);
+
+  useEffect(() => {
+    if (activeLiveSessionIds.length === 0) {
+      setLiveSessionTails((previous) => (Object.keys(previous).length > 0 ? {} : previous));
+      return;
+    }
+
+    const activeIdSet = new Set(activeLiveSessionIds);
+    let disposed = false;
+
+    const pollLiveSessionTail = async () => {
+      const updates = await Promise.all(activeLiveSessionIds.map(async (sessionId) => {
+        try {
+          const response = await fetch(
+            `/api/sessions/${encodeURIComponent(sessionId)}/history?consolidated=true`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) return [sessionId, null] as const;
+          const payload = await response.json();
+          return [sessionId, extractSessionLiveTail(payload?.history)] as const;
+        } catch {
+          return [sessionId, null] as const;
+        }
+      }));
+
+      if (disposed) return;
+
+      setLiveSessionTails((previous) => {
+        const next: Record<string, string> = {};
+        let changed = false;
+
+        for (const [sessionId, tail] of updates) {
+          if (!activeIdSet.has(sessionId) || !tail) continue;
+          next[sessionId] = tail;
+          if (previous[sessionId] !== tail) changed = true;
+        }
+
+        for (const sessionId of Object.keys(previous)) {
+          if (!activeIdSet.has(sessionId)) {
+            changed = true;
+            continue;
+          }
+          if (!next[sessionId] && previous[sessionId]) changed = true;
+        }
+
+        return changed ? next : previous;
+      });
+    };
+
+    void pollLiveSessionTail();
+    const timerId = window.setInterval(() => {
+      void pollLiveSessionTail();
+    }, LIVE_SESSION_TAIL_POLL_MS);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timerId);
+    };
+  }, [activeLiveSessionIds]);
 
   // Codebase edit handlers - use RepoPicker for re-selecting/cloning
   const handleStartEditCodebase = useCallback(() => {
@@ -1254,6 +1365,7 @@ export function KanbanTab({
                             task={task}
                             boardColumns={board.columns}
                             linkedSession={task.triggerSessionId ? sessionMap.get(task.triggerSessionId) : undefined}
+                            liveMessageTail={task.triggerSessionId ? liveSessionTails[task.triggerSessionId] : undefined}
                             availableProviders={availableProviders}
                             specialists={specialists}
                             codebases={codebases}

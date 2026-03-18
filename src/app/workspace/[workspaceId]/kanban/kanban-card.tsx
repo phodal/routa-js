@@ -16,6 +16,7 @@ export interface KanbanCardProps {
   task: TaskInfo;
   boardColumns: KanbanColumnInfo[];
   linkedSession?: SessionInfo;
+  liveMessageTail?: string;
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
   codebases: CodebaseData[];
@@ -149,6 +150,7 @@ export function KanbanCard({
   task,
   boardColumns,
   linkedSession,
+  liveMessageTail,
   availableProviders,
   specialists,
   codebases,
@@ -334,6 +336,20 @@ export function KanbanCard({
       )}
 
       <p className="line-clamp-3 text-[12px] leading-5 text-slate-600 dark:text-slate-400">{objectiveText}</p>
+      {liveMessageTail && (
+        <div className="rounded-lg border border-sky-200/80 bg-sky-50/70 px-2.5 py-1.5 dark:border-sky-900/50 dark:bg-sky-900/10">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">
+            Live Session
+          </div>
+          <div
+            className="mt-0.5 truncate font-mono text-[11px] leading-4 text-sky-700 dark:text-sky-200"
+            title={liveMessageTail}
+            data-testid="kanban-card-live-tail"
+          >
+            {liveMessageTail}
+          </div>
+        </div>
+      )}
 
       {visibleLabels.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
