@@ -4,14 +4,13 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use tokio_stream::StreamExt;
 
 use crate::error::ServerError;
-use crate::models::kanban::{default_kanban_board, KanbanColumn};
-use crate::models::task::{Task, TaskPriority, TaskStatus};
+use crate::rpc::RpcRouter;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -28,15 +27,12 @@ struct BoardsQuery {
     workspace_id: Option<String>,
 }
 
-fn get_session_concurrency_limit(
-    metadata: &std::collections::HashMap<String, String>,
-    board_id: &str,
-) -> u32 {
+fn get_session_concurrency_limit(metadata: &HashMap<String, String>, board_id: &str) -> u32 {
     let key = format!("kanbanSessionConcurrencyLimit:{}", board_id);
     metadata
         .get(&key)
-        .and_then(|v| v.parse::<u32>().ok())
-        .filter(|&n| n >= 1)
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|&value| value >= 1)
         .unwrap_or(1)
 }
 
@@ -45,36 +41,28 @@ async fn list_boards(
     Query(query): Query<BoardsQuery>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
     let workspace_id = query.workspace_id.unwrap_or_else(|| "default".to_string());
-    state
-        .kanban_store
-        .ensure_default_board(&workspace_id)
-        .await?;
-    let boards = state.kanban_store.list_by_workspace(&workspace_id).await?;
-    let workspace = state
-        .workspace_store
-        .get(&workspace_id)
-        .await
-        .ok()
-        .flatten();
-    let metadata = workspace.map(|w| w.metadata).unwrap_or_default();
-    let boards_with_meta: Vec<serde_json::Value> = boards
-        .iter()
-        .map(|b| {
-            let mut v = serde_json::to_value(b).unwrap_or_default();
-            if let Some(obj) = v.as_object_mut() {
-                obj.insert(
-                    "sessionConcurrencyLimit".to_string(),
-                    serde_json::json!(get_session_concurrency_limit(&metadata, &b.id)),
-                );
-                obj.insert(
-                    "queue".to_string(),
-                    serde_json::json!({ "runningCount": 0, "queuedCount": 0 }),
-                );
-            }
-            v
+    let rpc_result = rpc_result(
+        &state,
+        "kanban.listBoards",
+        serde_json::json!({ "workspaceId": workspace_id }),
+    )
+    .await?;
+    let workspace = state.workspace_store.get(&workspace_id).await.ok().flatten();
+    let metadata = workspace.map(|workspace| workspace.metadata).unwrap_or_default();
+
+    let boards = rpc_result
+        .get("boards")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mut board| {
+            add_board_runtime_meta(&mut board, &metadata);
+            board
         })
-        .collect();
-    Ok(Json(serde_json::json!({ "boards": boards_with_meta })))
+        .collect::<Vec<_>>();
+
+    Ok(Json(serde_json::json!({ "boards": boards })))
 }
 
 async fn kanban_events(
@@ -100,6 +88,7 @@ async fn kanban_events(
 struct CreateBoardRequest {
     workspace_id: String,
     name: String,
+    columns: Option<Vec<String>>,
     is_default: Option<bool>,
 }
 
@@ -107,31 +96,21 @@ async fn create_board(
     State(state): State<AppState>,
     Json(body): Json<CreateBoardRequest>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ServerError> {
-    let name = body.name.trim();
-    if name.is_empty() {
-        return Err(ServerError::BadRequest(
-            "board name cannot be blank".to_string(),
-        ));
-    }
-
-    let mut board = default_kanban_board(body.workspace_id.clone());
-    board.id = uuid::Uuid::new_v4().to_string();
-    board.name = name.to_string();
-    board.is_default = body.is_default.unwrap_or(false);
-    board.created_at = Utc::now();
-    board.updated_at = board.created_at;
-
-    state.kanban_store.create(&board).await?;
-    if board.is_default {
-        state
-            .kanban_store
-            .set_default_for_workspace(&body.workspace_id, &board.id)
-            .await?;
-    }
+    let rpc_result = rpc_result(
+        &state,
+        "kanban.createBoard",
+        serde_json::json!({
+            "workspaceId": body.workspace_id,
+            "name": body.name,
+            "columns": body.columns,
+            "isDefault": body.is_default,
+        }),
+    )
+    .await?;
 
     Ok((
         axum::http::StatusCode::CREATED,
-        Json(serde_json::json!({ "board": board })),
+        Json(serde_json::json!({ "board": rpc_result["board"].clone() })),
     ))
 }
 
@@ -139,41 +118,30 @@ async fn get_board(
     State(state): State<AppState>,
     Path(board_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
-    let board = state.kanban_store.get(&board_id).await?;
-    match board {
-        Some(b) => {
-            let workspace = state
-                .workspace_store
-                .get(&b.workspace_id)
-                .await
-                .ok()
-                .flatten();
-            let metadata = workspace.map(|w| w.metadata).unwrap_or_default();
-            let mut v = serde_json::to_value(&b).unwrap_or_default();
-            if let Some(obj) = v.as_object_mut() {
-                obj.insert(
-                    "sessionConcurrencyLimit".to_string(),
-                    serde_json::json!(get_session_concurrency_limit(&metadata, &b.id)),
-                );
-                obj.insert(
-                    "queue".to_string(),
-                    serde_json::json!({ "runningCount": 0, "queuedCount": 0 }),
-                );
-            }
-            Ok(Json(serde_json::json!({ "board": v })))
-        }
-        None => Err(ServerError::NotFound(format!(
-            "Board not found: {}",
-            board_id
-        ))),
-    }
+    let rpc_result = rpc_result(
+        &state,
+        "kanban.getBoard",
+        serde_json::json!({ "boardId": board_id }),
+    )
+    .await?;
+
+    let workspace_id = rpc_result
+        .get("workspaceId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("default");
+    let workspace = state.workspace_store.get(workspace_id).await.ok().flatten();
+    let metadata = workspace.map(|workspace| workspace.metadata).unwrap_or_default();
+
+    let mut board = strip_board_cards(&rpc_result);
+    add_board_runtime_meta(&mut board, &metadata);
+    Ok(Json(serde_json::json!({ "board": board })))
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateBoardRequest {
     name: Option<String>,
-    columns: Option<Vec<KanbanColumn>>,
+    columns: Option<serde_json::Value>,
     is_default: Option<bool>,
     session_concurrency_limit: Option<u32>,
 }
@@ -183,260 +151,152 @@ async fn update_board(
     Path(board_id): Path<String>,
     Json(body): Json<UpdateBoardRequest>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
-    let existing = state.kanban_store.get(&board_id).await?;
-    let mut board = match existing {
-        Some(b) => b,
-        None => {
-            return Err(ServerError::NotFound(format!(
-                "Board not found: {}",
-                board_id
-            )))
-        }
-    };
-
-    // Update fields
+    let mut params = serde_json::json!({ "boardId": board_id });
     if let Some(name) = body.name {
-        let trimmed = name.trim();
-        if !trimmed.is_empty() {
-            board.name = trimmed.to_string();
-        }
+        params["name"] = serde_json::json!(name);
     }
     if let Some(columns) = body.columns {
-        board.columns = columns;
+        params["columns"] = columns;
     }
     if let Some(is_default) = body.is_default {
-        board.is_default = is_default;
-    }
-    board.updated_at = Utc::now();
-
-    state.kanban_store.update(&board).await?;
-
-    // If setting as default, update other boards
-    if body.is_default == Some(true) {
-        state
-            .kanban_store
-            .set_default_for_workspace(&board.workspace_id, &board.id)
-            .await?;
+        params["isDefault"] = serde_json::json!(is_default);
     }
 
-    // Persist sessionConcurrencyLimit in workspace metadata if provided
+    let rpc_result = rpc_result(&state, "kanban.updateBoard", params).await?;
+    let board = rpc_result
+        .get("board")
+        .cloned()
+        .ok_or_else(|| ServerError::Internal("Missing board in RPC response".to_string()))?;
+
+    let board_id = board
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let workspace_id = board
+        .get("workspaceId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("default")
+        .to_string();
+
     if let Some(limit) = body.session_concurrency_limit {
-        let limit = limit.max(1);
-        let workspace = state
-            .workspace_store
-            .get(&board.workspace_id)
-            .await
-            .ok()
-            .flatten();
-        if let Some(mut ws) = workspace {
-            let key = format!("kanbanSessionConcurrencyLimit:{}", board_id);
-            ws.metadata.insert(key, limit.to_string());
-            state.workspace_store.save(&ws).await?;
-        }
+        persist_session_concurrency_limit(&state, &workspace_id, &board_id, limit).await?;
     }
 
-    let workspace = state
-        .workspace_store
-        .get(&board.workspace_id)
-        .await
-        .ok()
-        .flatten();
-    let metadata = workspace.map(|w| w.metadata).unwrap_or_default();
-    let mut v = serde_json::to_value(&board).unwrap_or_default();
-    if let Some(obj) = v.as_object_mut() {
-        obj.insert(
-            "sessionConcurrencyLimit".to_string(),
-            serde_json::json!(get_session_concurrency_limit(&metadata, &board_id)),
-        );
-        obj.insert(
-            "queue".to_string(),
-            serde_json::json!({ "runningCount": 0, "queuedCount": 0 }),
-        );
-    }
-    Ok(Json(serde_json::json!({ "board": v })))
-}
+    let workspace = state.workspace_store.get(&workspace_id).await.ok().flatten();
+    let metadata = workspace.map(|workspace| workspace.metadata).unwrap_or_default();
+    let mut board = board;
+    add_board_runtime_meta(&mut board, &metadata);
 
-// Helper function to convert column_id to TaskStatus
-fn column_id_to_task_status(column_id: &str) -> TaskStatus {
-    match column_id {
-        "backlog" => TaskStatus::Pending,
-        "todo" => TaskStatus::Pending,
-        "dev" => TaskStatus::InProgress,
-        "review" => TaskStatus::ReviewRequired,
-        "blocked" => TaskStatus::Blocked,
-        "done" => TaskStatus::Completed,
-        _ => TaskStatus::Pending,
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DecomposeTaskItem {
-    title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    priority: Option<String>,
-    #[serde(default)]
-    labels: Vec<String>,
+    Ok(Json(serde_json::json!({ "board": board })))
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DecomposeRequest {
-    board_id: String,
+    board_id: Option<String>,
     workspace_id: String,
-    tasks: Vec<DecomposeTaskItem>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    tasks: Vec<serde_json::Value>,
     column_id: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CardResponse {
-    id: String,
-    title: String,
-    description: String,
-    status: String,
-    column_id: String,
-    position: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    priority: Option<String>,
-    labels: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    assignee: Option<String>,
-    created_at: chrono::DateTime<Utc>,
-    updated_at: chrono::DateTime<Utc>,
 }
 
 async fn decompose_tasks(
     State(state): State<AppState>,
     Json(body): Json<DecomposeRequest>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
-    // Validate board exists
-    let board = state.kanban_store.get(&body.board_id).await?;
-    let board = match board {
-        Some(b) => b,
-        None => {
-            return Err(ServerError::NotFound(format!(
-                "Board not found: {}",
-                body.board_id
-            )))
+    let rpc_result = rpc_result(
+        &state,
+        "kanban.decomposeTasks",
+        serde_json::json!({
+            "boardId": body.board_id,
+            "workspaceId": body.workspace_id,
+            "tasks": body.tasks,
+            "columnId": body.column_id,
+        }),
+    )
+    .await?;
+    Ok(Json(rpc_result))
+}
+
+async fn persist_session_concurrency_limit(
+    state: &AppState,
+    workspace_id: &str,
+    board_id: &str,
+    limit: u32,
+) -> Result<(), ServerError> {
+    let limit = limit.max(1);
+    let workspace = state.workspace_store.get(workspace_id).await.ok().flatten();
+    if let Some(mut workspace) = workspace {
+        let key = format!("kanbanSessionConcurrencyLimit:{}", board_id);
+        workspace.metadata.insert(key, limit.to_string());
+        state.workspace_store.save(&workspace).await?;
+    }
+    Ok(())
+}
+
+async fn rpc_result(
+    state: &AppState,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, ServerError> {
+    let rpc = RpcRouter::new(state.clone());
+    let response = rpc
+        .handle_value(serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": method,
+            "params": params
+        }))
+        .await;
+
+    if let Some(result) = response.get("result") {
+        return Ok(result.clone());
+    }
+
+    let error = response
+        .get("error")
+        .ok_or_else(|| ServerError::Internal(format!("Missing RPC result for method {}", method)))?;
+    let code = error.get("code").and_then(|value| value.as_i64()).unwrap_or(0);
+    let message = error
+        .get("message")
+        .and_then(|value| value.as_str())
+        .unwrap_or("RPC error")
+        .to_string();
+
+    match code {
+        -32001 => Err(ServerError::NotFound(message)),
+        -32002 | -32602 => Err(ServerError::BadRequest(message)),
+        _ => Err(ServerError::Internal(message)),
+    }
+}
+
+fn strip_board_cards(board: &serde_json::Value) -> serde_json::Value {
+    let mut board = board.clone();
+    if let Some(columns) = board.get_mut("columns").and_then(|value| value.as_array_mut()) {
+        for column in columns {
+            if let Some(object) = column.as_object_mut() {
+                object.remove("cards");
+            }
         }
+    }
+    board
+}
+
+fn add_board_runtime_meta(board: &mut serde_json::Value, metadata: &HashMap<String, String>) {
+    let Some(object) = board.as_object_mut() else {
+        return;
     };
 
-    if board.workspace_id != body.workspace_id {
-        return Err(ServerError::BadRequest(format!(
-            "workspace mismatch: board {} belongs to workspace {}",
-            body.board_id, board.workspace_id
-        )));
-    }
-
-    // Validate tasks array is not empty
-    if body.tasks.is_empty() {
-        return Err(ServerError::BadRequest(
-            "tasks array cannot be empty".to_string(),
-        ));
-    }
-
-    // Determine target column
-    let target_column_id = body.column_id.unwrap_or_else(|| "backlog".to_string());
-    let column = board.columns.iter().find(|c| c.id == target_column_id);
-    if column.is_none() {
-        return Err(ServerError::NotFound(format!(
-            "Column not found: {}",
-            target_column_id
-        )));
-    }
-
-    // Get existing tasks in the column to determine starting position
-    let existing_tasks = state
-        .task_store
-        .list_by_workspace(&board.workspace_id)
-        .await?;
-    let backlog = String::from("backlog");
-    let column_tasks: Vec<_> = existing_tasks
-        .iter()
-        .filter(|t| {
-            t.board_id.as_ref() == Some(&body.board_id)
-                && t.column_id.as_ref().unwrap_or(&backlog) == &target_column_id
-        })
-        .collect();
-    let mut position = column_tasks.len() as i64;
-
-    // Create tasks
-    let mut created_cards = Vec::new();
-    for item in body.tasks {
-        let task_id = uuid::Uuid::new_v4().to_string();
-        let now = Utc::now();
-        let status = column_id_to_task_status(&target_column_id);
-        let priority = item
-            .priority
-            .as_ref()
-            .and_then(|p| TaskPriority::from_str(p));
-
-        let task = Task {
-            id: task_id.clone(),
-            title: item.title.clone(),
-            objective: item.description.clone().unwrap_or_default(),
-            scope: None,
-            acceptance_criteria: None,
-            verification_commands: None,
-            test_cases: None,
-            assigned_to: None,
-            status: status.clone(),
-            board_id: Some(body.board_id.clone()),
-            column_id: Some(target_column_id.clone()),
-            position,
-            priority: priority.clone(),
-            labels: item.labels.clone(),
-            assignee: None,
-            assigned_provider: None,
-            assigned_role: None,
-            assigned_specialist_id: None,
-            assigned_specialist_name: None,
-            trigger_session_id: None,
-            github_id: None,
-            github_number: None,
-            github_url: None,
-            github_repo: None,
-            github_state: None,
-            github_synced_at: None,
-            last_sync_error: None,
-            dependencies: Vec::new(),
-            parallel_group: None,
-            workspace_id: body.workspace_id.clone(),
-            session_id: None,
-            codebase_ids: Vec::new(),
-            worktree_id: None,
-            created_at: now,
-            updated_at: now,
-            completion_summary: None,
-            verification_verdict: None,
-            verification_report: None,
-        };
-
-        state.task_store.save(&task).await?;
-
-        created_cards.push(CardResponse {
-            id: task_id,
-            title: item.title,
-            description: item.description.unwrap_or_default(),
-            status: status.as_str().to_string(),
-            column_id: target_column_id.clone(),
-            position,
-            priority: priority.map(|p| p.as_str().to_string()),
-            labels: item.labels,
-            assignee: None,
-            created_at: now,
-            updated_at: now,
-        });
-
-        position += 1;
-    }
-
-    Ok(Json(serde_json::json!({
-        "count": created_cards.len(),
-        "cards": created_cards
-    })))
+    let board_id = object
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default();
+    object.insert(
+        "sessionConcurrencyLimit".to_string(),
+        serde_json::json!(get_session_concurrency_limit(metadata, board_id)),
+    );
+    object.insert(
+        "queue".to_string(),
+        serde_json::json!({ "runningCount": 0, "queuedCount": 0 }),
+    );
 }
