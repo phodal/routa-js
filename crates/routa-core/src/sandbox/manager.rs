@@ -269,6 +269,25 @@ impl SandboxManager {
 
         Ok(())
     }
+
+    /// Replace an existing sandbox with a newly created sandbox using a mutated policy.
+    pub async fn recreate_sandbox(
+        &self,
+        id: &str,
+        req: ResolvedCreateSandboxRequest,
+    ) -> Result<SandboxInfo, String> {
+        self.get_sandbox(id)
+            .await
+            .ok_or_else(|| format!("Sandbox not found: {id}"))?;
+
+        let next = self.create_sandbox(req).await?;
+        if let Err(err) = self.delete_sandbox(id).await {
+            let _ = self.delete_sandbox(&next.id).await;
+            return Err(format!("Failed to replace sandbox: {err}"));
+        }
+
+        Ok(next)
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

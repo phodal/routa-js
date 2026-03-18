@@ -21,11 +21,12 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::error::ServerError;
 use crate::sandbox::{
-    policy::{SandboxPolicyContext, SandboxPolicyWorktree},
+    policy::{SandboxPermissionConstraints, SandboxPolicyContext, SandboxPolicyWorktree},
     types::{CreateSandboxRequest, ExecuteRequest, ResolvedCreateSandboxRequest},
 };
 use crate::state::AppState;
@@ -36,6 +37,14 @@ pub fn router() -> Router<AppState> {
         .route("/explain", post(explain_policy))
         .route("/", post(create_sandbox))
         .route("/{id}", get(get_sandbox))
+        .route(
+            "/{id}/permissions/explain",
+            post(explain_permission_constraints),
+        )
+        .route(
+            "/{id}/permissions/apply",
+            post(apply_permission_constraints),
+        )
         .route("/{id}/execute", post(execute_code))
         .route("/{id}", delete(delete_sandbox))
 }
@@ -91,6 +100,36 @@ async fn get_sandbox(
         .get_sandbox(&id)
         .await
         .ok_or_else(|| ServerError::NotFound(format!("Sandbox not found: {id}")))?;
+
+    Ok(Json(json!(info)))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PermissionConstraintRequest {
+    constraints: SandboxPermissionConstraints,
+}
+
+async fn explain_permission_constraints(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<PermissionConstraintRequest>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let resolved = mutate_sandbox_policy(&state, &id, body.constraints).await?;
+    Ok(Json(json!({ "policy": resolved.policy })))
+}
+
+async fn apply_permission_constraints(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<PermissionConstraintRequest>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let resolved = mutate_sandbox_policy(&state, &id, body.constraints).await?;
+    let info = state
+        .sandbox_manager
+        .recreate_sandbox(&id, resolved)
+        .await
+        .map_err(ServerError::Internal)?;
 
     Ok(Json(json!(info)))
 }
@@ -167,6 +206,42 @@ async fn resolve_create_request(
     Ok(ResolvedCreateSandboxRequest {
         lang: body.lang,
         policy,
+    })
+}
+
+async fn mutate_sandbox_policy(
+    state: &AppState,
+    sandbox_id: &str,
+    constraints: SandboxPermissionConstraints,
+) -> Result<ResolvedCreateSandboxRequest, ServerError> {
+    if constraints.is_empty() {
+        return Err(ServerError::BadRequest(
+            "Permission constraints cannot be empty.".to_string(),
+        ));
+    }
+
+    let sandbox = state
+        .sandbox_manager
+        .get_sandbox(sandbox_id)
+        .await
+        .ok_or_else(|| ServerError::NotFound(format!("Sandbox not found: {sandbox_id}")))?;
+    let current_policy = sandbox.effective_policy.ok_or_else(|| {
+        ServerError::BadRequest(
+            "Permission constraints require a workspace-aware sandbox policy.".to_string(),
+        )
+    })?;
+
+    let next_input = current_policy
+        .to_input()
+        .apply_permission_constraints(&constraints);
+    let context = resolve_policy_context(state, &next_input).await?;
+    let next_policy = next_input
+        .resolve(context)
+        .map_err(ServerError::BadRequest)?;
+
+    Ok(ResolvedCreateSandboxRequest {
+        lang: sandbox.lang,
+        policy: Some(next_policy),
     })
 }
 

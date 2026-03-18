@@ -30,8 +30,8 @@ pub use policy::{
     ResolvedSandboxCapability, ResolvedSandboxEnvFile, ResolvedSandboxLinkedWorktree,
     ResolvedSandboxPolicy, ResolvedSandboxWorkspaceConfig, SandboxCapability,
     SandboxCapabilityTier, SandboxEnvFileSource, SandboxEnvMode, SandboxLinkedWorktreeMode,
-    SandboxMount, SandboxMountAccess, SandboxNetworkMode, SandboxPolicyContext, SandboxPolicyInput,
-    SandboxPolicyWorktree, SANDBOX_SCOPE_CONTAINER_ROOT,
+    SandboxMount, SandboxMountAccess, SandboxNetworkMode, SandboxPermissionConstraints,
+    SandboxPolicyContext, SandboxPolicyInput, SandboxPolicyWorktree, SANDBOX_SCOPE_CONTAINER_ROOT,
 };
 pub use types::{
     CreateSandboxRequest, ExecuteRequest, ResolvedCreateSandboxRequest, SandboxInfo,

@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use super::env::parse_env_file_keys;
 
+mod permission_constraints;
+pub use permission_constraints::SandboxPermissionConstraints;
+
 pub const SANDBOX_SCOPE_CONTAINER_ROOT: &str = "/workspace";
 const SANDBOX_EXTRA_READONLY_ROOT: &str = "/workspace-extra/ro";
 const SANDBOX_EXTRA_READWRITE_ROOT: &str = "/workspace-extra/rw";
