@@ -112,10 +112,14 @@ pub async fn create_board(
         return Err(RpcError::BadRequest("board name cannot be blank".to_string()));
     }
 
+    let want_default = params.is_default.unwrap_or(false);
     let mut board = default_kanban_board(params.workspace_id.clone());
     board.id = params.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     board.name = name.to_string();
-    board.is_default = params.is_default.unwrap_or(false);
+    // Always insert with is_default=false to avoid the unique partial index
+    // violation when another default board already exists in the workspace.
+    // set_default_for_workspace will flip the flag atomically afterwards.
+    board.is_default = false;
     if let Some(columns) = params.columns {
         board.columns = build_columns_from_names(&columns)?;
     }
@@ -123,11 +127,12 @@ pub async fn create_board(
     board.updated_at = board.created_at;
 
     state.kanban_store.create(&board).await?;
-    if board.is_default {
+    if want_default {
         state
             .kanban_store
             .set_default_for_workspace(&board.workspace_id, &board.id)
             .await?;
+        board.is_default = true;
     }
 
     Ok(CreateBoardResult { board })
