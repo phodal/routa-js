@@ -17,6 +17,7 @@ out
 # Production
 /build
 /dist
+docs-site/
 
 # Tauri
 apps/desktop/src-tauri/target/

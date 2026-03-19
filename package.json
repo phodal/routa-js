@@ -57,6 +57,7 @@
     "test:e2e:tauri:headed": "playwright test --config=playwright.tauri.config.ts e2e/tauri-backend-check.spec.ts --project=chromium-headed",
     "test:accessibility": "node scripts/check-accessibility-smoke.mjs",
     "test:performance": "node scripts/check-performance-smoke.mjs",
+    "docs:build": "node scripts/build-docs-site.mjs",
     "rust:cov": "./scripts/rust-coverage.sh routa-core summary",
     "rust:cov:lcov": "./scripts/rust-coverage.sh routa-core lcov",
     "rust:cov:html": "./scripts/rust-coverage.sh routa-core html",
