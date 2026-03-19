@@ -39,6 +39,7 @@ const ROLE_DESCRIPTIONS: Record<AgentRoleKey, string> = {
 const STORAGE_KEY = "routa.defaultProviders";
 const CONNECTIONS_STORAGE_KEY = "routa.providerConnections";
 const MODEL_DEFINITIONS_KEY = "routa.modelDefinitions";
+const KANBAN_EXPORT_WORKSPACE_KEY = "routa.kanbanExportWorkspaceId";
 const SETTINGS_PANEL_HEIGHT = "92vh";
 const SETTINGS_PANEL_BODY_MAX_HEIGHT = "calc(92vh - 148px)";
 
@@ -194,6 +195,20 @@ export function saveModelDefinitions(defs: ModelDefinition[]): void {
 export function getModelDefinitionByAlias(alias: string): ModelDefinition | undefined {
   if (!alias || typeof window === "undefined") return undefined;
   return loadModelDefinitions().find((d) => d.alias === alias);
+}
+
+function loadKanbanExportWorkspaceId(): string {
+  if (typeof window === "undefined") return "default";
+  try {
+    return localStorage.getItem(KANBAN_EXPORT_WORKSPACE_KEY)?.trim() || "default";
+  } catch {
+    return "default";
+  }
+}
+
+function saveKanbanExportWorkspaceId(workspaceId: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KANBAN_EXPORT_WORKSPACE_KEY, workspaceId);
 }
 
 interface ProviderOption {
@@ -1749,6 +1764,9 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
     resolveThemePreference(getStoredThemePreference()),
   );
+  const [kanbanExportWorkspaceId, setKanbanExportWorkspaceId] = useState<string>(() => loadKanbanExportWorkspaceId());
+  const [isExportingKanbanYaml, setIsExportingKanbanYaml] = useState(false);
+  const [kanbanExportError, setKanbanExportError] = useState("");
   const datalistId = useId();
 
   useEffect(() => {
@@ -1782,6 +1800,39 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
       setModelDefs(loadModelDefinitions());
     }
   };
+  const handleKanbanExportWorkspaceChange = (value: string) => {
+    setKanbanExportWorkspaceId(value);
+    saveKanbanExportWorkspaceId(value.trim() || "default");
+  };
+  const handleExportKanbanYaml = async () => {
+    const workspaceId = kanbanExportWorkspaceId.trim() || "default";
+    setKanbanExportError("");
+    setIsExportingKanbanYaml(true);
+    try {
+      saveKanbanExportWorkspaceId(workspaceId);
+      const response = await desktopAwareFetch(`/api/kanban/export?workspaceId=${encodeURIComponent(workspaceId)}`, {
+        method: "GET",
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || "Export failed");
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `kanban-${workspaceId.replace(/[^a-zA-Z0-9_-]+/g, "-") || "default"}.yaml`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      setKanbanExportError(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setIsExportingKanbanYaml(false);
+    }
+  };
 
   const TAB_DEFS: { key: SettingsTab; label: string }[] = [
     { key: "agents", label: "Agents" },
@@ -1812,6 +1863,26 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Settings</h2>
           </div>
           <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 dark:border-gray-700 dark:bg-[#111423] lg:flex">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Kanban YAML
+              </span>
+              <input
+                type="text"
+                value={kanbanExportWorkspaceId}
+                onChange={(event) => handleKanbanExportWorkspaceChange(event.target.value)}
+                placeholder="workspaceId"
+                className="w-28 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-900 outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-[#1e2130] dark:text-gray-100"
+              />
+              <button
+                type="button"
+                onClick={handleExportKanbanYaml}
+                disabled={isExportingKanbanYaml}
+                className="rounded-md bg-blue-600 px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isExportingKanbanYaml ? "Exporting…" : "Export YAML"}
+              </button>
+            </div>
             <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-[#111423]">
               <span className="px-1.5 text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 Theme
@@ -1865,6 +1936,12 @@ function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsP
             </button>
           ))}
         </div>
+
+        {kanbanExportError && (
+          <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-[11px] text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300">
+            Kanban YAML export failed: {kanbanExportError}
+          </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-hidden">
