@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { marked } from "marked";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -81,35 +82,117 @@ function buildPageHtml({ title, content, navGroups, activePath }) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} | Routa Docs</title>
     <style>
-      :root { --bg: #0b1020; --panel: #111827; --text: #e5e7eb; --muted: #94a3b8; --link: #93c5fd; --line: #1f2937; }
-      body { margin: 0; background: #0b1020; color: var(--text); font: 16px/1.6 Inter, system-ui, sans-serif; }
-      .top { position: sticky; top: 0; background: rgba(11,16,32,.88); backdrop-filter: blur(4px); padding: 18px 24px; border-bottom: 1px solid var(--line); }
-      .top h1 { margin: 0; font-size: 20px; }
-      .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; max-width: 1240px; margin: 24px auto; padding: 0 16px; }
-      nav { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; height: calc(100vh - 112px); overflow-y: auto; position: sticky; top: 80px; }
+      :root {
+        --bg-start: #070b17;
+        --bg-end: #122a48;
+        --panel: rgba(15, 23, 42, 0.82);
+        --text: #ecfeff;
+        --muted: #94a3b8;
+        --link: #7dd3fc;
+        --line: #24324a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 420px at 12% -15%, rgba(34, 211, 238, 0.2), transparent 60%),
+          radial-gradient(800px 360px at 80% -8%, rgba(99, 102, 241, 0.16), transparent 58%),
+          linear-gradient(180deg, var(--bg-start), var(--bg-end));
+        font: 16px/1.65 "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      }
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 8;
+        background: rgba(7, 11, 23, 0.86);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line);
+        padding: 18px 24px;
+      }
+      .top h1 { margin: 0; font-size: 22px; letter-spacing: 0.01em; }
+      .top .sub { color: var(--muted); margin-top: 6px; }
+      .layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 24px;
+        max-width: 1220px;
+        margin: 24px auto 36px;
+        padding: 0 16px 16px;
+      }
+      nav {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px 14px;
+        height: calc(100vh - 132px);
+        overflow-y: auto;
+        position: sticky;
+        top: 96px;
+        box-shadow: 0 20px 50px -30px #000;
+      }
       .nav-group + .nav-group { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
-      .nav-group h3 { margin: 0 0 8px; font-size: 14px; color: #d1d5db; }
+      .nav-group h3 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #dbeafe;
+      }
       ul { list-style: none; margin: 0; padding: 0; }
       li { margin: 0; }
-      a { color: var(--link); text-decoration: none; display: block; padding: 6px 4px; border-radius: 6px; }
-      a:hover { background: rgba(99, 102, 241, 0.18); }
-      a.active { background: rgba(59, 130, 246, 0.25); color: #dbeafe; }
-      main { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; min-height: 80vh; }
-      h1, h2, h3, h4 { color: #f8fafc; }
-      pre { background: #020617; padding: 16px; border-radius: 8px; overflow-x: auto; }
-      code { background: rgba(148,163,184,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      a {
+        color: var(--link);
+        text-decoration: none;
+        display: block;
+        padding: 6px 10px;
+        border-radius: 8px;
+        transition: background 120ms ease, transform 120ms ease;
+      }
+      a:hover { background: rgba(34, 211, 238, 0.16); transform: translateX(2px); }
+      a.active { background: linear-gradient(90deg, rgba(34, 211, 238, 0.28), rgba(125, 211, 252, 0.2)); color: #f0f9ff; }
+      main {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 28px;
+        min-height: 80vh;
+        box-shadow: 0 20px 60px -30px #000;
+      }
+      h1, h2, h3, h4 { color: #f8fafc; line-height: 1.3; }
+      p { color: #e2e8f0; }
+      pre {
+        background: #020617;
+        border: 1px solid var(--line);
+        padding: 16px;
+        border-radius: 10px;
+        overflow-x: auto;
+      }
+      code { background: rgba(14, 116, 144, 0.2); padding: 0.15em 0.45em; border-radius: 5px; }
       pre code { background: transparent; padding: 0; }
-      img { max-width: 100%; border-radius: 8px; }
+      img { max-width: 100%; border-radius: 10px; }
       table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid var(--line); padding: 8px; }
+      th, td { border: 1px solid var(--line); padding: 9px; }
       th { background: #0f172a; text-align: left; }
       .muted { color: var(--muted); font-size: 14px; }
+      .meta {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 14px;
+        margin-bottom: 0;
+      }
+      @media (max-width: 900px) {
+        .layout { grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
+        nav { height: auto; position: static; }
+        main { padding: 20px; }
+      }
     </style>
   </head>
   <body>
-    <header class="top">
+      <header class="top">
       <h1>Routa Documentation</h1>
-      <div class="muted">A documentation site published with GitHub Pages</div>
+      <div class="muted sub">A documentation site published with GitHub Pages</div>
     </header>
     <div class="layout">
       <nav>${navHtml}</nav>
@@ -151,6 +234,53 @@ function listMarkdownFiles(baseDir, rootPrefix = "") {
   return results;
 }
 
+function getUpdatedTs(fullPath) {
+  try {
+    const relativePath = path.relative(rootDir, fullPath);
+    const output = execFileSync("git", [
+      "-C",
+      rootDir,
+      "log",
+      "-1",
+      "--format=%ct",
+      "--",
+      relativePath,
+    ], { encoding: "utf8" });
+
+    const value = Number(output.trim());
+    if (Number.isFinite(value)) {
+      return value * 1000;
+    }
+  } catch {
+    // fall back to file stats for non-git contexts
+  }
+
+  return fs.statSync(fullPath).mtimeMs;
+}
+
+function normalizeLabel(relPath) {
+  const base = relPath.replace(/\.md$/i, "");
+  const localeMatch = base.match(/(.*?)\.([a-z]{2}-[A-Z]{2})$/);
+  if (localeMatch) {
+    const [, plain, locale] = localeMatch;
+    return `${plain.replace(/[-_]/g, " ")} (${locale})`;
+  }
+
+  return base.replace(/-/g, " ").replace(/_/g, " ");
+}
+
+function sectionItems(dirName) {
+  const items = listMarkdownFiles(path.join(docsDir, dirName));
+  return items
+    .map((item) => ({
+      relPath: `${dirName}/${item.relPath}`,
+      fullPath: item.fullPath,
+      updatedTs: getUpdatedTs(item.fullPath),
+      label: normalizeLabel(item.relPath),
+    }))
+    .sort((a, b) => b.updatedTs - a.updatedTs);
+}
+
 function buildDocsCatalog() {
   const all = listMarkdownFiles(docsDir);
   const groups = [
@@ -168,58 +298,23 @@ function buildDocsCatalog() {
     },
     {
       title: "Fitness",
-      items: listMarkdownFiles(path.join(docsDir, "fitness")).map((item) => ({
-        relPath: item.relPath,
-        label: item.relPath
-          .replace(/^fitness\//, "")
-          .replace(/\.md$/, "")
-          .replace(/-/g, " ")
-          .replace(/_/g, " "),
-      })),
+      items: sectionItems("fitness").map(({ relPath, label }) => ({ relPath, label })),
     },
     {
       title: "Product Specs",
-      items: listMarkdownFiles(path.join(docsDir, "product-specs")).map((item) => ({
-        relPath: item.relPath,
-        label: item.relPath
-          .replace(/^product-specs\//, "")
-          .replace(/\.md$/, "")
-          .replace(/-/g, " ")
-          .replace(/_/g, " "),
-      })),
+      items: sectionItems("product-specs").map(({ relPath, label }) => ({ relPath, label })),
     },
     {
       title: "Blog",
-      items: listMarkdownFiles(path.join(docsDir, "blog")).map((item) => ({
-        relPath: item.relPath,
-        label: item.relPath
-          .replace(/^blog\//, "")
-          .replace(/\.md$/, "")
-          .replace(/-/g, " ")
-          .replace(/_/g, " "),
-      })),
+      items: sectionItems("blog").map(({ relPath, label }) => ({ relPath, label })),
     },
     {
       title: "Releases",
-      items: listMarkdownFiles(path.join(docsDir, "releases")).map((item) => ({
-        relPath: item.relPath,
-        label: item.relPath
-          .replace(/^releases\//, "")
-          .replace(/\.md$/, "")
-          .replace(/-/g, " ")
-          .replace(/_/g, " "),
-      })),
+      items: sectionItems("releases").map(({ relPath, label }) => ({ relPath, label })),
     },
     {
       title: "Features",
-      items: listMarkdownFiles(path.join(docsDir, "features")).map((item) => ({
-        relPath: item.relPath,
-        label: item.relPath
-          .replace(/^features\//, "")
-          .replace(/\.md$/, "")
-          .replace(/-/g, " ")
-          .replace(/_/g, " "),
-      })),
+      items: sectionItems("features").map(({ relPath, label }) => ({ relPath, label })),
     },
   ].map((group) => {
     const filtered = group.items.filter((item) =>
