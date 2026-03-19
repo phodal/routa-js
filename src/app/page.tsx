@@ -1,44 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { HomeInput } from "@/client/components/home-input";
-import { ConnectionDot, HomeTodoPreview, OnboardingCard, WorkspaceCards } from "@/client/components/home-page-sections";
+import { ConnectionDot, OnboardingCard, WorkspaceCards } from "@/client/components/home-page-sections";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { NotificationBell, NotificationProvider } from "@/client/components/notification-center";
 import { SettingsPanel } from "@/client/components/settings-panel";
-import { desktopAwareFetch, isTauriRuntime } from "@/client/utils/diagnostics";
-
-interface KanbanColumnInfo {
-  id: string;
-  name: string;
-}
-
-interface KanbanBoardQueue {
-  runningCount: number;
-  queuedCount: number;
-}
-
-interface KanbanBoardSummary {
-  id: string;
-  name: string;
-  isDefault: boolean;
-  columns: KanbanColumnInfo[];
-  queue?: KanbanBoardQueue;
-}
-
-interface HomeTaskInfo {
-  id: string;
-  title: string;
-  columnId?: string;
-  status?: string;
-  createdAt: string;
-  priority?: string;
-}
+import { isTauriRuntime } from "@/client/utils/diagnostics";
 
 export default function HomePage() {
   const router = useRouter();
@@ -53,10 +26,6 @@ export default function HomePage() {
   const [showWorkspacesMenu, setShowWorkspacesMenu] = useState(false);
   const workspacesMenuRef = useRef<HTMLDivElement>(null);
   const [isDesktopHome] = useState(() => isTauriRuntime());
-
-  const [activeBoard, setActiveBoard] = useState<KanbanBoardSummary | null>(null);
-  const [boardTasks, setBoardTasks] = useState<HomeTaskInfo[]>([]);
-  const [isBoardLoading, setIsBoardLoading] = useState(false);
 
   useEffect(() => {
     if (!activeWorkspaceId && workspacesHook.workspaces.length > 0) {
@@ -82,93 +51,6 @@ export default function HomePage() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showWorkspacesMenu]);
 
-  useEffect(() => {
-    if (!activeWorkspaceId) {
-      setActiveBoard(null);
-      setBoardTasks([]);
-      return;
-    }
-
-    const controller = new AbortController();
-
-    const loadKanbanSnapshot = async () => {
-      setIsBoardLoading(true);
-      try {
-        const [boardsRes, tasksRes] = await Promise.all([
-          desktopAwareFetch(`/api/kanban/boards?workspaceId=${encodeURIComponent(activeWorkspaceId)}`, {
-            cache: "no-store",
-            signal: controller.signal,
-          }),
-          desktopAwareFetch(`/api/tasks?workspaceId=${encodeURIComponent(activeWorkspaceId)}`, {
-            cache: "no-store",
-            signal: controller.signal,
-          }),
-        ]);
-
-        if (!boardsRes.ok || !tasksRes.ok) {
-          throw new Error("Failed to load homepage snapshot");
-        }
-
-        const boardsPayload = await boardsRes.json();
-        const tasksPayload = await tasksRes.json();
-
-        if (controller.signal.aborted) return;
-
-        const boards = Array.isArray(boardsPayload?.boards) ? boardsPayload.boards : [];
-        const defaultBoard = boards.find((board: { isDefault?: boolean }) => board.isDefault === true)
-          ?? boards[0]
-          ?? null;
-        if (defaultBoard) {
-          setActiveBoard({
-            id: String(defaultBoard.id),
-            name: String(defaultBoard.name || "Kanban Board"),
-            isDefault: Boolean(defaultBoard.isDefault),
-            columns: Array.isArray(defaultBoard.columns)
-              ? defaultBoard.columns.map((column: { id: string; name: string }) => ({
-                  id: String(column.id),
-                  name: String(column.name),
-                }))
-              : [],
-            queue: defaultBoard.queue && typeof defaultBoard.queue === "object"
-              ? {
-                  runningCount: Number(defaultBoard.queue.runningCount ?? 0),
-                  queuedCount: Number(defaultBoard.queue.queuedCount ?? 0),
-                }
-              : undefined,
-          });
-        } else {
-          setActiveBoard(null);
-        }
-
-        setBoardTasks(
-          Array.isArray(tasksPayload?.tasks)
-            ? tasksPayload.tasks
-              .filter((task: { id?: string; title?: string; createdAt?: string }) => task?.id && task?.title)
-              .map((task: { id: string; title: string; columnId?: string; status?: string; createdAt: string; priority?: string }) => ({
-                id: String(task.id),
-                title: String(task.title),
-                columnId: task.columnId ? String(task.columnId) : undefined,
-                status: task.status ? String(task.status) : undefined,
-                createdAt: String(task.createdAt ?? new Date(0).toISOString()),
-                priority: task.priority ? String(task.priority) : undefined,
-              }))
-            : [],
-        );
-      } catch {
-        setActiveBoard(null);
-        setBoardTasks([]);
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsBoardLoading(false);
-        }
-      }
-    };
-
-    void loadKanbanSnapshot();
-
-    return () => controller.abort();
-  }, [activeWorkspaceId, refreshKey]);
-
   const handleWorkspaceSelect = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
     setRefreshKey((value) => value + 1);
@@ -192,35 +74,6 @@ export default function HomePage() {
 
   const activeKanbanHref = activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/";
   const activeWorkspaceHref = activeWorkspaceId ? `/workspace/${activeWorkspaceId}` : "/";
-
-  const boardColumnCounts = useMemo(() => {
-    const columns = activeBoard?.columns ?? [];
-    const counts = Object.fromEntries(columns.map((column) => [column.id, 0])) as Record<string, number>;
-
-    for (const task of boardTasks) {
-      const columnId = task.columnId ?? "backlog";
-      counts[columnId] = (counts[columnId] ?? 0) + 1;
-    }
-
-    return counts;
-  }, [activeBoard, boardTasks]);
-
-  const laneCards = useMemo(() => {
-    if (!activeBoard) return [];
-
-    return activeBoard.columns.map((column) => {
-      const items = boardTasks
-        .filter((task) => (task.columnId ?? "backlog") === column.id)
-        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-        .slice(0, 3);
-      return { column, items, count: boardColumnCounts[column.id] ?? 0 };
-    });
-  }, [activeBoard, boardTasks, boardColumnCounts]);
-
-  const totalActiveTasks = boardTasks.filter((task) => (task.columnId ?? "backlog").toLowerCase() !== "done").length;
-  const totalDoneTasks = boardTasks.filter((task) => (task.columnId ?? "backlog").toLowerCase() === "done").length;
-  const runningCount = activeBoard?.queue?.runningCount ?? 0;
-  const queuedCount = activeBoard?.queue?.queuedCount ?? 0;
 
   return (
     <NotificationProvider>
@@ -301,17 +154,16 @@ export default function HomePage() {
                           Desktop Launchpad
                         </p>
                         <h1 className="mt-2 max-w-3xl font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2.15rem] leading-[0.94] font-semibold tracking-[-0.04em] text-[#081120] dark:text-white sm:text-[2.7rem]">
-                          Pick up the lane that is already moving.
+                          Launch work once. Operate it in Kanban.
                         </h1>
                         <p className="mt-3 max-w-2xl text-sm leading-7 text-[#4d6689] dark:text-slate-300">
-                          Tauri should feel like a control room, not a marketing page. Start a new requirement, jump back into the latest workspace, or recover an active session without leaving this surface.
+                          Start a new requirement, select the active workspace, then drop into the board where the real execution flow already lives.
                         </p>
 
-                        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                           <BoardStat label="Workspaces" value={String(workspaceCount).padStart(2, "0")} detail="Connected lanes" />
-                          <BoardStat label="Active" value={String(totalActiveTasks)} detail="Open tasks" />
-                          <BoardStat label="Running" value={String(runningCount)} detail="Live sessions" />
                           <BoardStat label="Runtime" value={acp.connected ? "Ready" : "Offline"} detail={acp.connected ? "ACP connected" : "Waiting for ACP"} />
+                          <BoardStat label="Primary Surface" value="Kanban" detail={activeWorkspace?.title ?? "Select a workspace"} />
                         </div>
 
                         <div className="mt-5 rounded-[28px] border border-sky-200/75 bg-white/80 p-3 shadow-[0_30px_100px_-58px_rgba(37,99,235,0.24)] backdrop-blur dark:border-white/10 dark:bg-[#0a1322]/66 sm:p-4">
@@ -341,13 +193,13 @@ export default function HomePage() {
                             href={activeKanbanHref}
                             className="inline-flex items-center justify-center rounded-full bg-[#0f62d6] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#2a77e4] dark:bg-[#5ee5ff] dark:text-[#04111d] dark:hover:bg-[#87edff]"
                           >
-                            Continue in board
+                            Open Kanban
                           </Link>
                           <Link
                             href={activeWorkspaceHref}
                             className="inline-flex items-center justify-center rounded-full border border-sky-200/70 bg-white/90 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2b6fc8] transition-colors hover:bg-white dark:border-white/10 dark:bg-[#1b2232] dark:text-slate-300 dark:hover:bg-[#101826]"
                           >
-                            Open workspace
+                            Workspace overview
                           </Link>
                           <button
                             type="button"
@@ -363,59 +215,35 @@ export default function HomePage() {
                       </div>
 
                       <aside className="overflow-hidden rounded-[26px] border border-[#1f3354] bg-[linear-gradient(180deg,#07111f,#0b1630)] p-4 text-white sm:p-5">
-                        <div className="relative">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-200/75">
-                            Active lane
-                          </div>
-                          <div className="mt-2 text-[1.3rem] font-semibold text-white">
-                            {activeWorkspace?.title ?? "Workspace unavailable"}
-                          </div>
-                          <div className="mt-1 text-[11px] leading-5 text-slate-400">
-                            {activeBoard?.name ?? "Open the board to inspect full telemetry"}
-                          </div>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-200/75">
+                          Current workspace
+                        </div>
+                        <div className="mt-2 text-[1.3rem] font-semibold text-white">
+                          {activeWorkspace?.title ?? "Workspace unavailable"}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-5 text-slate-400">
+                          Homepage now stays focused on launch and recovery. Use the workspace overview for context, then operate inside Kanban.
+                        </div>
 
-                          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                            <DesktopSignalCard label="Queue pressure" value={`${queuedCount}`} tone="amber" detail="Queued runs waiting for concurrency" />
-                            <DesktopSignalCard label="Done today" value={`${totalDoneTasks}`} tone="emerald" detail="Cards already shipped out of active lanes" />
-                          </div>
+                        <div className="mt-4 space-y-2">
+                          <DesktopSignalCard label="Launcher" value="New work" tone="blue" detail="Create the next requirement from the composer" />
+                          <DesktopSignalCard label="Overview" value="Workspace" tone="amber" detail="Inspect recent sessions and supporting tabs" />
+                          <DesktopSignalCard label="Operate" value="Kanban" tone="emerald" detail="Run the active queue in the board surface" />
+                        </div>
 
-                          <div className="mt-4 space-y-2">
-                            {isBoardLoading ? (
-                              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-slate-300">
-                                Loading board status...
-                              </div>
-                            ) : (
-                              laneCards.slice(0, 4).map((lane) => (
-                                <div key={lane.column.id} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
-                                  <div className="flex items-center justify-between gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-300">
-                                    <span>{lane.column.name}</span>
-                                    <span>{lane.count}</span>
-                                  </div>
-                                  {lane.items.length === 0 ? (
-                                    <div className="mt-2 text-[11px] text-slate-500">No cards in this lane.</div>
-                                  ) : (
-                                    <div className="mt-2 space-y-1.5">
-                                      {lane.items.map((task) => (
-                                        <div key={task.id} className="truncate rounded-[12px] border border-white/8 bg-white/[0.03] px-2.5 py-1.5 text-[11px] leading-5 text-slate-200">
-                                          {task.title}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))
-                            )}
+                        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+                            Recommended path
                           </div>
+                          <ol className="mt-3 space-y-2 text-[12px] leading-6 text-slate-300">
+                            <li>1. Pick the workspace you want to operate in.</li>
+                            <li>2. Submit a new requirement from the launcher.</li>
+                            <li>3. Open Kanban to manage the task across lanes.</li>
+                          </ol>
                         </div>
                       </aside>
                     </div>
                   </section>
-
-                  <HomeTodoPreview
-                    workspaceId={activeWorkspaceId}
-                    workspaceTitle={activeWorkspace?.title ?? null}
-                    refreshKey={refreshKey}
-                  />
                 </div>
 
                 <div className="space-y-4">
@@ -486,13 +314,13 @@ export default function HomePage() {
                       href={activeWorkspaceHref}
                       className="inline-flex items-center justify-center rounded-full border border-sky-200/70 bg-white/90 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2b6fc8] transition-colors hover:bg-white dark:border-white/10 dark:bg-[#1b2232] dark:text-slate-300 dark:hover:bg-[#101826]"
                     >
-                      Open workspace
+                      Workspace overview
                     </Link>
                     <Link
                       href={activeKanbanHref}
                       className="inline-flex items-center justify-center rounded-full bg-[#0f62d6] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#2a77e4] dark:bg-[#5ee5ff] dark:text-[#04111d] dark:hover:bg-[#87edff]"
                     >
-                      Open board
+                      Open Kanban
                     </Link>
                   </div>
                 </div>
@@ -561,11 +389,13 @@ function DesktopSignalCard({
   label: string;
   value: string;
   detail: string;
-  tone: "amber" | "emerald";
+  tone: "amber" | "emerald" | "blue";
 }) {
   const toneClass = tone === "amber"
     ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
-    : "border-emerald-300/20 bg-emerald-400/10 text-emerald-100";
+    : tone === "emerald"
+      ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+      : "border-sky-300/20 bg-sky-400/10 text-sky-100";
 
   return (
     <div className={`rounded-[18px] border px-3 py-3 ${toneClass}`}>

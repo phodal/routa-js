@@ -1,9 +1,9 @@
 # page-id: traces
 # route: /traces
 # source-page: src/app/traces/page.tsx
-# url: http://127.0.0.1:3000/traces
+# url: http://localhost:3000/traces
 # title: Routa - Multi-Agent Coordinator
-# generated-at: 2026-03-17T13:02:40.447Z
+# generated-at: 2026-03-19T11:54:43.631Z
 # generator: playwright
 # playwright-version: 1.58.2
 - banner:
@@ -20,7 +20,7 @@
     - link "Home":
       - /url: /
       - img
-    - link "Dashboard":
+    - link "Overview":
       - /url: /workspace/default
       - img
     - link "Kanban":
@@ -48,478 +48,445 @@
   - button "Trace(AG-UI)"
   - complementary:
     - heading "Sessions" [level=2]
-    - paragraph: 411 sessions found
+    - paragraph: 492 sessions found
+    - button "Python Hello World · opencode 1 Mar 19, 04:15 PM CRAFTER opencode"
+    - button "<id>… 2 Mar 19, 04:15 PM CRAFTER opencode":
+      - code: <id>…
+      - text: 2 Mar 19, 04:15 PM CRAFTER opencode
+    - button "<id>… 1 Mar 19, 04:14 PM CRAFTER codex":
+      - code: <id>…
+      - text: 1 Mar 19, 04:14 PM CRAFTER codex
+    - button "创建 JS Hello World 示例脚本 · opencode 1 Mar 19, 04:10 PM CRAFTER opencode"
+    - button "创建一个 js 的 hello world · opencode 1 Mar 19, 04:09 PM CRAFTER opencode"
+    - button "<id>… 1 Mar 19, 04:08 PM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 19, 04:08 PM CRAFTER claude
+    - button "Kanban MCP 验证 1773888300 · auggie 1 Mar 19, 12:25 PM DEVELOPER auggie"
+    - button "创建一个 JS 的 hello world · opencode 1 Mar 19, 12:19 PM CRAFTER opencode"
+    - button "创建一个 JS 的 hello world · opencode 1 Mar 19, 12:19 PM CRAFTER opencode"
+    - button "<id>… 1 Mar 19, 12:18 PM CRAFTER opencode":
+      - code: <id>…
+      - text: 1 Mar 19, 12:18 PM CRAFTER opencode
+    - button "创建一个 JS 的 Hello World · opencode 1 Mar 19, 12:15 PM GATE opencode"
+    - button "创建一个 JS 的 Hello World · opencode 1 Mar 19, 12:15 PM CRAFTER opencode"
+    - button "<id>… 1 Mar 19, 12:15 PM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 19, 12:15 PM CRAFTER claude
+    - button "Backlog 自动推进验证 1773890130 · opencode 1 Mar 19, 11:03 AM CRAFTER opencode"
+    - button "<id>… 1 Mar 19, 11:02 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 11:02 AM CRAFTER claude-code-sdk
+    - button "Kanban MCP 验证 1773888300 · claude-code-sdk 1 Mar 19, 10:44 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 19, 10:44 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 10:44 AM CRAFTER claude-code-sdk
+    - button "<id>… 1 Mar 19, 10:21 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 10:21 AM CRAFTER claude-code-sdk
+    - button "Probe decompose fixed · claude-code-sdk 1 Mar 19, 09:50 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 19, 08:23 AM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 19, 08:23 AM CRAFTER claude
+    - button "Hello World 测试 · codex 1 Mar 19, 08:21 AM CRAFTER codex"
+    - button "Hello World 测试 · claude-code-sdk 1 Mar 19, 08:19 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 19, 08:18 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 08:18 AM CRAFTER claude-code-sdk
+    - button "<id>… 1 Mar 19, 08:16 AM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 19, 08:16 AM CRAFTER claude
+    - button "<id>… 1 Mar 19, 08:14 AM CRAFTER auggie":
+      - code: <id>…
+      - text: 1 Mar 19, 08:14 AM CRAFTER auggie
+    - button "Auto regression probe 1773880000 · claude-code-sdk 1 Mar 19, 08:10 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 19, 08:10 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 08:10 AM CRAFTER claude-code-sdk
+    - button "Schema Validation Task · claude-code-sdk 1 Mar 19, 08:07 AM CRAFTER claude-code-sdk"
+    - button "Schema Validation Task · claude-code-sdk 1 Mar 19, 08:06 AM CRAFTER claude-code-sdk"
+    - button "Create JavaScript Hello World program with execution verification · codex 1 Mar 19, 08:06 AM CRAFTER codex"
+    - button "Create a JS hello world · claude-code-sdk 1 Mar 19, 08:05 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 19, 08:05 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 08:05 AM CRAFTER claude-code-sdk
+    - button "<id>… 1 Mar 19, 08:04 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 08:04 AM CRAFTER claude-code-sdk
+    - button "创建一个 js 的 hello world · claude-code-sdk 1 Mar 19, 12:06 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 19, 12:06 AM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 19, 12:06 AM CRAFTER claude
+    - button "<id>… 1 Mar 19, 12:02 AM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 19, 12:02 AM CRAFTER claude-code-sdk
+    - button "Add JavaScript Hello World Example Module · codex 1 Mar 18, 11:53 PM CRAFTER codex"
+    - button "创建一个 js 的 hello world · claude-code-sdk 1 Mar 18, 11:52 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 18, 11:52 PM CRAFTER codex":
+      - code: <id>…
+      - text: 1 Mar 18, 11:52 PM CRAFTER codex
+    - button "Create JavaScript Hello World Program · codex 1 Mar 18, 11:49 PM CRAFTER codex"
+    - button "创建一个 js 的 hello world · claude-code-sdk 1 Mar 18, 11:46 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 18, 11:46 PM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 18, 11:46 PM CRAFTER claude
+    - button "Create JavaScript Hello World with Chinese Output · codex 1 Mar 18, 11:40 PM CRAFTER codex"
+    - button "创建 JS Hello World 项目 · claude-code-sdk 1 Mar 18, 11:38 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 18, 11:38 PM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 18, 11:38 PM CRAFTER claude
+    - button "Create JavaScript Hello World smoke test artifact in examples/ · codex 1 Mar 18, 11:31 PM CRAFTER codex"
+    - button "Create a JavaScript Hello World application · claude-code-sdk 1 Mar 18, 11:30 PM CRAFTER claude-code-sdk"
+    - button "Create a JavaScript Hello World application · codex 1 Mar 18, 11:29 PM CRAFTER codex"
+    - button "Create a JS hello world · claude-code-sdk 1 Mar 18, 11:27 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 18, 11:27 PM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 18, 11:27 PM CRAFTER claude
+    - button "Create minimal JavaScript agent example demonstrating basic Routa coordination · codex 1 Mar 18, 10:33 PM GATE codex"
+    - button "Create minimal JavaScript agent example demonstrating basic Routa coordination · codex 1 Mar 18, 10:32 PM CRAFTER codex"
+    - button "Create a JS hello world · claude-code-sdk 1 Mar 18, 10:31 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 18, 10:31 PM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 18, 10:31 PM CRAFTER claude
+    - button "Create JavaScript Hello World example app · codex 1 Mar 18, 10:17 PM GATE codex"
+    - button "Create JavaScript Hello World example app · codex 1 Mar 18, 10:15 PM CRAFTER codex"
+    - button "Create a JS hello world · claude-code-sdk 1 Mar 18, 10:13 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 18, 10:13 PM CRAFTER claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 18, 10:13 PM CRAFTER claude-code-sdk
+    - button "Phase3 agent-browser verify 177 · codex 1 Mar 18, 05:32 PM CRAFTER codex"
+    - button "<id>… 1 Mar 18, 09:25 AM CRAFTER auggie":
+      - code: <id>…
+      - text: 1 Mar 18, 09:25 AM CRAFTER auggie
+    - 'button "Test watchdog stale detection: 180s blocking command without output · codex 1 Mar 18, 09:01 AM CRAFTER codex"'
+    - 'button "Manual watchdog stale test: 180s blocking command without output · claude-code-sdk 1 Mar 18, 09:01 AM CRAFTER claude-code-sdk"'
+    - button "<id>… 1 Mar 18, 09:00 AM CRAFTER claude":
+      - code: <id>…
+      - text: 1 Mar 18, 09:00 AM CRAFTER claude
+    - button "<id>… 1 Mar 18, 08:28 AM CRAFTER auggie":
+      - code: <id>…
+      - text: 1 Mar 18, 08:28 AM CRAFTER auggie
+    - button "<id>… 1 Mar 18, 08:28 AM CRAFTER auggie":
+      - code: <id>…
+      - text: 1 Mar 18, 08:28 AM CRAFTER auggie
+    - button "<id>… 1 Mar 17, 11:06 PM CRAFTER auggie":
+      - code: <id>…
+      - text: 1 Mar 17, 11:06 PM CRAFTER auggie
+    - button "Implement GitHub issue polling service to sync open issues to Kanban · codex 1 Mar 17, 09:32 PM CRAFTER codex"
+    - button "Backlog Planner 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Expose API and MCP surfaces for GitHub sync status, CI snapshot, and issue-context kickoff · codex 1 Mar 17, 09:32 PM CRAFTER codex"
+    - button "Add CI status resolution and workflow link for GitHub linked issues · codex 1 Mar 17, 09:32 PM CRAFTER codex"
+    - button "Extend Kanban card storage for GitHub issue linkage and CI snapshot metadata · codex 1 Mar 17, 09:32 PM CRAFTER codex"
+    - 'button "Backlog: Validate Sync Behavior Tests 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"'
+    - button "Wire issue selection to launch Codex with GitHub issue context payload · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Update Kanban and card detail UI to render GitHub issue and CI status context · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Implement CI status resolution and workflow-run link generation for linked issues · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Expose API and MCP surfaces for sync status, CI snapshot access, and issue-context agent kickoff · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Add idempotent issue-to-card mapping and closed-issue completion handling · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Implement polling-based GitHub issue sync for open issues in phodal/routa · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Extend Kanban card storage for GitHub issue linkage and CI snapshot metadata · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "Audit Kanban persistence and existing GitHub integration touchpoints · claude-code-sdk 1 Mar 17, 09:32 PM CRAFTER claude-code-sdk"
+    - button "GitHub Issues Sync + CI Status Integration for Kanban Board · codex 1 Mar 17, 09:24 PM CRAFTER codex"
     - button "GitHub Issues Sync + CI Status Integration for Kanban Board · codex 1 Mar 17, 08:54 PM CRAFTER codex"
     - 'button "Dogfood: GitHub issues + CI 状态看板闭环 · claude-code-sdk 1 Mar 17, 08:53 PM CRAFTER claude-code-sdk"'
-    - button "<id>… 1 Mar 17, 05:38 PM":
+    - button "<id>… 1 Mar 17, 05:38 PM DEVELOPER auggie":
       - code: <id>…
-      - text: 1 Mar 17, 05:38 PM
-    - button "<id>… 1 Mar 17, 10:29 AM":
-      - code: <id>…
-      - text: 1 Mar 17, 10:29 AM
-    - button "<id>… 1 Mar 17, 10:28 AM":
-      - code: <id>…
-      - text: 1 Mar 17, 10:28 AM
-    - button "<id>… 1 Mar 17, 09:48 AM":
-      - code: <id>…
-      - text: 1 Mar 17, 09:48 AM
-    - button "<id>… 1 Mar 17, 09:48 AM":
-      - code: <id>…
-      - text: 1 Mar 17, 09:48 AM
+      - text: 1 Mar 17, 05:38 PM DEVELOPER auggie
+    - button "Debug Dev Lane Session 1773714600 Failure · codex 1 Mar 17, 10:29 AM CRAFTER codex"
+    - button "Dev lane debug 1773714600 · claude-code-sdk 1 Mar 17, 10:28 AM CRAFTER claude-code-sdk"
+    - button "Add temporary QA smoke-test badge to homepage hero section · codex 1 Mar 17, 09:48 AM CRAFTER codex"
+    - button "Add temporary QA smoke-test note to homepage hero · claude-code-sdk 1 Mar 17, 09:48 AM CRAFTER claude-code-sdk"
     - button "KanbanTask Agent 1 Mar 17, 09:46 AM ROUTA claude-code-sdk"
-    - button "<id>… 1 Mar 17, 07:51 AM":
+    - 'button "Implement minimal auto lane probe: automated card movement test · codex 1 Mar 17, 07:51 AM CRAFTER codex"'
+    - button "Create simple hello world auto lane probe 20260317-1 · claude-code-sdk 1 Mar 17, 07:50 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 17, 07:50 AM CRAFTER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 17, 07:51 AM
-    - button "<id>… 1 Mar 17, 07:50 AM":
+      - text: 1 Mar 17, 07:50 AM CRAFTER claude-code-sdk
+    - button "Validate review stage uses single public pr-reviewer specialist with internal worker phases · codex 1 Mar 16, 09:10 PM GATE codex"
+    - button "Validate review stage uses single public pr-reviewer specialist with internal worker phases · codex 1 Mar 16, 08:59 PM CRAFTER codex"
+    - button "Create a small test story validating review stage uses one public pr-reviewer specialist with internal worker phases · claude-code-sdk 1 Mar 16, 08:59 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 16, 08:58 PM CRAFTER codex":
       - code: <id>…
-      - text: 1 Mar 17, 07:50 AM
-    - button "<id>… 1 Mar 17, 07:50 AM":
+      - text: 1 Mar 16, 08:58 PM CRAFTER codex
+    - button "Create JavaScript/TypeScript usage demo for Routa.js platform · codex 1 Mar 16, 07:06 PM CRAFTER codex"
+    - button "create a demo for js class · claude-code-sdk 1 Mar 16, 07:05 PM CRAFTER claude-code-sdk"
+    - button "Implement simplified Tauri desktop homepage UI · codex 1 Mar 16, 09:49 AM CRAFTER codex"
+    - button "Design simplified Tauri desktop homepage · claude-code-sdk 1 Mar 16, 09:49 AM CRAFTER claude-code-sdk"
+    - 'button "Duplicate: JavaScript Hello World agent template already completed · codex 1 Mar 16, 08:05 AM GATE codex"'
+    - button "create a js hello world · claude-code-sdk 1 Mar 16, 08:05 AM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 16, 08:05 AM CRAFTER claude":
       - code: <id>…
-      - text: 1 Mar 17, 07:50 AM
-    - button "<id>… 1 Mar 16, 09:10 PM":
+      - text: 1 Mar 16, 08:05 AM CRAFTER claude
+    - button "<id>… 1 Mar 15, 05:34 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 16, 09:10 PM
-    - button "<id>… 1 Mar 16, 08:59 PM":
+      - text: 1 Mar 15, 05:34 PM CRAFTER opencode
+    - button "<id>… 1 Mar 15, 05:34 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 16, 08:59 PM
-    - button "<id>… 1 Mar 16, 08:59 PM":
+      - text: 1 Mar 15, 05:34 PM CRAFTER opencode
+    - button "Verify Schema Validation in API Layer · codex 1 Mar 15, 05:29 PM CRAFTER codex"
+    - button "Verify Schema Validation in API Layer · claude-code-sdk 1 Mar 15, 05:29 PM CRAFTER claude-code-sdk"
+    - button "Schema Validation Task · claude-code-sdk 1 Mar 15, 05:29 PM CRAFTER claude-code-sdk"
+    - button "Test Task · claude-code-sdk 1 Mar 15, 05:29 PM CRAFTER claude-code-sdk"
+    - button "Create minimal JavaScript \"Hello World\" agent template · codex 1 Mar 15, 03:02 PM CRAFTER codex"
+    - button "create a js hello world · claude-code-sdk 1 Mar 15, 03:02 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 03:02 PM CRAFTER claude":
       - code: <id>…
-      - text: 1 Mar 16, 08:59 PM
-    - button "<id>… 1 Mar 16, 08:58 PM":
-      - code: <id>…
-      - text: 1 Mar 16, 08:58 PM
-    - button "<id>… 1 Mar 16, 07:06 PM":
-      - code: <id>…
-      - text: 1 Mar 16, 07:06 PM
-    - button "<id>… 1 Mar 16, 07:05 PM":
-      - code: <id>…
-      - text: 1 Mar 16, 07:05 PM
-    - button "<id>… 1 Mar 16, 09:49 AM":
-      - code: <id>…
-      - text: 1 Mar 16, 09:49 AM
-    - button "<id>… 1 Mar 16, 09:49 AM":
-      - code: <id>…
-      - text: 1 Mar 16, 09:49 AM
-    - button "<id>… 1 Mar 16, 08:05 AM":
-      - code: <id>…
-      - text: 1 Mar 16, 08:05 AM
-    - button "<id>… 1 Mar 16, 08:05 AM":
-      - code: <id>…
-      - text: 1 Mar 16, 08:05 AM
-    - button "<id>… 1 Mar 16, 08:05 AM":
-      - code: <id>…
-      - text: 1 Mar 16, 08:05 AM
-    - button "<id>… 1 Mar 15, 05:34 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 05:34 PM
-    - button "<id>… 1 Mar 15, 05:34 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 05:34 PM
-    - button "<id>… 1 Mar 15, 05:29 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 05:29 PM
-    - button "<id>… 1 Mar 15, 05:29 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 05:29 PM
-    - button "<id>… 1 Mar 15, 05:29 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 05:29 PM
-    - button "<id>… 1 Mar 15, 05:29 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 05:29 PM
-    - button "<id>… 1 Mar 15, 03:02 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 03:02 PM
-    - button "<id>… 1 Mar 15, 03:02 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 03:02 PM
-    - button "<id>… 1 Mar 15, 03:02 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 03:02 PM
+      - text: 1 Mar 15, 03:02 PM CRAFTER claude
     - button "KanbanTask Agent 1 Mar 15, 03:02 PM ROUTA claude"
-    - button "<id>… 1 Mar 15, 02:48 PM":
+    - button "Create minimal Python \"Hello World\" agent template · codex 1 Mar 15, 02:48 PM CRAFTER codex"
+    - button "Create a Python hello world · claude-code-sdk 1 Mar 15, 02:48 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 02:48 PM CRAFTER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 15, 02:48 PM
-    - button "<id>… 1 Mar 15, 02:48 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 02:48 PM
-    - button "<id>… 1 Mar 15, 02:48 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 02:48 PM
+      - text: 1 Mar 15, 02:48 PM CRAFTER claude-code-sdk
     - button "<id>… 1 Mar 15, 02:46 PM ROUTA codex":
       - code: <id>…
       - text: 1 Mar 15, 02:46 PM ROUTA codex
-    - button "<id>… 1 Mar 15, 02:43 PM":
+    - button "Create standalone Python Hello World agent example · codex 1 Mar 15, 02:43 PM CRAFTER codex"
+    - button "create a python hello world · claude-code-sdk 1 Mar 15, 02:43 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 02:43 PM CRAFTER claude":
       - code: <id>…
-      - text: 1 Mar 15, 02:43 PM
-    - button "<id>… 1 Mar 15, 02:43 PM":
+      - text: 1 Mar 15, 02:43 PM CRAFTER claude
+    - button "Create Python hello world · claude-code-sdk 1 Mar 15, 02:38 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 02:38 PM CRAFTER claude":
       - code: <id>…
-      - text: 1 Mar 15, 02:43 PM
-    - button "<id>… 1 Mar 15, 02:43 PM":
+      - text: 1 Mar 15, 02:38 PM CRAFTER claude
+    - button "Python hello world · claude-code-sdk 1 Mar 15, 02:34 PM CRAFTER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 02:34 PM CRAFTER claude":
       - code: <id>…
-      - text: 1 Mar 15, 02:43 PM
-    - button "<id>… 1 Mar 15, 02:38 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 02:38 PM
-    - button "<id>… 1 Mar 15, 02:38 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 02:38 PM
-    - button "<id>… 1 Mar 15, 02:34 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 02:34 PM
-    - button "<id>… 1 Mar 15, 02:34 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 02:34 PM
+      - text: 1 Mar 15, 02:34 PM CRAFTER claude
     - button "<id>… 1 Mar 15, 02:32 PM ROUTA codex":
       - code: <id>…
       - text: 1 Mar 15, 02:32 PM ROUTA codex
-    - button "<id>… 1 Mar 15, 01:05 PM":
+    - button "Add Python Agent Runtime Support to Routa.js · claude-code-sdk 1 Mar 15, 01:05 PM GATE claude-code-sdk"
+    - button "Verify the Python example in local dev environment and capture execution steps · claude-code-sdk 1 Mar 15, 01:05 PM GATE claude-code-sdk"
+    - button "Implement Python agent connection and registration flow against Routa backend · codex 1 Mar 15, 01:01 PM CRAFTER codex"
+    - button "<id>… 1 Mar 15, 12:54 PM CRAFTER claude":
       - code: <id>…
-      - text: 1 Mar 15, 01:05 PM
-    - button "<id>… 1 Mar 15, 01:05 PM":
+      - text: 1 Mar 15, 12:54 PM CRAFTER claude
+    - button "<id>… 1 Mar 15, 12:52 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 01:05 PM
-    - button "<id>… 1 Mar 15, 01:01 PM":
+      - text: 1 Mar 15, 12:52 PM DEVELOPER claude
+    - button "Create JS Hello World example · claude-code-sdk 1 Mar 15, 12:44 PM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 12:44 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 01:01 PM
-    - button "<id>… 1 Mar 15, 12:54 PM":
+      - text: 1 Mar 15, 12:44 PM DEVELOPER claude
+    - button "Run repeated popup open-close cycles and inspect for cumulative state or memory leakage · claude-code-sdk 1 Mar 15, 12:28 PM DEVELOPER claude-code-sdk"
+    - button "Document QA findings, blockers, and UX friction for OpenCode popup · claude-code-sdk 1 Mar 15, 12:28 PM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 12:28 PM DEVELOPER codex":
       - code: <id>…
-      - text: 1 Mar 15, 12:54 PM
-    - button "<id>… 1 Mar 15, 12:52 PM":
+      - text: 1 Mar 15, 12:28 PM DEVELOPER codex
+    - button "Inspect console and network signals during OpenCode popup interaction · claude-code-sdk 1 Mar 15, 12:28 PM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 12:27 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 15, 12:52 PM
-    - button "<id>… 1 Mar 15, 12:44 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:44 PM
-    - button "<id>… 1 Mar 15, 12:44 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:44 PM
-    - button "<id>… 1 Mar 15, 12:28 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:28 PM
-    - button "<id>… 1 Mar 15, 12:28 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:28 PM
-    - button "<id>… 1 Mar 15, 12:28 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:28 PM
-    - button "<id>… 1 Mar 15, 12:28 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:28 PM
-    - button "<id>… 1 Mar 15, 12:27 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:27 PM
+      - text: 1 Mar 15, 12:27 PM DEVELOPER claude-code-sdk
     - button "Generate verification report and regression log for OpenCode ACP popup flow · codex 1 Mar 15, 12:22 PM ROUTA codex"
-    - button "<id>… 1 Mar 15, 12:22 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:22 PM
+    - button "Summarize verification results and record follow-up regressions · claude-code-sdk 1 Mar 15, 12:22 PM DEVELOPER claude-code-sdk"
     - 'button "QA: Capture OpenCode ACP popup evidence with screenshots and network diagnostics · codex 1 Mar 15, 12:21 PM ROUTA codex"'
-    - button "<id>… 1 Mar 15, 12:21 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:21 PM
+    - button "Capture popup evidence with screenshots and ACP/network diagnostics · claude-code-sdk 1 Mar 15, 12:21 PM DEVELOPER claude-code-sdk"
     - button "Add E2E regression test for OpenCode provider selection in session creation dialog · codex 1 Mar 15, 12:21 PM ROUTA codex"
-    - button "<id>… 1 Mar 15, 12:20 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:20 PM
+    - button "Add focused regression coverage for OpenCode provider selection behavior · claude-code-sdk 1 Mar 15, 12:20 PM DEVELOPER claude-code-sdk"
     - button "Screenshot and document OpenCode provider state before session submission · codex 1 Mar 15, 12:20 PM ROUTA codex"
     - button "Create local validation checklist for OpenCode ACP session smoke tests · codex 1 Mar 15, 12:20 PM ROUTA codex"
-    - button "<id>… 1 Mar 15, 12:20 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:20 PM
-    - button "<id>… 1 Mar 15, 12:19 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:19 PM
+    - button "Capture pre-submit evidence for OpenCode provider selection state · claude-code-sdk 1 Mar 15, 12:20 PM DEVELOPER claude-code-sdk"
+    - button "Define a repeatable local validation checklist for OpenCode ACP session smoke tests · claude-code-sdk 1 Mar 15, 12:19 PM DEVELOPER claude-code-sdk"
     - button "Create reusable OpenCode ACP local session setup note · codex 1 Mar 15, 12:19 PM ROUTA codex"
     - button "Document OpenCode ACP smoke-test evidence and defects · codex 1 Mar 15, 12:18 PM ROUTA codex"
-    - button "<id>… 1 Mar 15, 12:18 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:18 PM
+    - button "Create a reusable setup note for local OpenCode ACP session verification · claude-code-sdk 1 Mar 15, 12:18 PM DEVELOPER claude-code-sdk"
     - 'button "QA: Verify OpenCode session popup persistence and clean teardown · codex 1 Mar 15, 12:16 PM ROUTA codex"'
-    - button "<id>… 1 Mar 15, 12:16 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:16 PM
-    - button "<id>… 1 Mar 15, 12:15 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:15 PM
+    - button "Document OpenCode ACP smoke-test evidence and follow-up defects · claude-code-sdk 1 Mar 15, 12:16 PM DEVELOPER claude-code-sdk"
+    - button "Verify popup close/reopen persistence and clean session teardown · claude-code-sdk 1 Mar 15, 12:15 PM DEVELOPER claude-code-sdk"
     - 'button "QA: Verify OpenCode popup message round-trip and capture UI evidence · codex 1 Mar 15, 12:15 PM ROUTA codex"'
     - button "Verify OpenCode ACP session trigger launches popup with shell UI · codex 1 Mar 15, 12:14 PM ROUTA codex"
-    - button "<id>… 1 Mar 15, 12:14 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:14 PM
-    - button "<id>… 1 Mar 15, 12:13 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:13 PM
+    - button "Exercise basic OpenCode popup interaction and response flow · claude-code-sdk 1 Mar 15, 12:14 PM DEVELOPER claude-code-sdk"
+    - button "Validate OpenCode ACP session trigger and popup launch · claude-code-sdk 1 Mar 15, 12:13 PM DEVELOPER claude-code-sdk"
     - button "Verify OpenCode provider selection UI state management · codex 1 Mar 15, 12:13 PM ROUTA codex"
     - button "Document and validate local testing environment for OpenCode ACP sessions · codex 1 Mar 15, 12:13 PM ROUTA codex"
-    - button "<id>… 1 Mar 15, 12:12 PM":
+    - button "Verify OpenCode provider selection in the session creation UI · claude-code-sdk 1 Mar 15, 12:12 PM DEVELOPER claude-code-sdk"
+    - button "Prepare local smoke-test setup for OpenCode ACP session validation · claude-code-sdk 1 Mar 15, 12:12 PM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 12:12 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 15, 12:12 PM
-    - button "<id>… 1 Mar 15, 12:12 PM":
+      - text: 1 Mar 15, 12:12 PM CRAFTER opencode
+    - button "<id>… 1 Mar 15, 12:12 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 15, 12:12 PM
-    - button "<id>… 1 Mar 15, 12:12 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:12 PM
-    - button "<id>… 1 Mar 15, 12:12 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:12 PM
+      - text: 1 Mar 15, 12:12 PM CRAFTER opencode
     - button "KanbanTask Agent 1 Mar 15, 12:11 PM ROUTA claude"
     - button "Test OpenCode ACP session trigger and popup behavior · codex 1 Mar 15, 12:11 PM ROUTA codex"
-    - button "<id>… 1 Mar 15, 12:10 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:10 PM
-    - button "<id>… 1 Mar 15, 12:05 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:05 PM
-    - button "<id>… 1 Mar 15, 12:04 PM":
-      - code: <id>…
-      - text: 1 Mar 15, 12:04 PM
+    - button "Test OpenCode Smoke Issue 1773547851232 · claude-code-sdk 1 Mar 15, 12:10 PM DEVELOPER claude-code-sdk"
+    - button "Map expected backlog -> todo -> dev automation behavior and triggers · claude-code-sdk 1 Mar 15, 12:05 PM DEVELOPER claude-code-sdk"
+    - button "Test OpenCode Smoke Issue · opencode 1 Mar 15, 12:04 PM DEVELOPER opencode"
     - button "Auto chain verify 1773504200 · codex 1 Mar 15, 12:04 PM ROUTA codex"
     - button "[DUPLICATE] Verify automation chain test card · codex 1 Mar 15, 11:38 AM ROUTA codex"
-    - button "<id>… 1 Mar 15, 11:38 AM":
+    - button "Verify automation chain test card · claude-code-sdk 1 Mar 15, 11:38 AM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 11:37 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 11:38 AM
-    - button "<id>… 1 Mar 15, 11:37 AM":
+      - text: 1 Mar 15, 11:37 AM DEVELOPER claude
+    - button "Create hello world function · claude-code-sdk 1 Mar 15, 11:32 AM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 11:32 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 11:37 AM
-    - button "<id>… 1 Mar 15, 11:32 AM":
+      - text: 1 Mar 15, 11:32 AM DEVELOPER claude
+    - button "Create Python hello world · claude-code-sdk 1 Mar 15, 11:31 AM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 11:30 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 11:32 AM
-    - button "<id>… 1 Mar 15, 11:32 AM":
+      - text: 1 Mar 15, 11:30 AM DEVELOPER claude
+    - button "Create hello world test for automation chain · claude-code-sdk 1 Mar 15, 11:27 AM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 11:27 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 11:32 AM
-    - button "<id>… 1 Mar 15, 11:31 AM":
+      - text: 1 Mar 15, 11:27 AM DEVELOPER claude
+    - button "<id>… 1 Mar 15, 11:19 AM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 15, 11:31 AM
-    - button "<id>… 1 Mar 15, 11:30 AM":
+      - text: 1 Mar 15, 11:19 AM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 15, 09:59 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 11:30 AM
-    - button "<id>… 1 Mar 15, 11:27 AM":
-      - code: <id>…
-      - text: 1 Mar 15, 11:27 AM
-    - button "<id>… 1 Mar 15, 11:27 AM":
-      - code: <id>…
-      - text: 1 Mar 15, 11:27 AM
-    - button "<id>… 1 Mar 15, 11:19 AM":
-      - code: <id>…
-      - text: 1 Mar 15, 11:19 AM
-    - button "<id>… 1 Mar 15, 09:59 AM":
-      - code: <id>…
-      - text: 1 Mar 15, 09:59 AM
+      - text: 1 Mar 15, 09:59 AM DEVELOPER claude
     - button "Add Python Hello World agent example to Routa.js platform · codex 1 Mar 15, 09:42 AM ROUTA codex"
-    - button "<id>… 1 Mar 15, 09:41 AM":
+    - button "create a python hello world · claude-code-sdk 1 Mar 15, 09:41 AM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 09:41 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 09:41 AM
-    - button "<id>… 1 Mar 15, 09:41 AM":
-      - code: <id>…
-      - text: 1 Mar 15, 09:41 AM
+      - text: 1 Mar 15, 09:41 AM DEVELOPER claude
     - button "[DUPLICATE] Browser verification chain verify - see card 76cbec55 · codex 1 Mar 15, 09:35 AM ROUTA codex"
-    - button "<id>… 1 Mar 15, 09:34 AM":
+    - button "browser auto chain verify 1773538453 · claude-code-sdk 1 Mar 15, 09:34 AM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 09:34 AM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 15, 09:34 AM
-    - button "<id>… 1 Mar 15, 09:34 AM":
+      - text: 1 Mar 15, 09:34 AM DEVELOPER claude-code-sdk
+    - button "Create a JavaScript hello world · claude-code-sdk 1 Mar 15, 09:31 AM DEVELOPER claude-code-sdk"
+    - button "<id>… 1 Mar 15, 09:29 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 09:34 AM
-    - button "<id>… 1 Mar 15, 09:31 AM":
-      - code: <id>…
-      - text: 1 Mar 15, 09:31 AM
-    - button "<id>… 1 Mar 15, 09:29 AM":
-      - code: <id>…
-      - text: 1 Mar 15, 09:29 AM
+      - text: 1 Mar 15, 09:29 AM DEVELOPER claude
     - button "Verify card automation chain documentation · codex 1 Mar 15, 09:26 AM ROUTA codex"
-    - button "<id>… 1 Mar 15, 09:25 AM":
+    - button "Auto chain verify 1773504400 · claude-code-sdk 1 Mar 15, 09:25 AM DEVELOPER claude-code-sdk"
+    - button "Auto chain verify 1773504300 · claude-code-sdk 1 Mar 15, 09:22 AM DEVELOPER claude-code-sdk"
+    - button "Claude delay smoke 1 Mar 15, 12:06 AM DEVELOPER claude"
+    - button "Claude smoke session 1 Mar 15, 12:05 AM DEVELOPER claude"
+    - button "Auto chain verify 1773504100 · claude 1 Mar 15, 12:03 AM DEVELOPER claude"
+    - button "Auto chain verify 1773504000 · claude 1 Mar 14, 11:59 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 11:57 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 09:25 AM
-    - button "<id>… 1 Mar 15, 09:22 AM":
+      - text: 1 Mar 14, 11:57 PM DEVELOPER claude
+    - button "Browser verification story 1773503800 · claude 1 Mar 14, 11:55 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 11:55 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 15, 09:22 AM
-    - button "<id>… 1 Mar 15, 12:06 AM":
+      - text: 1 Mar 14, 11:55 PM DEVELOPER claude-code-sdk
+    - button "Browser verification story 1773503600 · claude 1 Mar 14, 11:53 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 11:52 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 15, 12:06 AM
-    - button "<id>… 1 Mar 15, 12:05 AM":
+      - text: 1 Mar 14, 11:52 PM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 11:43 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 12:05 AM
-    - button "<id>… 1 Mar 15, 12:03 AM":
+      - text: 1 Mar 14, 11:43 PM DEVELOPER claude
+    - button "create browser verification story 1773502944 · claude 1 Mar 14, 11:42 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 11:42 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 15, 12:03 AM
-    - button "<id>… 1 Mar 14, 11:59 PM":
+      - text: 1 Mar 14, 11:42 PM DEVELOPER claude
+    - button "<id>… 1 Mar 14, 11:41 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 11:59 PM
-    - button "<id>… 1 Mar 14, 11:57 PM":
+      - text: 1 Mar 14, 11:41 PM DEVELOPER claude-code-sdk
+    - button "create browser verification story 1773502588 · claude 1 Mar 14, 11:36 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 11:36 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 14, 11:57 PM
-    - button "<id>… 1 Mar 14, 11:55 PM":
+      - text: 1 Mar 14, 11:36 PM DEVELOPER claude
+    - button "<id>… 1 Mar 14, 11:34 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 11:55 PM
-    - button "<id>… 1 Mar 14, 11:55 PM":
+      - text: 1 Mar 14, 11:34 PM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 11:32 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 11:55 PM
-    - button "<id>… 1 Mar 14, 11:53 PM":
+      - text: 1 Mar 14, 11:32 PM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 11:29 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 11:53 PM
-    - button "<id>… 1 Mar 14, 11:52 PM":
+      - text: 1 Mar 14, 11:29 PM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 11:26 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 11:52 PM
-    - button "<id>… 1 Mar 14, 11:43 PM":
+      - text: 1 Mar 14, 11:26 PM DEVELOPER claude-code-sdk
+    - button "Test OpenCode Smoke Issue 1773501795365 · claude 1 Mar 14, 11:23 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 11:21 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 11:43 PM
-    - button "<id>… 1 Mar 14, 11:42 PM":
+      - text: 1 Mar 14, 11:21 PM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 10:32 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 11:42 PM
-    - button "<id>… 1 Mar 14, 11:42 PM":
+      - text: 1 Mar 14, 10:32 PM DEVELOPER claude-code-sdk
+    - button "echo hello world story for testing · claude 1 Mar 14, 10:23 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 10:23 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 14, 11:42 PM
-    - button "<id>… 1 Mar 14, 11:41 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:41 PM
-    - button "<id>… 1 Mar 14, 11:36 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:36 PM
-    - button "<id>… 1 Mar 14, 11:36 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:36 PM
-    - button "<id>… 1 Mar 14, 11:34 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:34 PM
-    - button "<id>… 1 Mar 14, 11:32 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:32 PM
-    - button "<id>… 1 Mar 14, 11:29 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:29 PM
-    - button "<id>… 1 Mar 14, 11:26 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:26 PM
-    - button "<id>… 1 Mar 14, 11:23 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:23 PM
-    - button "<id>… 1 Mar 14, 11:21 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 11:21 PM
-    - button "<id>… 1 Mar 14, 10:32 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 10:32 PM
-    - button "<id>… 1 Mar 14, 10:23 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 10:23 PM
-    - button "<id>… 1 Mar 14, 10:23 PM":
-      - code: <id>…
-      - text: 1 Mar 14, 10:23 PM
+      - text: 1 Mar 14, 10:23 PM DEVELOPER claude
     - button "KanbanTask Agent 1 Mar 14, 10:21 PM ROUTA claude"
     - button "<id>… 1 Mar 14, 10:12 PM ROUTA claude-code-sdk":
       - code: <id>…
       - text: 1 Mar 14, 10:12 PM ROUTA claude-code-sdk
-    - button "<id>… 1 Mar 14, 10:05 PM":
+    - button "创建 Story 测试方案 · claude 1 Mar 14, 10:05 PM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 09:51 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 14, 10:05 PM
-    - button "<id>… 1 Mar 14, 09:51 PM":
+      - text: 1 Mar 14, 09:51 PM DEVELOPER claude
+    - button "Test · claude 1 Mar 14, 08:28 PM DEVELOPER claude"
+    - button "Queue Probe E 1773449522 · claude 1 Mar 14, 09:02 AM DEVELOPER claude"
+    - button "Queue Probe D 1773449522 · claude 1 Mar 14, 09:00 AM DEVELOPER claude"
+    - button "Queue Probe C 1773449522 · claude 1 Mar 14, 09:00 AM DEVELOPER claude"
+    - button "Queue Probe B 1773449522 · claude 1 Mar 14, 08:58 AM DEVELOPER claude"
+    - button "Queue Probe A 1773449522 · claude 1 Mar 14, 08:58 AM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 12:16 AM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 09:51 PM
-    - button "<id>… 1 Mar 14, 08:28 PM":
+      - text: 1 Mar 14, 12:16 AM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 12:14 AM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 08:28 PM
-    - button "<id>… 1 Mar 14, 09:02 AM":
+      - text: 1 Mar 14, 12:14 AM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 12:09 AM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 09:02 AM
-    - button "<id>… 1 Mar 14, 09:00 AM":
+      - text: 1 Mar 14, 12:09 AM DEVELOPER claude-code-sdk
+    - button "Hello World Implementer 1 Mar 14, 12:08 AM DEVELOPER claude"
+    - button "<id>… 1 Mar 14, 12:07 AM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 09:00 AM
-    - button "<id>… 1 Mar 14, 09:00 AM":
+      - text: 1 Mar 14, 12:07 AM DEVELOPER claude-code-sdk
+    - button "<id>… 1 Mar 14, 12:03 AM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 09:00 AM
-    - button "<id>… 1 Mar 14, 08:58 AM":
+      - text: 1 Mar 14, 12:03 AM DEVELOPER claude-code-sdk
+    - button "Create a hello world · codex 1 Mar 14, 12:00 AM DEVELOPER codex"
+    - button "<id>… 1 Mar 14, 12:00 AM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 14, 08:58 AM
-    - button "<id>… 1 Mar 14, 08:58 AM":
+      - text: 1 Mar 14, 12:00 AM DEVELOPER claude
+    - button "<id>… 1 Mar 14, 12:00 AM DEVELOPER auggie":
       - code: <id>…
-      - text: 1 Mar 14, 08:58 AM
-    - button "<id>… 1 Mar 14, 12:16 AM":
+      - text: 1 Mar 14, 12:00 AM DEVELOPER auggie
+    - button "<id>… 1 Mar 13, 11:58 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 12:16 AM
-    - button "<id>… 1 Mar 14, 12:14 AM":
+      - text: 1 Mar 13, 11:58 PM DEVELOPER claude-code-sdk
+    - button "Investigate echo hello world regression 1773416901 · codex 1 Mar 13, 11:47 PM DEVELOPER codex"
+    - button "<id>… 1 Mar 13, 11:47 PM DEVELOPER codex":
       - code: <id>…
-      - text: 1 Mar 14, 12:14 AM
-    - button "<id>… 1 Mar 14, 12:09 AM":
+      - text: 1 Mar 13, 11:47 PM DEVELOPER codex
+    - button "<id>… 1 Mar 13, 11:40 PM DEVELOPER codex":
       - code: <id>…
-      - text: 1 Mar 14, 12:09 AM
-    - button "<id>… 1 Mar 14, 12:08 AM":
+      - text: 1 Mar 13, 11:40 PM DEVELOPER codex
+    - button "<id>… 1 Mar 13, 11:37 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 12:08 AM
-    - button "<id>… 1 Mar 14, 12:07 AM":
+      - text: 1 Mar 13, 11:37 PM DEVELOPER claude-code-sdk
+    - button "AI Input Probe 1773416101 · codex 1 Mar 13, 11:35 PM DEVELOPER codex"
+    - button "<id>… 1 Mar 13, 11:34 PM DEVELOPER codex":
       - code: <id>…
-      - text: 1 Mar 14, 12:07 AM
-    - button "<id>… 1 Mar 14, 12:03 AM":
+      - text: 1 Mar 13, 11:34 PM DEVELOPER codex
+    - button "Baseline BDD Probe 1773415901 · codex 1 Mar 13, 11:31 PM DEVELOPER codex"
+    - button "UI Backlog Automation 1773415601 · codex 1 Mar 13, 11:21 PM DEVELOPER codex"
+    - button "<id>… 1 Mar 13, 11:13 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 14, 12:03 AM
-    - button "<id>… 1 Mar 14, 12:00 AM":
+      - text: 1 Mar 13, 11:13 PM DEVELOPER claude
+    - button "echo hello world · codex 1 Mar 13, 11:13 PM DEVELOPER codex"
+    - button "<id>… 1 Mar 13, 11:13 PM DEVELOPER auggie":
       - code: <id>…
-      - text: 1 Mar 14, 12:00 AM
-    - button "<id>… 1 Mar 14, 12:00 AM":
+      - text: 1 Mar 13, 11:13 PM DEVELOPER auggie
+    - button "echo hello world · codex 1 Mar 13, 11:13 PM DEVELOPER codex"
+    - button "<id>… 1 Mar 13, 11:11 PM DEVELOPER claude-code-sdk":
       - code: <id>…
-      - text: 1 Mar 14, 12:00 AM
-    - button "<id>… 1 Mar 14, 12:00 AM":
+      - text: 1 Mar 13, 11:11 PM DEVELOPER claude-code-sdk
+    - button "echo hello world · codex 1 Mar 13, 11:11 PM DEVELOPER codex"
+    - button "<id>… 1 Mar 13, 11:02 PM DEVELOPER claude":
       - code: <id>…
-      - text: 1 Mar 14, 12:00 AM
-    - button "<id>… 1 Mar 13, 11:58 PM":
+      - text: 1 Mar 13, 11:02 PM DEVELOPER claude
+    - button "<id>… 1 Mar 13, 11:01 PM DEVELOPER auggie":
       - code: <id>…
-      - text: 1 Mar 13, 11:58 PM
-    - button "<id>… 1 Mar 13, 11:47 PM":
+      - text: 1 Mar 13, 11:01 PM DEVELOPER auggie
+    - button "<id>… 1 Mar 13, 10:03 AM CRAFTER codex":
       - code: <id>…
-      - text: 1 Mar 13, 11:47 PM
-    - button "<id>… 1 Mar 13, 11:47 PM":
+      - text: 1 Mar 13, 10:03 AM CRAFTER codex
+    - button "<id>… 1 Mar 12, 05:18 PM DEVELOPER opencode":
       - code: <id>…
-      - text: 1 Mar 13, 11:47 PM
-    - button "<id>… 1 Mar 13, 11:40 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:40 PM
-    - button "<id>… 1 Mar 13, 11:37 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:37 PM
-    - button "<id>… 1 Mar 13, 11:35 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:35 PM
-    - button "<id>… 1 Mar 13, 11:34 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:34 PM
-    - button "<id>… 1 Mar 13, 11:31 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:31 PM
-    - button "<id>… 1 Mar 13, 11:21 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:21 PM
-    - button "<id>… 1 Mar 13, 11:13 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:13 PM
-    - button "<id>… 1 Mar 13, 11:13 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:13 PM
-    - button "<id>… 1 Mar 13, 11:13 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:13 PM
-    - button "<id>… 1 Mar 13, 11:13 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:13 PM
-    - button "<id>… 1 Mar 13, 11:11 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:11 PM
-    - button "<id>… 1 Mar 13, 11:11 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:11 PM
-    - button "<id>… 1 Mar 13, 11:02 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:02 PM
-    - button "<id>… 1 Mar 13, 11:01 PM":
-      - code: <id>…
-      - text: 1 Mar 13, 11:01 PM
-    - button "<id>… 1 Mar 13, 10:03 AM":
-      - code: <id>…
-      - text: 1 Mar 13, 10:03 AM
-    - button "<id>… 1 Mar 12, 05:18 PM":
-      - code: <id>…
-      - text: 1 Mar 12, 05:18 PM
-    - button "<id>… 1 Mar 12, 01:11 PM":
-      - code: <id>…
-      - text: 1 Mar 12, 01:11 PM
+      - text: 1 Mar 12, 05:18 PM DEVELOPER opencode
+    - button "Assign task to ACP provider · claude 1 Mar 12, 01:11 PM DEVELOPER claude"
     - button "<id>… 1 Mar 12, 11:56 AM ROUTA claude-code-sdk":
       - code: <id>…
       - text: 1 Mar 12, 11:56 AM ROUTA claude-code-sdk
@@ -529,72 +496,30 @@
     - button "<id>… 1 Mar 12, 09:53 AM ROUTA claude-code-sdk":
       - code: <id>…
       - text: 1 Mar 12, 09:53 AM ROUTA claude-code-sdk
-    - button "<id>… 1 Mar 12, 08:01 AM":
-      - code: <id>…
-      - text: 1 Mar 12, 08:01 AM
-    - button "<id>… 1 Mar 11, 11:43 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 11:43 PM
-    - button "<id>… 1 Mar 11, 11:30 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 11:30 PM
-    - button "<id>… 1 Mar 11, 09:31 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 09:31 PM
-    - button "<id>… 1 Mar 11, 08:55 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:55 PM
-    - button "<id>… 1 Mar 11, 08:42 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:42 PM
-    - button "<id>… 1 Mar 11, 08:38 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:38 PM
-    - button "<id>… 1 Mar 11, 08:32 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:32 PM
-    - button "<id>… 1 Mar 11, 08:29 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:29 PM
-    - button "<id>… 1 Mar 11, 08:27 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:27 PM
-    - button "<id>… 1 Mar 11, 08:14 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:14 PM
-    - button "<id>… 1 Mar 11, 08:06 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 08:06 PM
-    - button "<id>… 1 Mar 11, 01:31 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 01:31 PM
-    - button "<id>… 1 Mar 11, 01:11 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 01:11 PM
-    - button "<id>… 1 Mar 11, 01:08 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 01:08 PM
-    - button "<id>… 1 Mar 11, 01:07 PM":
-      - code: <id>…
-      - text: 1 Mar 11, 01:07 PM
-    - button "<id>… 1 Mar 10, 09:22 PM":
-      - code: <id>…
-      - text: 1 Mar 10, 09:22 PM
+    - button "Add login page · claude-code-sdk 1 Mar 12, 08:01 AM DEVELOPER claude-code-sdk"
+    - button "Implement Master Agent Dynamic Provider Routing · claude 1 Mar 11, 11:43 PM DEVELOPER claude"
+    - button "Implement Master Agent Dynamic Provider Routing · claude 1 Mar 11, 11:30 PM DEVELOPER claude"
+    - button "Add login page · claude-code-sdk 1 Mar 11, 09:31 PM DEVELOPER claude-code-sdk"
+    - button "Add login page · claude-code-sdk 1 Mar 11, 08:55 PM DEVELOPER claude-code-sdk"
+    - button "Desk Check 1 Mar 11, 08:42 PM GATE opencode"
+    - button "Assign task to ACP provider · claude 1 Mar 11, 08:38 PM DEVELOPER claude"
+    - button "Implement Provider Capability Query APIs · claude 1 Mar 11, 08:32 PM DEVELOPER claude"
+    - button "Capability Metadata Dev 1 Mar 11, 08:29 PM DEVELOPER claude"
+    - button "Capability Metadata 1 Mar 11, 08:27 PM DEVELOPER claude"
+    - button "Desk Check 1 Mar 11, 08:14 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 11, 08:06 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 11, 01:31 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 11, 01:11 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 11, 01:08 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 11, 01:07 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 10, 09:22 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 10, 09:14 PM DEVELOPER claude"
+    - button "Add login page · claude 1 Mar 10, 09:14 PM DEVELOPER claude"
     - button "<id>… 1 Mar 10, 09:14 PM":
       - code: <id>…
       - text: 1 Mar 10, 09:14 PM
-    - button "<id>… 1 Mar 10, 09:14 PM":
-      - code: <id>…
-      - text: 1 Mar 10, 09:14 PM
-    - button "<id>… 1 Mar 10, 09:14 PM":
-      - code: <id>…
-      - text: 1 Mar 10, 09:14 PM
-    - button "<id>… 1 Mar 10, 05:52 PM":
-      - code: <id>…
-      - text: 1 Mar 10, 05:52 PM
-    - button "<id>… 1 Mar 10, 01:37 PM":
-      - code: <id>…
-      - text: 1 Mar 10, 01:37 PM
+    - button "Implement Provider Capability Query APIs · claude 1 Mar 10, 05:52 PM DEVELOPER claude"
+    - button "Add Capability Metadata to AcpAgentPreset · opencode 1 Mar 10, 01:37 PM CRAFTER opencode"
     - button "<id>… 1 Mar 9, 09:44 AM":
       - code: <id>…
       - text: 1 Mar 9, 09:44 AM
@@ -604,45 +529,41 @@
     - button "<id>… 1 Mar 9, 08:19 AM":
       - code: <id>…
       - text: 1 Mar 9, 08:19 AM
-    - button "<id>… 1 Mar 8, 10:13 PM":
+    - button "<id>… 1 Mar 8, 10:13 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 10:13 PM
-    - button "<id>… 1 Mar 8, 10:11 PM":
+      - text: 1 Mar 8, 10:13 PM CRAFTER opencode
+    - button "<id>… 1 Mar 8, 10:11 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 10:11 PM
-    - button "<id>… 1 Mar 8, 10:11 PM":
+      - text: 1 Mar 8, 10:11 PM CRAFTER opencode
+    - button "<id>… 1 Mar 8, 10:11 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 10:11 PM
-    - button "<id>… 1 Mar 8, 09:34 PM":
+      - text: 1 Mar 8, 10:11 PM CRAFTER opencode
+    - button "<id>… 1 Mar 8, 09:34 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 09:34 PM
-    - button "<id>… 1 Mar 8, 09:32 PM":
+      - text: 1 Mar 8, 09:34 PM CRAFTER opencode
+    - button "<id>… 1 Mar 8, 09:32 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 09:32 PM
-    - button "<id>… 1 Mar 8, 09:32 PM":
+      - text: 1 Mar 8, 09:32 PM CRAFTER opencode
+    - button "<id>… 1 Mar 8, 09:32 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 09:32 PM
-    - button "<id>… 1 Mar 8, 09:30 PM":
-      - code: <id>…
-      - text: 1 Mar 8, 09:30 PM
-    - button "<id>… 1 Mar 8, 09:15 PM":
-      - code: <id>…
-      - text: 1 Mar 8, 09:15 PM
+      - text: 1 Mar 8, 09:32 PM CRAFTER opencode
+    - button "Kanban ACP smoke test 1 Mar 8, 09:30 PM DEVELOPER claude"
+    - button "Kanban OpenCode smoke test · opencode 1 Mar 8, 09:15 PM CRAFTER opencode"
     - button "<id>… 1 Mar 8, 09:13 PM":
       - code: <id>…
       - text: 1 Mar 8, 09:13 PM
-    - button "<id>… 1 Mar 8, 09:11 PM":
+    - button "<id>… 1 Mar 8, 09:11 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 09:11 PM
+      - text: 1 Mar 8, 09:11 PM CRAFTER opencode
     - button "<id>… 1 Mar 8, 09:07 PM":
       - code: <id>…
       - text: 1 Mar 8, 09:07 PM
     - button "<id>… 1 Mar 8, 09:05 PM":
       - code: <id>…
       - text: 1 Mar 8, 09:05 PM
-    - button "<id>… 1 Mar 8, 09:05 PM":
+    - button "<id>… 1 Mar 8, 09:05 PM CRAFTER opencode":
       - code: <id>…
-      - text: 1 Mar 8, 09:05 PM
+      - text: 1 Mar 8, 09:05 PM CRAFTER opencode
     - button "Coordinator 1 Mar 8, 12:05 AM ROUTA docker-opencode"
     - button "Greeting 1 Mar 7, 11:55 PM ROUTA docker-opencode"
     - button "Coordinator 1 Mar 7, 11:30 PM ROUTA docker-opencode"
@@ -1220,5 +1141,4 @@
     - button "Agent"
     - button "Tools"
     - button "Thoughts"
-    - text: "Kanban Story todo 930cf8fc GitHub Issues Sync + CI Status Integration for Kanban Board Current lane session: Todo • codex • CRAFTER · completed Previous lane session: Backlog • claude • CRAFTER"
 - alert

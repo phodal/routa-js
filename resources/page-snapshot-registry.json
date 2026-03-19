@@ -17,7 +17,7 @@
   },
   {
     "id": "workspace",
-    "name": "Workspace Detail",
+    "name": "Workspace Overview",
     "group": "workspace",
     "priority": "P0",
     "ci": true,
@@ -89,8 +89,8 @@
     "pageFile": "src/app/workspace/[workspaceId]/sessions/[sessionId]/page.tsx",
     "snapshotFile": "src/app/workspace/[workspaceId]/sessions/[sessionId]/page.snapshot.yaml",
     "waitFor": {
-      "strategy": "text",
-      "value": "Quick Access",
+      "strategy": "selector",
+      "value": "main",
       "timeoutMs": 20000,
       "settleMs": 1500
     }

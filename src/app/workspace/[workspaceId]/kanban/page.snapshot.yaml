@@ -1,9 +1,9 @@
 # page-id: kanban
 # route: /workspace/default/kanban
 # source-page: src/app/workspace/[workspaceId]/kanban/page.tsx
-# url: http://127.0.0.1:3000/workspace/default/kanban
+# url: http://localhost:3000/workspace/default/kanban
 # title: Routa - Multi-Agent Coordinator
-# generated-at: 2026-03-17T13:01:10.407Z
+# generated-at: 2026-03-19T11:54:40.438Z
 # generator: playwright
 # playwright-version: 1.58.2
 - banner:
@@ -18,7 +18,7 @@
     - link "Home":
       - /url: /
       - img
-    - link "Dashboard":
+    - link "Overview":
       - /url: /workspace/default
       - img
     - link "Kanban":
@@ -33,15 +33,19 @@
 - main:
   - img
   - heading "Kanban Board" [level=1]
-  - text: (7 tasks) Limit 10 Running 0 Queued 0
+  - text: (10 tasks) Limit 10 Running 0 Queued 0 Kanban Health 2 session mismatch
   - button "Backend Agents":
     - img
     - text: Backend Agents
   - button "Settings"
+  - text: Language
+  - button "English" [pressed]
+  - button "Chinese"
   - button "Refresh":
     - img
   - text: Repos
   - button "phodal/routa @main"
+  - text: Syncing 0/1 0/1 phodal/routa
   - combobox "KanbanTask Agent provider":
     - option "Auggie" [selected]
     - option "Claude Code"
@@ -71,6 +75,7 @@
     - option "Minion Code"
     - option "Nova"
     - option "pi ACP"
+    - option "Qoder CLI (Registry)"
     - option "Qwen Code"
   - img
   - textbox "Describe work to plan in Kanban..."
@@ -78,305 +83,70 @@
     - text: Send
     - img
   - button "Manual"
-  - text: Backlog 0 cards -> Claude Code · CRAFTER · Backlog Refiner Todo 1 cards -> Codex · CRAFTER · Todo Orchestrator
-  - button "Open GitHub Issues Sync + CI Status Integration for Kanban Board":
+  - text: Backlog 3 cards -> Default · CRAFTER · Backlog Refiner
+  - button "Open mcp verify test":
     - img
     - button "Delete task":
       - img
-    - text: Live GitHub Issues Sync + CI Status Integration for Kanban Board medium
-    - paragraph: "## Problem Statement Currently, the Routa.js Kanban board operates independently of GitHub issues. Developers work in two disconnected systems: - GitHub issues for task tracking and CI/CD visibility - Routa Kanban board for agent coordination and task execution This disconnect creates friction when using Codex agents to work on GitHub issues—there's no automatic sync, no CI status visibility, and no seamless way to select GitHub issues for agent execution. ## Objective Build a closed-loop integration between GitHub Issues and the Routa Kanban board, enabling GitHub-driven development workflows with full CI visibility and Codex agent execution capabilities. ## Scope ### In Scope 1. **GitHub Issue Import/Sync** - Sync all open issues from `phodal/routa` repository - Display issues in Kanban board (configurable: all/open/assigned) - Maintain bidirectional link between cards and GitHub issues - Handle issue state changes (open/closed) → card status updates 2. **CI Status Display** - Fetch and display GitHub Actions status for each issue - Show CI badge/status indicator on task cards - Link to full workflow run logs - Handle multiple workflow runs per issue (via branch/PR association) 3. **Codex Integration** - Select GitHub issue from Kanban → spawn Codex agent with issue context - Auto-populate agent task from issue body/labels - Create PR/comments back to GitHub when agent completes ### Affected Areas - Frontend: Kanban board UI components, card detail views - Backend: GitHub API integration, CI status polling - MCP tools: New tools for GitHub sync and CI status queries - Database: Schema changes to store GitHub issue mappings ### Out of Scope - GitHub PR management (review, merge controls) - Issue creation from Kanban (unidirectional sync only) - Real-time webhook-based updates (polling initially) - Multi-repo support (single repo: `phodal/routa`) ## Acceptance Criteria 1. ✅ Kanban board displays all open issues from `phodal/routa` with titles, labels, and status 2. ✅ Each issue card shows current GitHub Actions CI status (passing/failing/running/pending) 3. ✅ Clicking a CI status indicator opens the GitHub Actions workflow run page 4. ✅ Selecting an issue from Kanban creates a Codex agent session with issue context 5. ✅ Issue number and link are visible on all synced cards 6. ✅ GitHub issue closure syncs to Kanban (card moves to Done or archived) 7. ✅ Configuration exists for GitHub repo owner/name and API token ## Implementation Notes ### Technical Approach - Use GitHub REST API: `/repos/{owner}/{repo}/issues`, `/repos/{owner}/{repo}/actions/runs` - Store GitHub issue metadata in card metadata (issue number, URL, last sync timestamp) - CI status mapping: branch/commit → workflow runs → issue association - Poll GitHub API every 5-10 minutes for updates (webhooks later) ### Key Files to Modify - Frontend: `src/components/kanban/` - Card components, board view - Backend (Rust): `crates/routa-server/` - GitHub API client, sync service - MCP Tools: New tools in `src/mcp/` or Rust equivalent ### Configuration Required - Environment variable for GitHub personal access token (classic or fine-grained) - Repo configuration: owner=`phodal`, repo=`routa` - Polling interval configuration ## Dependencies - GitHub personal access token with `repo:status`, `repo:issues`, `actions:read` scopes - Existing GitHub integration libraries (if any) in the codebase"
-    - text: dogfood github-issues +2 phodal/routa Automation Card override Codex · CRAFTER · Todo Orchestrator
+    - text: Idle Not synced mcp verify test medium
+    - paragraph: verify delegator path
+    - text: phodal/routa Automation Lane default
     - button "Edit"
-    - text: Provider
-    - combobox "ACP provider for GitHub Issues Sync + CI Status Integration for Kanban Board":
-      - option "Use lane default"
-      - option "Auggie"
-      - option "Claude Code"
-      - option "Claude Code SDK"
-      - option "Codex" [selected]
-      - option "Gemini"
-      - option "GitHub Copilot"
-      - option "Kimi"
-      - option "Kiro"
-      - option "OpenCode"
-      - option "OpenCode SDK"
-      - option "Qoder"
-      - option "Auggie CLI (Registry)"
-      - option "Autohand Code"
-      - option "Claude Agent"
-      - option "Cline"
-      - option "Codebuddy Code"
-      - option "Codex CLI"
-      - option "crow-cli"
-      - option "DeepAgents"
-      - option "DimCode"
-      - option "Factory Droid"
-      - option "fast-agent"
-      - option "Gemini CLI (Registry)"
-      - option "GitHub Copilot"
-      - option "Kilo"
-      - option "Minion Code"
-      - option "Nova"
-      - option "pi ACP"
-      - option "Qwen Code"
-    - text: Not synced
-  - text: Dev 1 cards -> Claude Code · CRAFTER · Dev Crafter
-  - button "Open Dev review done recheck 1773726620":
+  - button "Open mcp verify test":
     - img
     - button "Delete task":
       - img
-    - text: Idle Dev review done recheck 1773726620 medium
-    - paragraph: Add temporary QA smoke-test badge to homepage hero section
-    - text: qa frontend +2 phodal/routa
-    - button "worktree active · issue/396fa856-dev-review-done-recheck-1773726620"
-    - text: Automation Card override Claude Code · CRAFTER · Dev Crafter
+    - text: Idle Not synced mcp verify test medium
+    - paragraph: verify delegator path
+    - text: phodal/routa Automation Lane default
     - button "Edit"
-    - text: Provider
-    - combobox "ACP provider for Dev review done recheck 1773726620":
-      - option "Use lane default"
-      - option "Auggie"
-      - option "Claude Code" [selected]
-      - option "Claude Code SDK"
-      - option "Codex"
-      - option "Gemini"
-      - option "GitHub Copilot"
-      - option "Kimi"
-      - option "Kiro"
-      - option "OpenCode"
-      - option "OpenCode SDK"
-      - option "Qoder"
-      - option "Auggie CLI (Registry)"
-      - option "Autohand Code"
-      - option "Claude Agent"
-      - option "Cline"
-      - option "Codebuddy Code"
-      - option "Codex CLI"
-      - option "crow-cli"
-      - option "DeepAgents"
-      - option "DimCode"
-      - option "Factory Droid"
-      - option "fast-agent"
-      - option "Gemini CLI (Registry)"
-      - option "GitHub Copilot"
-      - option "Kilo"
-      - option "Minion Code"
-      - option "Nova"
-      - option "pi ACP"
-      - option "Qwen Code"
-    - text: Not synced
-  - text: Review 1 cards -> Claude Code · GATE · Review Guard
-  - button "Open Add Python Agent Runtime Support to Routa.js":
+  - button "Open Smoke Test Task":
     - img
     - button "Delete task":
       - img
-    - text: Idle Add Python Agent Runtime Support to Routa.js medium
-    - paragraph: "## Problem Statement Routa.js currently supports TypeScript/JavaScript agents and Rust-based coordination. Users need to create and run Python-based agents to leverage Python's rich ecosystem (ML, data science, scientific computing) within the Routa multi-agent coordination platform. ## Why Now - Enable Python-first users to contribute agents without learning TypeScript/Rust - Leverage existing Python AI/ML libraries (PyTorch, TensorFlow, scikit-learn) in agent implementations - Expand agent ecosystem beyond JS/TS languages ## Context - **Current behavior:** Agents must be implemented in TypeScript/JavaScript or interact via API - **Desired behavior:** Python agents can be created, registered, and coordinated alongside TS/JS agents - **Related files:** - `src/agents/` - Agent coordination logic - `src/worker/` - Agent worker implementation - `src/types/agent.ts` - Agent type definitions - **Related history:** None found after searching docs/issues/ ## Proposed Approaches ### Approach 1: Python MCP Server (Recommended) **Description:** Implement a Python MCP (Model Context Protocol) server that exposes agent capabilities. Python agents run as separate processes connected via stdio IPC. Rust/Axum backend manages agent lifecycles. **Pros:** - Leverages existing MCP infrastructure - Isolated execution (process-level sandbox) - Language-agnostic protocol - Easy to add other languages later (Ruby, Go, etc.) **Cons:** - Requires MCP client integration on Rust side - Inter-process communication overhead - Need to serialize/deserialize messages **Effort:** Medium **Libraries:** - `mcp` (Python package) - Existing Rust MCP SDK ### Approach 2: Python Worker Bridge **Description:** Create a dedicated Python worker service that accepts task assignments from Rust backend via REST/WebSocket API. Python maintains its own agent pool and task execution state. **Pros:** - Decoupled architecture - Can scale Python workers independently - Clear separation of concerns **Cons:** - Additional deployment component - More complex orchestration (two worker pools) - Requires cross-language API contract maintenance **Effort:** Large **Libraries:** - `fastapi` for REST/WS API - `uvicorn` as ASGI server ### Approach 3: Embedded Python via PyO3 **Description:** Use PyO3 to embed Python runtime directly in Rust backend. Python agents execute as native Rust modules calling into Python interpreter. **Pros:** - Single deployment (no extra service) - Zero-latency communication (in-process) - Shared memory possible for performance **Cons:** - Tightly coupled (Python runtime in Rust process) - GIL limits true parallelism - Safety concerns (Python errors can crash backend) - Complex build setup **Effort:** Large **Libraries:** - `pyo3` crate ## Recommendation **Approach 1 (Python MCP Server)** is recommended because: 1. Aligns with existing MCP architecture patterns in Routa.js 2. Provides clear isolation and fault boundaries 3. Extensible to other languages in future 4. Lower implementation complexity than Approach 3 5. Better fit for multi-agent orchestration than Approach 2 ## Acceptance Criteria - [ ] Python agent template project created with MCP server scaffolding - [ ] Python agent can register with Routa coordinator - [ ] Python agent can receive and execute tasks - [ ] Python agent can report completion back to coordinator - [ ] Example \"hello world\" Python agent implemented - [ ] Documentation for creating Python agents - [ ] Integration tests covering Python agent lifecycle ## Out of Scope - Python-specific UI for agent creation (use existing UI) - Hot reloading of Python agents - Python agent debugging tools - Performance optimization for high-throughput scenarios"
-    - text: phodal/routa Automation Card override Claude Code · GATE · Review Guard
+    - text: Idle Not synced Smoke Test Task medium
+    - paragraph: Validate delegation tool creates agent processes correctly
+    - text: phodal/routa Automation Lane default
     - button "Edit"
-    - text: Provider
-    - combobox "ACP provider for Add Python Agent Runtime Support to Routa.js":
-      - option "Use lane default"
-      - option "Auggie"
-      - option "Claude Code" [selected]
-      - option "Claude Code SDK"
-      - option "Codex"
-      - option "Gemini"
-      - option "GitHub Copilot"
-      - option "Kimi"
-      - option "Kiro"
-      - option "OpenCode"
-      - option "OpenCode SDK"
-      - option "Qoder"
-      - option "Auggie CLI (Registry)"
-      - option "Autohand Code"
-      - option "Claude Agent"
-      - option "Cline"
-      - option "Codebuddy Code"
-      - option "Codex CLI"
-      - option "crow-cli"
-      - option "DeepAgents"
-      - option "DimCode"
-      - option "Factory Droid"
-      - option "fast-agent"
-      - option "Gemini CLI (Registry)"
-      - option "GitHub Copilot"
-      - option "Kilo"
-      - option "Minion Code"
-      - option "Nova"
-      - option "pi ACP"
-      - option "Qwen Code"
-    - text: Not synced
-  - text: Done 4 cards -> Codex · GATE · Done Reporter
-  - button "Open Create minimal JavaScript \"Hello World\" agent template":
+  - text: Todo 0 cards -> Default · CRAFTER · Todo Orchestrator Dev 0 cards -> Default · CRAFTER · Dev Crafter Review 0 cards -> Default · GATE · Review Guard Done 5 cards -> Default · GATE · Done Reporter
+  - 'button "Open Smoke Test: Verify delegation tool works"':
     - img
     - button "Delete task":
       - img
-    - text: Idle Create minimal JavaScript "Hello World" agent template medium
-    - paragraph: "Shipped a minimal JavaScript \"Hello World\" agent template: an ES module CLI example with full MCP lifecycle flow, session management, parent/child agent creation, task delegation, package metadata, and setup documentation. Verified by live server execution in TEST_OUTPUT.txt: initialize and session flow succeeded, parent and child agents were created, task creation and delegation completed, package.json and README.md were reviewed, and the work landed cleanly at commit 99b041d with no known issues."
-    - text: javascript example +1 phodal/routa
-    - button "worktree active · issue/d741ad48-create-minimal-javascript-hello-world-ag"
-    - text: Automation Card override Codex · GATE · Done Reporter
+    - text: "Idle Not synced Smoke Test: Verify delegation tool works medium"
+    - paragraph: Validate that the delegate_tool_to_agent MCP tool can successfully create and delegate a task to a specialist agent
+    - text: phodal/routa Automation Lane default
     - button "Edit"
-    - text: Provider
-    - combobox "ACP provider for Create minimal JavaScript \"Hello World\" agent template":
-      - option "Use lane default"
-      - option "Auggie"
-      - option "Claude Code"
-      - option "Claude Code SDK"
-      - option "Codex" [selected]
-      - option "Gemini"
-      - option "GitHub Copilot"
-      - option "Kimi"
-      - option "Kiro"
-      - option "OpenCode"
-      - option "OpenCode SDK"
-      - option "Qoder"
-      - option "Auggie CLI (Registry)"
-      - option "Autohand Code"
-      - option "Claude Agent"
-      - option "Cline"
-      - option "Codebuddy Code"
-      - option "Codex CLI"
-      - option "crow-cli"
-      - option "DeepAgents"
-      - option "DimCode"
-      - option "Factory Droid"
-      - option "fast-agent"
-      - option "Gemini CLI (Registry)"
-      - option "GitHub Copilot"
-      - option "Kilo"
-      - option "Minion Code"
-      - option "Nova"
-      - option "pi ACP"
-      - option "Qwen Code"
-    - text: Not synced
-  - button "Open Create JavaScript/TypeScript usage demo for Routa.js platform":
+  - button "Open delegate-smoke-test":
     - img
     - button "Delete task":
       - img
-    - text: Idle Create JavaScript/TypeScript usage demo for Routa.js platform medium
-    - paragraph: "Shipped a complete JavaScript/TypeScript usage demo for the Routa.js platform, including a runnable `RoutaClient`, TypeScript response/interface definitions, and setup/usage documentation. Verified completion with code review and build evidence: all 7 TypeScript errors were resolved in `verify.ts`, typed assertions were added for all 6 fetch responses, and `npm run build` completed successfully with zero errors, producing compiled output in `dist/`. This card remains in Done."
-    - text: phodal/routa
-    - button "worktree active · issue/d19f1175-create-javascript-typescript-usage-demo-"
-    - text: Automation Card override Codex · GATE · Done Reporter
+    - text: Idle Not synced delegate-smoke-test medium
+    - paragraph: Test delegate tool execution path
+    - text: phodal/routa Automation Lane default
     - button "Edit"
-    - text: Provider
-    - combobox "ACP provider for Create JavaScript/TypeScript usage demo for Routa.js platform":
-      - option "Use lane default"
-      - option "Auggie"
-      - option "Claude Code"
-      - option "Claude Code SDK"
-      - option "Codex" [selected]
-      - option "Gemini"
-      - option "GitHub Copilot"
-      - option "Kimi"
-      - option "Kiro"
-      - option "OpenCode"
-      - option "OpenCode SDK"
-      - option "Qoder"
-      - option "Auggie CLI (Registry)"
-      - option "Autohand Code"
-      - option "Claude Agent"
-      - option "Cline"
-      - option "Codebuddy Code"
-      - option "Codex CLI"
-      - option "crow-cli"
-      - option "DeepAgents"
-      - option "DimCode"
-      - option "Factory Droid"
-      - option "fast-agent"
-      - option "Gemini CLI (Registry)"
-      - option "GitHub Copilot"
-      - option "Kilo"
-      - option "Minion Code"
-      - option "Nova"
-      - option "pi ACP"
-      - option "Qwen Code"
-    - text: Not synced
-  - button "Open Dev verification safety recheck 1773720435":
+  - button "Open MCP Delegate Smoke Test Task":
     - img
     - button "Delete task":
       - img
-    - text: Idle Dev verification safety recheck 1773720435 medium
-    - paragraph: "Completed and approved for production. Shipped: - Added the amber/yellow pill badge with `QA Smoke Test` text in the homepage hero - Included dark-mode badge styling - Kept the hero flex layout responsive Verified: - Attached screenshot confirms the badge is visible in the hero next to the `Kanban Core` label - Git diff review confirmed a clean, minimal implementation that matches the spec (`8` insertions, `3` deletions) Verdict: implementation is complete and ready for production."
-    - text: qa frontend +2 phodal/routa
-    - button "worktree active · issue/989a0c1f-dev-verification-safety-recheck-17737204"
-    - text: Automation Card override Codex · GATE · Done Reporter
+    - text: Idle Not synced MCP Delegate Smoke Test Task medium
+    - paragraph: Verify delegate tool execution path works correctly
+    - text: phodal/routa Automation Lane default
     - button "Edit"
-    - text: Provider
-    - combobox "ACP provider for Dev verification safety recheck 1773720435":
-      - option "Use lane default"
-      - option "Auggie"
-      - option "Claude Code"
-      - option "Claude Code SDK"
-      - option "Codex" [selected]
-      - option "Gemini"
-      - option "GitHub Copilot"
-      - option "Kimi"
-      - option "Kiro"
-      - option "OpenCode"
-      - option "OpenCode SDK"
-      - option "Qoder"
-      - option "Auggie CLI (Registry)"
-      - option "Autohand Code"
-      - option "Claude Agent"
-      - option "Cline"
-      - option "Codebuddy Code"
-      - option "Codex CLI"
-      - option "crow-cli"
-      - option "DeepAgents"
-      - option "DimCode"
-      - option "Factory Droid"
-      - option "fast-agent"
-      - option "Gemini CLI (Registry)"
-      - option "GitHub Copilot"
-      - option "Kilo"
-      - option "Minion Code"
-      - option "Nova"
-      - option "pi ACP"
-      - option "Qwen Code"
-    - text: Not synced
-  - button "Open Dev verification guardrail final 1773720632":
+  - button "Open Delegate Smoke Test":
     - img
     - button "Delete task":
       - img
-    - text: Idle Dev verification guardrail final 1773720632 medium
-    - paragraph: "## Completion Summary Shipped a temporary QA badge variant in the homepage hero area, colocated with the existing `Kanban Core` label, to support verification visibility during guardrail checks. The implementation is intended to be temporary/easily removable. ## Verification - ✅ Code path checked in `src/app/page.tsx` (hero section, lines 291-293) showing the badge markup and amber/warning styling. - ✅ Visual verification artifact: screenshot `25038a99-067e-4f93-ab1e-52e175db4336` shows `QA Smoke Test` badge in hero area. - ✅ Acceptance criteria review: visible, correctly styled (amber/warning color), temporary scope, and proper placement in hero are all passing."
-    - text: qa frontend +2 phodal/routa
-    - button "worktree active · issue/278760d1-dev-verification-guardrail-final-1773720"
-    - text: Automation Card override Codex · GATE · Done Reporter
+    - text: Idle Not synced Delegate Smoke Test medium
+    - paragraph: Smoke test task - echo "hello"
+    - text: phodal/routa Automation Lane default
     - button "Edit"
-    - text: Provider
-    - combobox "ACP provider for Dev verification guardrail final 1773720632":
-      - option "Use lane default"
-      - option "Auggie"
-      - option "Claude Code"
-      - option "Claude Code SDK"
-      - option "Codex" [selected]
-      - option "Gemini"
-      - option "GitHub Copilot"
-      - option "Kimi"
-      - option "Kiro"
-      - option "OpenCode"
-      - option "OpenCode SDK"
-      - option "Qoder"
-      - option "Auggie CLI (Registry)"
-      - option "Autohand Code"
-      - option "Claude Agent"
-      - option "Cline"
-      - option "Codebuddy Code"
-      - option "Codex CLI"
-      - option "crow-cli"
-      - option "DeepAgents"
-      - option "DimCode"
-      - option "Factory Droid"
-      - option "fast-agent"
-      - option "Gemini CLI (Registry)"
-      - option "GitHub Copilot"
-      - option "Kilo"
-      - option "Minion Code"
-      - option "Nova"
-      - option "pi ACP"
-      - option "Qwen Code"
-    - text: Not synced
+  - button "Open Smoke Test Delegate":
+    - img
+    - button "Delete task":
+      - img
+    - text: Idle Not synced Smoke Test Delegate medium
+    - paragraph: "Smoke test: echo \"delegate works\""
+    - text: phodal/routa Automation Lane default
+    - button "Edit"
 - alert

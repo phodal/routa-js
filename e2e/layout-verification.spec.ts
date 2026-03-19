@@ -34,8 +34,8 @@ test.describe("Layout Verification", () => {
     const main = page.locator("main");
     await expect(main).toBeVisible();
 
-    await expect(page.getByRole("link", { name: "Open workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Open board" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Workspace overview" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open Kanban" })).toBeVisible();
     await expect(header.getByRole("link", { name: "Kanban" })).toBeVisible();
 
     await page.screenshot({

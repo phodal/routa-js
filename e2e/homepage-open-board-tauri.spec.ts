@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Homepage "Open board" E2E Test for Tauri/Rust Backend
+ * Homepage "Open Kanban" E2E Test for Tauri/Rust Backend
  * 
  * Tests the complete flow:
  * 1. Load homepage
- * 2. Click "Open board" button
+ * 2. Click "Open Kanban" button
  * 3. Verify navigation to Kanban page
  * 4. Click a task to view details
  * 5. Close detail panel
@@ -14,14 +14,14 @@ import { test, expect } from "@playwright/test";
  * Run with:
  *   npx playwright test --config=playwright.tauri.config.ts e2e/homepage-open-board-tauri.spec.ts --project=chromium-headed
  */
-test.describe("Homepage Open Board Flow (Tauri/Rust)", () => {
+test.describe("Homepage Open Kanban Flow (Tauri/Rust)", () => {
   const getBaseUrl = () => {
     return process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3210";
   };
 
   test.setTimeout(120_000);
 
-  test("Complete flow: Homepage → Open board → Kanban → Task detail → Back to homepage", async ({ page }) => {
+  test("Complete flow: Homepage → Open Kanban → Kanban → Task detail → Back to homepage", async ({ page }) => {
     const baseUrl = getBaseUrl();
     const results: string[] = [];
 
@@ -37,13 +37,13 @@ test.describe("Homepage Open Board Flow (Tauri/Rust)", () => {
 
     // Step 2: Verify homepage elements
     await expect(page.locator("text=Routa")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("text=Kanban Core")).toBeVisible();
+    await expect(page.locator("text=Kanban-First Control Surface")).toBeVisible();
     results.push("2. Homepage elements visible");
 
-    // Step 3: Find and click "Open board" button
+    // Step 3: Find and click the Kanban CTA
     const openBoardLink = page.locator('a:has-text("Open board"), a:has-text("Open Kanban")').first();
     await expect(openBoardLink).toBeVisible({ timeout: 10_000 });
-    results.push("3. 'Open board' button found");
+    results.push("3. 'Open Kanban' button found");
 
     await page.screenshot({
       path: "test-results/tauri-homepage-02-before-click.png",
@@ -52,7 +52,7 @@ test.describe("Homepage Open Board Flow (Tauri/Rust)", () => {
 
     await openBoardLink.click();
     await page.waitForLoadState("domcontentloaded");
-    results.push("4. Clicked 'Open board' button");
+    results.push("4. Clicked 'Open Kanban' button");
 
     // Step 4: Verify navigation to Kanban page
     await expect(page).toHaveURL(/\/kanban/, { timeout: 10_000 });
@@ -105,7 +105,7 @@ test.describe("Homepage Open Board Flow (Tauri/Rust)", () => {
       });
 
       // Verify we're back on homepage
-      await expect(page.locator("text=Kanban Core")).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator("text=Kanban-First Control Surface")).toBeVisible({ timeout: 10_000 });
       results.push("10. Back on homepage");
     }
 
@@ -118,13 +118,13 @@ test.describe("Homepage Open Board Flow (Tauri/Rust)", () => {
     expect(results.length).toBeGreaterThan(5);
   });
 
-  test("Verify 'Open board' button exists and has correct href", async ({ page }) => {
+  test("Verify 'Open Kanban' button exists and has correct href", async ({ page }) => {
     const baseUrl = getBaseUrl();
 
     await page.goto(baseUrl);
     await page.waitForLoadState("domcontentloaded");
 
-    // Find the "Open board" or "Open Kanban" link
+    // Find the main Kanban link
     const openBoardLink = page.locator('a:has-text("Open board"), a:has-text("Open Kanban")').first();
     await expect(openBoardLink).toBeVisible({ timeout: 10_000 });
 
@@ -132,7 +132,7 @@ test.describe("Homepage Open Board Flow (Tauri/Rust)", () => {
     const href = await openBoardLink.getAttribute("href");
     expect(href).toMatch(/\/kanban$/);
 
-    console.log(`✓ 'Open board' link found with href: ${href}`);
+    console.log(`✓ 'Open Kanban' link found with href: ${href}`);
 
     await page.screenshot({
       path: "test-results/tauri-homepage-open-board-button.png",
@@ -140,4 +140,3 @@ test.describe("Homepage Open Board Flow (Tauri/Rust)", () => {
     });
   });
 });
-

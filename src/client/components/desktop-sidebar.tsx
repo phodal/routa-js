@@ -4,7 +4,7 @@
  * Desktop Sidebar Navigation — VS Code-style left navigation for Tauri app.
  *
  * Provides a compact icon-based navigation with:
- * - Primary navigation icons (Dashboard, Kanban, Traces)
+ * - Primary navigation icons (Overview, Kanban, Traces)
  * - Secondary actions (Settings)
  * - Workspace indicator
  */
@@ -41,8 +41,8 @@ export function DesktopSidebar({
       ),
     },
     {
-      id: "dashboard",
-      label: "Dashboard",
+      id: "overview",
+      label: "Overview",
       href: `/workspace/${workspaceId}`,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

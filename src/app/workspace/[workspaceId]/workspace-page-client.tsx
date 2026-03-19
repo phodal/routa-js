@@ -1,20 +1,19 @@
 "use client";
 
 /**
- * Workspace Dashboard — Desktop-optimized layout with sidebar navigation
+ * Workspace Overview — Desktop-optimized layout with sidebar navigation
  *
  * Route: /workspace/[workspaceId]
  *
  * Features:
  * - VS Code-style sidebar navigation
  * - Compact title bar
- * - Tabs: Kanban (default) | Notes (general + task) | Activity (BG tasks)
+ * - Tabs: Overview | Notes (general + task) | Activity (BG tasks)
  */
 
 import React, { useCallback, useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { HomeInput } from "@/client/components/home-input";
-import { useWorkspaces, useCodebases } from "@/client/hooks/use-workspaces";
+import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useAgentsRpc } from "@/client/hooks/use-agents-rpc";
 import { useNotes } from "@/client/hooks/use-notes";
@@ -25,18 +24,11 @@ import { BackgroundTaskInfo, TaskInfo, SessionInfo, KanbanBoardInfo } from "@/ap
 import { NoteTasksTab } from "@/app/workspace/[workspaceId]/note-tasks-tab";
 import { NotesTab } from "@/app/workspace/[workspaceId]/notes-tab";
 import { BgTasksTab } from "@/app/workspace/[workspaceId]/bg-tasks-tab";
-import { KanbanTab } from "@/app/workspace/[workspaceId]/kanban/kanban-tab";
-
-interface SpecialistOption {
-  id: string;
-  name: string;
-  role: string;
-}
 
 export function WorkspacePageClient({
-  initialTab = "kanban",
+  initialTab = "overview",
 }: {
-  initialTab?: "kanban" | "notes" | "activity";
+  initialTab?: "overview" | "notes" | "activity";
 }) {
   const router = useRouter();
   const params = useParams();
@@ -48,7 +40,6 @@ export function WorkspacePageClient({
 
   const workspacesHook = useWorkspaces();
   const acp = useAcp();
-  const { codebases, fetchCodebases } = useCodebases(workspaceId);
   const agentsHook = useAgentsRpc(workspaceId);
   const notesHook = useNotes(workspaceId);
 
@@ -57,9 +48,8 @@ export function WorkspacePageClient({
   const [boards, setBoards] = useState<KanbanBoardInfo[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
-  const [activeTab, setActiveTab] = useState<"kanban" | "notes" | "activity">(initialTab);
+  const [activeTab, setActiveTab] = useState<"overview" | "notes" | "activity">(initialTab);
   const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
-  const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
   const [notesSubFilter, setNotesSubFilter] = useState<"general" | "tasks">("general");
 
   // Auto-connect ACP
@@ -134,23 +124,6 @@ export function WorkspacePageClient({
     })();
   }, [workspaceId, refreshKey]);
 
-  // Fetch specialists
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/specialists", { cache: "no-store" });
-        const data = await res.json();
-        setSpecialists(Array.isArray(data?.specialists)
-          ? data.specialists.filter((item: { enabled?: boolean }) => item.enabled !== false).map((item: { id: string; name: string; role: string }) => ({
-              id: item.id,
-              name: item.name,
-              role: item.role,
-            }))
-          : []);
-      } catch { /* ignore */ }
-    })();
-  }, []);
-
   const workspace = workspacesHook.workspaces.find((w) => w.id === workspaceId);
   const isDefaultWorkspace = workspaceId === "default";
 
@@ -171,8 +144,7 @@ export function WorkspacePageClient({
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
-    void fetchCodebases();
-  }, [fetchCodebases]);
+  }, []);
 
   if (workspacesHook.loading && !isDefaultWorkspace) {
     return (
@@ -202,6 +174,8 @@ export function WorkspacePageClient({
   const activeAgents = agentsHook.agents.filter((a) => a.status === "ACTIVE");
   const pendingTasks = tasks.filter((t) => t.status === "PENDING" || t.status === "IN_PROGRESS");
   const runningBgTasks = bgTasks.filter((t) => t.status === "RUNNING").length;
+  const activeBoard = boards.find((board) => board.isDefault) ?? boards[0];
+  const latestSession = sessions[0];
 
   const handleDeleteAllGeneralNotes = async () => {
     await Promise.all(
@@ -242,26 +216,6 @@ export function WorkspacePageClient({
         {/* Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-4 py-4">
-            {/* Quick Input - more compact */}
-            <div className="mb-4">
-              <HomeInput
-                workspaceId={workspaceId}
-                onSessionCreated={handleRefresh}
-              />
-            </div>
-
-            {/* Sessions Overview - compact */}
-            {sessions.length > 0 && (
-              <div className="mb-4">
-                <SessionsOverview
-                  sessions={sessions}
-                  workspaceId={workspaceId}
-                  onNavigate={(sessionId) => router.push(`/workspace/${workspaceId}/sessions/${sessionId}`)}
-                  onRefresh={handleRefresh}
-                />
-              </div>
-            )}
-
             {/* Compact Stat Row */}
             <div className="flex items-center gap-4 mb-4 px-1">
               <CompactStat label="Sessions" value={sessions.length} color="blue" />
@@ -272,8 +226,8 @@ export function WorkspacePageClient({
 
             {/* Tab Bar - VS Code style */}
             <div className="mb-4 flex items-center gap-0 border-b border-desktop-border" data-testid="workspace-tab-bar">
-              <DesktopTabButton active={activeTab === "kanban"} onClick={() => setActiveTab("kanban")}>
-                Kanban {tasks.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({tasks.length})</span>}
+              <DesktopTabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>
+                Overview
               </DesktopTabButton>
               <DesktopTabButton active={activeTab === "notes"} onClick={() => setActiveTab("notes")}>
                 Notes {notesHook.notes.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({notesHook.notes.length})</span>}
@@ -284,19 +238,97 @@ export function WorkspacePageClient({
             </div>
 
             {/* Tab Content */}
-            {activeTab === "kanban" && (
-              <KanbanTab
-                workspaceId={workspaceId}
-                boards={boards}
-                tasks={tasks}
-                sessions={sessions}
-                providers={acp.providers}
-                specialists={specialists}
-                codebases={codebases}
-                specialistLanguage="en"
-                onSpecialistLanguageChange={() => {}}
-                onRefresh={handleRefresh}
-              />
+            {activeTab === "overview" && (
+              <div className="space-y-4">
+                <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="max-w-2xl">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                        Workspace overview
+                      </div>
+                      <h1 className="mt-2 text-xl font-semibold text-desktop-text-primary">
+                        {workspace?.title ?? (isDefaultWorkspace ? "Default Workspace" : "Workspace")}
+                      </h1>
+                      <p className="mt-2 text-sm leading-6 text-desktop-text-secondary">
+                        This page now stays focused on context and recovery. Use the dedicated Kanban route as the primary operating surface for active task execution.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/workspace/${workspaceId}/kanban`)}
+                        className="rounded-md bg-desktop-accent px-3 py-2 text-[12px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+                      >
+                        Open Kanban
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push("/traces")}
+                        className="rounded-md border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                      >
+                        Open traces
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <OverviewCard
+                    eyebrow="Primary surface"
+                    title={activeBoard?.name ?? "Kanban board"}
+                    description="Kanban is the canonical work surface for routing, queue supervision, and lane-based execution."
+                    meta={[
+                      `${boards.length} board${boards.length === 1 ? "" : "s"}`,
+                      `${pendingTasks.length} active tasks`,
+                      `${runningBgTasks} background runs`,
+                    ]}
+                    actionLabel="Go to board"
+                    onAction={() => router.push(`/workspace/${workspaceId}/kanban`)}
+                  />
+                  <OverviewCard
+                    eyebrow="Latest recovery point"
+                    title={latestSession?.name ?? latestSession?.sessionId ?? "No recent session"}
+                    description={latestSession
+                      ? "Recover the latest session from this workspace or continue task execution from the board."
+                      : "Create a new requirement from the homepage launcher, then return here for context and recovery."}
+                    meta={[
+                      `${sessions.length} recent sessions`,
+                      `${notesHook.notes.length} notes`,
+                      `${agentsHook.agents.length} agents`,
+                    ]}
+                    actionLabel={latestSession ? "Open latest session" : "Back to launcher"}
+                    onAction={() => {
+                      if (latestSession?.sessionId) {
+                        router.push(`/workspace/${workspaceId}/sessions/${latestSession.sessionId}`);
+                        return;
+                      }
+                      router.push("/");
+                    }}
+                  />
+                </div>
+
+                {sessions.length > 0 && (
+                  <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                          Recent sessions
+                        </div>
+                        <div className="mt-1 text-sm text-desktop-text-secondary">
+                          Recover execution context without reopening the Kanban surface.
+                        </div>
+                      </div>
+                    </div>
+                    <SessionsOverview
+                      sessions={sessions}
+                      workspaceId={workspaceId}
+                      onNavigate={(sessionId) => router.push(`/workspace/${workspaceId}/sessions/${sessionId}`)}
+                      onRefresh={handleRefresh}
+                    />
+                  </section>
+                )}
+              </div>
             )}
 
             {activeTab === "notes" && (
@@ -430,6 +462,53 @@ function CompactStat({
         {sub && <span className="ml-1 text-desktop-text-muted">· {sub}</span>}
       </span>
     </div>
+  );
+}
+
+function OverviewCard({
+  eyebrow,
+  title,
+  description,
+  meta,
+  actionLabel,
+  onAction,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  meta: string[];
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+        {eyebrow}
+      </div>
+      <div className="mt-2 text-lg font-semibold text-desktop-text-primary">
+        {title}
+      </div>
+      <div className="mt-2 text-sm leading-6 text-desktop-text-secondary">
+        {description}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {meta.map((item) => (
+          <span
+            key={item}
+            className="rounded-full border border-desktop-border px-2 py-1 text-[11px] text-desktop-text-secondary"
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={onAction}
+        className="mt-4 rounded-md border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+      >
+        {actionLabel}
+      </button>
+    </section>
   );
 }
 

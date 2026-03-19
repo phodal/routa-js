@@ -1,45 +1,40 @@
 # page-id: home
 # route: /
 # source-page: src/app/page.tsx
-# url: http://127.0.0.1:3000/
+# url: http://localhost:3000/
 # title: Routa - Multi-Agent Coordinator
-# generated-at: 2026-03-13T08:19:53.262Z
+# generated-at: 2026-03-19T11:54:35.221Z
 # generator: playwright
 # playwright-version: 1.58.2
 - banner:
   - img "Routa"
-  - text: Routa
+  - text: Routa Kanban-First Control Surface
   - navigation:
     - link "Kanban":
       - /url: /workspace/default/kanban
-    - button "Integrations":
-      - text: Integrations
-      - img
-    - link "Webhooks":
-      - /url: /settings/webhooks
-    - link "Schedules":
-      - /url: /settings/schedules
     - button "Notifications":
       - img
     - button "Settings":
       - img
     - text: Connected
 - main:
-  - paragraph: What are you working on? (@ files, / skills)
-  - img
-  - button "phodal/routa"
-  - button "main Uncommitted changes":
+  - text: Minimal Home Runtime ready
+  - heading "Start with a requirement." [level=1]
+  - paragraph: Pick a workspace, describe the task, and route it. Everything else can happen after you enter the flow.
+  - text: "Composer Current workspace: Default Workspace"
+  - paragraph
+  - button "Select or clone a repository...":
     - img
-    - text: main
+    - text: Select or clone a repository...
+  - button "opencode":
+    - text: opencode
     - img
-  - text: <repo-root>/.routa/repos/phodal--routa 4M 8U
-  - button "Clear repo selection":
+  - button "Default model":
     - img
-  - button "Claude Code SDK":
-    - text: Claude Code SDK
+    - text: Default model
     - img
   - text: "@ file·# agent·/ skill"
-  - button "Send":
+  - button "Send" [disabled]:
     - img
   - group "Agent mode":
     - button "Multi-Agent":
@@ -59,128 +54,9 @@
   - text: ⏎ send
   - img
   - text: 适合复杂任务 · 自动拆解需求并分配给多个专属 Agent
-  - 'button "/issue-enricher Transforms rough requirements into well-structured GitHub issues. Use when the user provides a vague idea, feature request, or problem description and wants to create a GitHub issue. Analyzes codebase, explores solution approaches, researches relevant libraries, and generates actionable issues using `gh` CLI."'
-  - button "/issue-garbage-collector Two-phase cleanup of duplicate and outdated issue files in docs/issues/. Phase 1 uses Python script for fast pattern matching. Phase 2 uses claude -p for semantic analysis on suspects only."
-  - button "/playwright-cli Automates browser interactions for web testing, form filling, screenshots, and data extraction. Use when the user needs to navigate websites, interact with web pages, fill forms, take screenshots, test web applications, or extract information from web pages."
-  - button "/pr-verify Comprehensive PR verification skill. Analyzes PR body requirements, reviews comments, checks CI status, and performs E2E testing. Use when a PR is ready for final verification before merge."
-  - button "/agent-browser Browser automation CLI for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to \"open a website\", \"fill out a form\", \"click a button\", \"take a screenshot\", \"scrape data from a page\", \"test this web app\", \"login to a site\", \"automate browser actions\", or any task requiring programmatic web interaction."
-  - button "/dogfood Systematically explore and test a web application to find bugs, UX issues, and other problems. Use when asked to \"dogfood\", \"QA\", \"exploratory test\", \"find issues\", \"bug hunt\", \"test this app/site/platform\", or review the quality of a web application. Produces a structured report with full reproduction evidence -- step-by-step screenshots, repro videos, and detailed repro steps for every issue -- so findings can be handed directly to the responsible teams."
-  - button "/electron Automate Electron desktop apps (VS Code, Slack, Discord, Figma, Notion, Spotify, etc.) using agent-browser via Chrome DevTools Protocol. Use when the user needs to interact with an Electron app, automate a desktop app, connect to a running app, control a native app, or test an Electron application. Triggers include \"automate Slack app\", \"control VS Code\", \"interact with Discord app\", \"test this Electron app\", \"connect to desktop app\", or any task requiring automation of a native Electron application."
-  - button "/frontend-design Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics."
-  - button "/slack Interact with Slack workspaces using browser automation. Use when the user needs to check unread channels, navigate Slack, send messages, extract data, find information, search conversations, or automate any Slack task. Triggers include \"check my Slack\", \"what channels have unreads\", \"send a message to\", \"search Slack for\", \"extract from Slack\", \"find who said\", or any task requiring programmatic Slack interaction."
-  - button "/find-skills Helps users discover and install agent skills when they ask questions like \"how do I do X\", \"find a skill for X\", \"is there a skill that can...\", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill."
-  - button "/skill-creator Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations."
-  - button "/skill-installer Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos)."
-  - button "/cloudflare-deploy Deploy applications and infrastructure to Cloudflare using Workers, Pages, and related platform services. Use when the user asks to deploy, host, publish, or set up a project on Cloudflare."
-  - button "/feedback-mastery Navigate difficult conversations and deliver constructive feedback using structured frameworks. Covers the Preparation-Delivery-Follow-up model and Situation-Behavior-Impact (SBI) feedback technique. Use when preparing for difficult conversations, giving feedback, or managing conflicts."
-  - button "/mysql-best-practices MySQL development best practices for schema design, query optimization, and database administration"
-  - heading "Recent Workspaces" [level=2]
-  - button "View all":
-    - text: View all
-    - img
-  - button "Default Workspace codex · crafter 6h ago Echo Hello World auto test · codex 22h ago Echo Hello World 0x01 · codex 22h ago":
-    - text: Default Workspace
-    - link "Open Kanban board":
-      - /url: /workspace/default/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/default
-      - img
-    - img
-    - text: codex · crafter 6h ago
-    - img
-    - text: Echo Hello World auto test · codex 22h ago
-    - img
-    - text: Echo Hello World 0x01 · codex 22h ago
-  - button "Kanban Automation Workspace 1773300581196 Kanban Automation 1773300581196 · codex 1d ago":
-    - text: Kanban Automation Workspace 1773300581196
-    - link "Open Kanban board":
-      - /url: /workspace/a810526c-db81-4d7b-9ad4-4a902a13cc70/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/a810526c-db81-4d7b-9ad4-4a902a13cc70
-      - img
-    - img
-    - text: Kanban Automation 1773300581196 · codex 1d ago
-  - button "Kanban Automation Workspace 1773300580567 Kanban Automation 1773300580567 · codex 1d ago":
-    - text: Kanban Automation Workspace 1773300580567
-    - link "Open Kanban board":
-      - /url: /workspace/9355363f-4977-45b6-be8a-59a5ce880bcd/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/9355363f-4977-45b6-be8a-59a5ce880bcd
-      - img
-    - img
-    - text: Kanban Automation 1773300580567 · codex 1d ago
-  - button "Kanban Repo Workspace 1773300397755 No sessions yet":
-    - text: Kanban Repo Workspace 1773300397755
-    - link "Open Kanban board":
-      - /url: /workspace/bb9b66db-46f0-4f52-9e4a-c13c4156fb58/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/bb9b66db-46f0-4f52-9e4a-c13c4156fb58
-      - img
-    - text: No sessions yet
-  - button "Kanban Repo Workspace 1773299582010 No sessions yet":
-    - text: Kanban Repo Workspace 1773299582010
-    - link "Open Kanban board":
-      - /url: /workspace/cc7e90b5-aead-4647-8ff9-c5cd14d919ab/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/cc7e90b5-aead-4647-8ff9-c5cd14d919ab
-      - img
-    - text: No sessions yet
-  - button "Kanban Automation Workspace 1773299498552 No sessions yet":
-    - text: Kanban Automation Workspace 1773299498552
-    - link "Open Kanban board":
-      - /url: /workspace/b1820bf6-8cd2-4f27-bcaf-91183eed98c1/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/b1820bf6-8cd2-4f27-bcaf-91183eed98c1
-      - img
-    - text: No sessions yet
-  - button "Schema Test Workspace No sessions yet":
-    - text: Schema Test Workspace
-    - link "Open Kanban board":
-      - /url: /workspace/18f9edb3-2e31-491d-a698-ee0940cf2d7b/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/18f9edb3-2e31-491d-a698-ee0940cf2d7b
-      - img
-    - text: No sessions yet
-  - button "Schema Test Workspace No sessions yet":
-    - text: Schema Test Workspace
-    - link "Open Kanban board":
-      - /url: /workspace/3c8af588-c2c6-4376-aba4-b095acfb022c/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/3c8af588-c2c6-4376-aba4-b095acfb022c
-      - img
-    - text: No sessions yet
-  - button "New Workspace No sessions yet":
-    - text: New Workspace
-    - link "Open Kanban board":
-      - /url: /workspace/08a37727-8055-4be2-9ffa-bd59732538ce/kanban
-      - img
-    - link "Open workspace":
-      - /url: /workspace/08a37727-8055-4be2-9ffa-bd59732538ce
-      - img
-    - text: No sessions yet
-  - button "New workspace":
-    - img
-    - text: New workspace
-  - img
-  - text: Current Todos A quick slice of the active board.
+  - button "Default Workspace"
+  - link "Workspace overview":
+    - /url: /workspace/default
   - link "Open Kanban":
-    - /url: /workspace/default/kanban
-    - img
-    - text: Open Kanban
-  - link "Auto Codex Browser Verify BACKLOG · unassigned medium":
-    - /url: /workspace/default/kanban
-  - link "Login Story BACKLOG · unassigned medium":
-    - /url: /workspace/default/kanban
-  - link "Test OpenCode Smoke Issue 1773302698463 DEV · opencode medium":
-    - /url: /workspace/default/kanban
-  - link "Test OpenCode Smoke Issue TODO · opencode medium":
     - /url: /workspace/default/kanban
 - alert
