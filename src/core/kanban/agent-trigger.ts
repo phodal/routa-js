@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import type { Task } from "../models/task";
-import type { KanbanColumn } from "../models/kanban";
+import { getNextHappyPathColumnId, type KanbanColumn } from "../models/kanban";
 import { AgentEventType, type EventBus } from "../events/event-bus";
 import { isClaudeCodeSdkConfigured } from "../acp/claude-code-sdk-adapter";
 import { formatArtifactSummary, resolveKanbanTransitionArtifacts } from "./transition-artifacts";
@@ -76,11 +76,7 @@ export function buildTaskPrompt(
   const canAdvanceToNextColumn = !isBacklogPlanning && !laneAutomationState.hasRemainingSteps;
 
   // Determine the next column for move_card guidance
-  const columnOrder = ["backlog", "todo", "dev", "review", "done"];
-  const currentIdx = columnOrder.indexOf(currentColumnId);
-  const fallbackNextColumnId = currentIdx >= 0 && currentIdx < columnOrder.length - 1
-    ? columnOrder[currentIdx + 1]
-    : undefined;
+  const fallbackNextColumnId = getNextHappyPathColumnId(currentColumnId);
   const nextColumnId = transitionArtifacts.nextColumn?.id ?? fallbackNextColumnId;
   const boardId = task.boardId;
 

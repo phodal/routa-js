@@ -145,6 +145,31 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("Dev");
   });
 
+  it("routes review happy-path guidance to done even if blocked is positioned before it", () => {
+    const task = createTask({
+      id: "task-review-1",
+      title: "Approve review result",
+      objective: "Verify the card advances to done on approval",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "review",
+    });
+
+    const prompt = buildTaskPrompt(task, [
+      { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+      { id: "todo", name: "Todo", position: 1, stage: "todo" },
+      { id: "dev", name: "Dev", position: 2, stage: "dev" },
+      { id: "review", name: "Review", position: 3, stage: "review" },
+      { id: "blocked", name: "Blocked", position: 4, stage: "blocked" },
+      { id: "done", name: "Done", position: 5, stage: "done" },
+    ]);
+
+    expect(prompt).toContain("targetColumnId: \"done\"");
+    expect(prompt).toContain("**Next Column ID:** done");
+    expect(prompt).toContain("Moving this card to Done");
+    expect(prompt).not.toContain("targetColumnId: \"blocked\"");
+  });
+
   it("includes previous run context for multi-step sessions in the same lane", () => {
     const task = createTask({
       id: "task-5",

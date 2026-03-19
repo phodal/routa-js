@@ -74,14 +74,58 @@ export interface KanbanBoard {
   updatedAt: Date;
 }
 
+export const DEFAULT_KANBAN_COLUMN_ORDER: KanbanColumnStage[] = [
+  "backlog",
+  "todo",
+  "dev",
+  "review",
+  "done",
+  "blocked",
+];
+
+export const KANBAN_HAPPY_PATH_COLUMN_ORDER: Exclude<KanbanColumnStage, "blocked">[] = [
+  "backlog",
+  "todo",
+  "dev",
+  "review",
+  "done",
+];
+
 export const DEFAULT_KANBAN_COLUMNS: KanbanColumn[] = [
   { id: "backlog", name: "Backlog", color: "slate", position: 0, stage: "backlog" },
   { id: "todo", name: "Todo", color: "sky", position: 1, stage: "todo" },
   { id: "dev", name: "Dev", color: "amber", position: 2, stage: "dev" },
   { id: "review", name: "Review", color: "violet", position: 3, stage: "review" },
-  { id: "blocked", name: "Blocked", color: "rose", position: 4, stage: "blocked" },
-  { id: "done", name: "Done", color: "emerald", position: 5, stage: "done" },
+  { id: "done", name: "Done", color: "emerald", position: 4, stage: "done" },
+  { id: "blocked", name: "Blocked", color: "rose", position: 5, stage: "blocked" },
 ];
+
+export function getDefaultKanbanColumnPosition(columnId?: string): number {
+  const normalizedColumnId = columnId?.toLowerCase();
+  const index = DEFAULT_KANBAN_COLUMN_ORDER.findIndex((id) => id === normalizedColumnId);
+  return index >= 0 ? index : DEFAULT_KANBAN_COLUMN_ORDER.length;
+}
+
+export function getNextHappyPathColumnId(currentColumnId?: string): string | undefined {
+  const normalizedColumnId = currentColumnId?.toLowerCase() ?? "backlog";
+  const currentIndex = KANBAN_HAPPY_PATH_COLUMN_ORDER.findIndex((id) => id === normalizedColumnId);
+  return currentIndex >= 0 && currentIndex < KANBAN_HAPPY_PATH_COLUMN_ORDER.length - 1
+    ? KANBAN_HAPPY_PATH_COLUMN_ORDER[currentIndex + 1]
+    : undefined;
+}
+
+export function normalizeDefaultKanbanColumnPositions(columns: KanbanColumn[]): KanbanColumn[] {
+  return columns
+    .map((column) => ({ ...column }))
+    .sort((left, right) => {
+      const rankDiff = getDefaultKanbanColumnPosition(left.id) - getDefaultKanbanColumnPosition(right.id);
+      return rankDiff !== 0 ? rankDiff : left.position - right.position;
+    })
+    .map((column, index) => ({
+      ...column,
+      position: index,
+    }));
+}
 
 export function cloneKanbanColumns(columns: KanbanColumn[]): KanbanColumn[] {
   return columns.map((column) => ({

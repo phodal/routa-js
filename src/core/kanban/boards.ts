@@ -6,6 +6,7 @@ import {
   getKanbanAutomationSteps,
   type KanbanColumnAutomation,
   getPrimaryKanbanAutomationStep,
+  normalizeDefaultKanbanColumnPositions,
   normalizeKanbanAutomation,
   type KanbanColumnStage,
 } from "../models/kanban";
@@ -187,13 +188,15 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
 }
 
 function createRecommendedDefaultColumns(): KanbanColumn[] {
-  return applyRecommendedAutomationToColumns(DEFAULT_KANBAN_COLUMNS);
+  return normalizeDefaultKanbanColumnPositions(applyRecommendedAutomationToColumns(DEFAULT_KANBAN_COLUMNS));
 }
 
 export async function ensureDefaultBoard(system: RoutaSystem, workspaceId: string): Promise<ReturnType<typeof createKanbanBoard>> {
   const existing = await system.kanbanBoardStore.getDefault(workspaceId);
   if (existing) {
-    const normalizedColumns = applyRecommendedAutomationToColumns(existing.columns);
+    const normalizedColumns = normalizeDefaultKanbanColumnPositions(
+      applyRecommendedAutomationToColumns(existing.columns),
+    );
     if (JSON.stringify(normalizedColumns) !== JSON.stringify(existing.columns)) {
       const updated = {
         ...existing,

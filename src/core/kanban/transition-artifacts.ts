@@ -1,4 +1,5 @@
 import type { ArtifactType } from "../models/artifact";
+import { getNextHappyPathColumnId } from "../models/kanban";
 
 type ColumnWithArtifacts = {
   id: string;
@@ -8,8 +9,6 @@ type ColumnWithArtifacts = {
     requiredArtifacts?: ArtifactType[];
   };
 };
-
-const DEFAULT_KANBAN_COLUMN_ORDER = ["backlog", "todo", "dev", "review", "blocked", "done"];
 
 const ARTIFACT_LABELS: Record<string, string> = {
   screenshot: "Screenshot",
@@ -36,23 +35,11 @@ export function resolveKanbanTransitionArtifacts(
   currentRequiredArtifacts: ArtifactType[];
   nextRequiredArtifacts: ArtifactType[];
 } {
-  const orderedColumns = columns
-    .slice()
-    .sort((left, right) => {
-      const leftPosition = typeof left.position === "number"
-        ? left.position
-        : DEFAULT_KANBAN_COLUMN_ORDER.indexOf(left.id);
-      const rightPosition = typeof right.position === "number"
-        ? right.position
-        : DEFAULT_KANBAN_COLUMN_ORDER.indexOf(right.id);
-      return leftPosition - rightPosition;
-    });
-
   const resolvedCurrentColumnId = currentColumnId ?? "backlog";
-  const currentIndex = orderedColumns.findIndex((column) => column.id === resolvedCurrentColumnId);
-  const currentColumn = currentIndex >= 0 ? orderedColumns[currentIndex] : undefined;
-  const nextColumn = currentIndex >= 0 && currentIndex < orderedColumns.length - 1
-    ? orderedColumns[currentIndex + 1]
+  const currentColumn = columns.find((column) => column.id === resolvedCurrentColumnId);
+  const nextColumnId = getNextHappyPathColumnId(currentColumn?.id ?? resolvedCurrentColumnId);
+  const nextColumn = nextColumnId
+    ? columns.find((column) => column.id === nextColumnId)
     : undefined;
 
   return {

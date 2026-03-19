@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_KANBAN_COLUMNS } from "@/core/models/kanban";
+import {
+  DEFAULT_KANBAN_COLUMNS,
+  normalizeDefaultKanbanColumnPositions,
+} from "@/core/models/kanban";
 import { applyRecommendedAutomationToColumns } from "../boards";
 
 describe("applyRecommendedAutomationToColumns", () => {
@@ -11,20 +14,38 @@ describe("applyRecommendedAutomationToColumns", () => {
       "kanban-todo-orchestrator",
       "kanban-dev-executor",
       "kanban-review-guard",
-      "kanban-blocked-resolver",
       "kanban-done-reporter",
+      "kanban-blocked-resolver",
     ]);
     expect(columns.map((column) => column.automation?.steps?.[0]?.role)).toEqual([
       "CRAFTER",
       "CRAFTER",
       "CRAFTER",
       "GATE",
-      "CRAFTER",
       "GATE",
+      "CRAFTER",
     ]);
     expect(columns[0].automation?.autoAdvanceOnSuccess).toBe(true);
     expect(columns.slice(1).every((column) => column.automation?.autoAdvanceOnSuccess === false)).toBe(true);
     expect(columns[3]?.automation?.requiredArtifacts).toEqual(["screenshot"]);
+  });
+
+  it("normalizes the default board layout to keep blocked after done", () => {
+    const columns = normalizeDefaultKanbanColumnPositions([
+      { ...DEFAULT_KANBAN_COLUMNS.find((column) => column.id === "blocked")!, position: 4 },
+      { ...DEFAULT_KANBAN_COLUMNS.find((column) => column.id === "done")!, position: 5 },
+      ...DEFAULT_KANBAN_COLUMNS.filter((column) => column.id !== "blocked" && column.id !== "done"),
+    ]);
+
+    expect(columns.map((column) => column.id)).toEqual([
+      "backlog",
+      "todo",
+      "dev",
+      "review",
+      "done",
+      "blocked",
+    ]);
+    expect(columns.map((column) => column.position)).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
   it("backfills legacy backlog automation with system auto-advance", () => {

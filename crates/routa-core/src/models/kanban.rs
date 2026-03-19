@@ -141,19 +141,19 @@ pub fn default_kanban_columns() -> Vec<KanbanColumn> {
             automation: None,
         },
         KanbanColumn {
-            id: "blocked".to_string(),
-            name: "Blocked".to_string(),
-            color: Some("rose".to_string()),
-            position: 4,
-            stage: "blocked".to_string(),
-            automation: None,
-        },
-        KanbanColumn {
             id: "done".to_string(),
             name: "Done".to_string(),
             color: Some("emerald".to_string()),
-            position: 5,
+            position: 4,
             stage: "done".to_string(),
+            automation: None,
+        },
+        KanbanColumn {
+            id: "blocked".to_string(),
+            name: "Blocked".to_string(),
+            color: Some("rose".to_string()),
+            position: 5,
+            stage: "blocked".to_string(),
             automation: None,
         },
     ]
