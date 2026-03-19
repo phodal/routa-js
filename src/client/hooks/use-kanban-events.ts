@@ -12,6 +12,7 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tearingDownRef = useRef(false);
+  const hasConnectedOnceRef = useRef(false);
   const onInvalidateRef = useRef(onInvalidate);
   const connectSseRef = useRef<() => void>(() => {});
 
@@ -33,7 +34,15 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as { type?: string };
-        if (data.type === "connected" || data.type === "kanban:changed") {
+        if (data.type === "connected") {
+          if (hasConnectedOnceRef.current) {
+            onInvalidateRef.current();
+          } else {
+            hasConnectedOnceRef.current = true;
+          }
+          return;
+        }
+        if (data.type === "kanban:changed") {
           onInvalidateRef.current();
         }
       } catch {
@@ -62,10 +71,12 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
     if (workspaceId === "__placeholder__") return;
 
     tearingDownRef.current = false;
+    hasConnectedOnceRef.current = false;
     connectSSE();
 
     return () => {
       tearingDownRef.current = true;
+      hasConnectedOnceRef.current = false;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
