@@ -170,10 +170,6 @@ export default function HomePage() {
                       workspaceId={activeWorkspaceId ?? undefined}
                       onWorkspaceChange={(workspaceId) => {
                         setActiveWorkspaceId(workspaceId);
-                        setRefreshKey((value) => value + 1);
-                      }}
-                      onSessionCreated={() => {
-                        setRefreshKey((value) => value + 1);
                       }}
                     />
                   </div>
