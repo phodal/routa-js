@@ -70,6 +70,13 @@ function createEmptyAutomationStep(index: number): KanbanAutomationStep {
 
 function getDefaultAutomationForStage(stage: string): ColumnAutomationConfig {
   switch (stage as KanbanColumnStage) {
+    case "backlog":
+      return syncAutomationPrimaryStep({
+        enabled: true,
+        transitionType: "entry",
+        autoAdvanceOnSuccess: true,
+        steps: [{ id: "step-1", role: "CRAFTER" }],
+      });
     case "review":
       return syncAutomationPrimaryStep({
         enabled: true,

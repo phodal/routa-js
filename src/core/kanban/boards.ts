@@ -23,7 +23,7 @@ const RECOMMENDED_AUTOMATION_BY_STAGE: Partial<Record<KanbanColumnStage, KanbanC
       specialistName: "Backlog Refiner",
     }],
     transitionType: "entry",
-    autoAdvanceOnSuccess: false,
+    autoAdvanceOnSuccess: true,
   },
   todo: {
     enabled: true,
@@ -110,21 +110,59 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
     }
 
     const currentAutomation = normalizeKanbanAutomation(column.automation) ?? column.automation;
-    const customStepSpecialistIds = getKanbanAutomationSteps(currentAutomation)
+    const currentSteps = getKanbanAutomationSteps(currentAutomation);
+    const recommendedStepSpecialistIds = getKanbanAutomationSteps(recommended)
       .map((step) => step.specialistId)
       .filter((value): value is string => Boolean(value));
+    const recommendedStepSpecialistNames = getKanbanAutomationSteps(recommended)
+      .map((step) => step.specialistName)
+      .filter((value): value is string => Boolean(value));
     const legacySpecialistId = currentAutomation.specialistId;
-    const hasCustomSteps = customStepSpecialistIds.some((specialistId) => !legacySpecialists.includes(specialistId));
+    const hasCustomSteps = getKanbanAutomationSteps(currentAutomation).some((step) => {
+      if (step.specialistId) {
+        return !legacySpecialists.includes(step.specialistId)
+          && !recommendedStepSpecialistIds.includes(step.specialistId);
+      }
+      if (step.specialistName) {
+        return !recommendedStepSpecialistNames.includes(step.specialistName);
+      }
+      return false;
+    });
     const shouldMigrateLegacySpecialist = Boolean(
       legacySpecialistId && legacySpecialists.includes(legacySpecialistId),
     );
+    const shouldMigrateRecommendedSpecialist = Boolean(
+      (currentAutomation.specialistId && currentAutomation.specialistId === recommendedPrimaryStep?.specialistId)
+      || (!currentAutomation.specialistId
+        && currentAutomation.specialistName
+        && currentAutomation.specialistName === recommendedPrimaryStep?.specialistName),
+    );
 
-    if (hasCustomSteps || ((currentAutomation.specialistId || currentAutomation.specialistName) && !shouldMigrateLegacySpecialist)) {
+    if (
+      hasCustomSteps
+      || (
+        (currentAutomation.specialistId || currentAutomation.specialistName)
+        && !shouldMigrateLegacySpecialist
+        && !shouldMigrateRecommendedSpecialist
+      )
+    ) {
       return {
         ...column,
         automation: currentAutomation,
       };
     }
+
+    const mergedRecommendedSteps = getKanbanAutomationSteps(recommended).map((step, index) => {
+      const currentStep = currentSteps[index];
+      return {
+        ...step,
+        providerId: currentStep?.providerId ?? step.providerId,
+        role: currentStep?.role ?? step.role,
+        specialistLocale: currentStep?.specialistLocale
+          ?? currentAutomation.specialistLocale
+          ?? step.specialistLocale,
+      };
+    });
 
     return {
       ...column,
@@ -132,11 +170,14 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
         ...recommended,
         ...currentAutomation,
         enabled: currentAutomation.enabled ?? recommended.enabled,
-        steps: recommended.steps,
+        steps: mergedRecommendedSteps,
         providerId: currentAutomation.providerId ?? recommendedPrimaryStep?.providerId,
         role: currentAutomation.role ?? recommendedPrimaryStep?.role,
         specialistId: recommendedPrimaryStep?.specialistId,
         specialistName: recommendedPrimaryStep?.specialistName,
+        specialistLocale: currentAutomation.specialistLocale
+          ?? currentSteps[0]?.specialistLocale
+          ?? recommendedPrimaryStep?.specialistLocale,
         transitionType: currentAutomation.transitionType ?? recommended.transitionType,
         requiredArtifacts: currentAutomation.requiredArtifacts ?? recommended.requiredArtifacts,
         autoAdvanceOnSuccess: recommended.autoAdvanceOnSuccess,
