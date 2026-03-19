@@ -47,6 +47,15 @@ describe("/api/background-tasks route", () => {
     expect(data.tasks).toEqual([]);
   });
 
+  it("rejects task listing without workspaceId", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/background-tasks"));
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: "workspaceId is required" });
+    expect(listByWorkspace).not.toHaveBeenCalled();
+  });
+
   it("rejects task creation without workspaceId", async () => {
     const request = new NextRequest("http://localhost/api/background-tasks", {
       method: "POST",

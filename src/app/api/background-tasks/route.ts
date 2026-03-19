@@ -21,8 +21,12 @@ function requireWorkspaceId(value: unknown): string | null {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const workspaceId = searchParams.get("workspaceId") ?? "default";
+  const workspaceId = requireWorkspaceId(searchParams.get("workspaceId"));
   const status = searchParams.get("status");
+
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
 
   const system = getRoutaSystem();
 

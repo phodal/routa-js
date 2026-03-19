@@ -12,6 +12,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useWorkspaces } from "@/client/hooks/use-workspaces";
 
 interface BackgroundTask {
   id: string;
@@ -37,17 +38,24 @@ interface TriggerLog {
 }
 
 export default function MessagesPage() {
+  const { workspaces, loading: workspacesLoading } = useWorkspaces();
   const [tab, setTab] = useState<"tasks" | "logs">("tasks");
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [tasks, setTasks] = useState<BackgroundTask[]>([]);
   const [logs, setLogs] = useState<TriggerLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const effectiveWorkspaceId = selectedWorkspaceId || workspaces[0]?.id || "";
 
   useEffect(() => {
+    if (!effectiveWorkspaceId) {
+      return;
+    }
+
     const fetchData = async () => {
       setLoading(true);
       try {
         const [tasksRes, logsRes] = await Promise.all([
-          fetch("/api/background-tasks?limit=50"),
+          fetch(`/api/background-tasks?workspaceId=${encodeURIComponent(effectiveWorkspaceId)}&limit=50`),
           fetch("/api/webhooks/logs?limit=50"),
         ]);
         if (tasksRes.ok) setTasks((await tasksRes.json()).tasks ?? []);
@@ -56,7 +64,7 @@ export default function MessagesPage() {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [effectiveWorkspaceId]);
 
   const formatTime = (ts: string) => new Date(ts).toLocaleString();
 
@@ -89,6 +97,22 @@ export default function MessagesPage() {
           <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">Messages</span>
         </Link>
         <div className="flex gap-1">
+          <select
+            value={effectiveWorkspaceId}
+            onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+            disabled={workspacesLoading || workspaces.length === 0}
+            className="mr-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 dark:border-[#1c1f2e] dark:bg-[#12141c] dark:text-gray-300"
+          >
+            {workspaces.length === 0 ? (
+              <option value="">No workspace</option>
+            ) : (
+              workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.title}
+                </option>
+              ))
+            )}
+          </select>
           <button
             onClick={() => setTab("tasks")}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === "tasks" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}
@@ -157,4 +181,3 @@ export default function MessagesPage() {
     </div>
   );
 }
-
