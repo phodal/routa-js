@@ -76,6 +76,7 @@ export function createRoutaMcpServer(
   // Wire in kanban tools with event bus for column transition events
   const kanbanTools = new KanbanTools(routaSystem.kanbanBoardStore, routaSystem.taskStore);
   kanbanTools.setEventBus(routaSystem.eventBus);
+  kanbanTools.setAutomationSystem(routaSystem);
   toolManager.setKanbanTools(kanbanTools);
 
   // Initialize the workflow orchestrator singleton (listens for column transitions)

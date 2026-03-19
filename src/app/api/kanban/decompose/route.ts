@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
   const system = getRoutaSystem();
   const kanbanTools = new KanbanTools(system.kanbanBoardStore, system.taskStore);
   kanbanTools.setEventBus(system.eventBus);
+  kanbanTools.setAutomationSystem(system);
 
   const result = await kanbanTools.decomposeTasks({
     boardId: body.boardId,

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKanbanBoard } from "../../models/kanban";
 import { createTask } from "../../models/task";
+import { createInMemorySystem } from "../../routa-system";
+import { resetWorkflowOrchestrator } from "../../kanban/workflow-orchestrator-singleton";
 import { InMemoryKanbanBoardStore } from "../../store/kanban-board-store";
 import { InMemoryTaskStore } from "../../store/task-store";
 import { KanbanTools } from "../kanban-tools";
@@ -11,6 +13,7 @@ describe("KanbanTools", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     globalThis.fetch = originalFetch;
+    resetWorkflowOrchestrator();
   });
   it("creates a card on the default board when boardId is omitted", async () => {
     const boardStore = new InMemoryKanbanBoardStore();
@@ -67,6 +70,76 @@ describe("KanbanTools", () => {
       columnId: "backlog",
       cards: [{ title: "Backlog card" }],
     });
+  });
+
+  it("enqueues backlog automation immediately after createCard when attached to a Routa system", async () => {
+    const system = createInMemorySystem();
+    const tools = new KanbanTools(system.kanbanBoardStore, system.taskStore);
+    tools.setEventBus(system.eventBus);
+    tools.setAutomationSystem(system);
+
+    const board = createKanbanBoard({
+      id: "board-1",
+      workspaceId: "default",
+      name: "Default Board",
+      isDefault: true,
+      columns: [
+        {
+          id: "backlog",
+          name: "Backlog",
+          position: 0,
+          stage: "backlog",
+          automation: {
+            enabled: true,
+            transitionType: "entry",
+            providerId: "claude",
+            role: "CRAFTER",
+            specialistId: "kanban-backlog-refiner",
+            specialistName: "Backlog Refiner",
+            steps: [{
+              id: "step-1",
+              providerId: "claude",
+              role: "CRAFTER",
+              specialistId: "kanban-backlog-refiner",
+              specialistName: "Backlog Refiner",
+            }],
+          },
+        },
+      ],
+    });
+    await system.kanbanBoardStore.save(board);
+    await system.kanbanBoardStore.setDefault("default", board.id);
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        result: { sessionId: "session-backlog-1" },
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ result: {} }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await tools.createCard({
+      workspaceId: "default",
+      title: "Auto-start backlog card",
+      description: "Probe automation bootstrap",
+      columnId: "backlog",
+    });
+
+    expect(result.success).toBe(true);
+    const tasks = await system.taskStore.listByWorkspace("default");
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({
+      title: "Auto-start backlog card",
+      columnId: "backlog",
+      triggerSessionId: "session-backlog-1",
+    });
+    expect(tasks[0].sessionIds).toContain("session-backlog-1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("requests a handoff from the previous lane session", async () => {

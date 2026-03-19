@@ -15,6 +15,7 @@ import { KanbanBoardStore } from "../store/kanban-board-store";
 import { TaskStore } from "../store/task-store";
 import { ArtifactStore } from "../store/artifact-store";
 import { createKanbanBoard, KanbanColumn, columnIdToTaskStatus } from "../models/kanban";
+import type { RoutaSystem } from "../routa-system";
 import {
   createTask,
   Task,
@@ -41,6 +42,7 @@ import { getInternalApiOrigin } from "../kanban/agent-trigger";
 export class KanbanTools {
   private eventBus?: EventBus;
   private artifactStore?: ArtifactStore;
+  private automationSystem?: RoutaSystem;
   private kanbanBroadcaster = getKanbanEventBroadcaster();
 
   constructor(
@@ -56,6 +58,11 @@ export class KanbanTools {
   /** Set the artifact store for checking required artifacts */
   setArtifactStore(artifactStore: ArtifactStore): void {
     this.artifactStore = artifactStore;
+  }
+
+  /** Set the Routa system used for direct automation enqueue after card creation */
+  setAutomationSystem(system: RoutaSystem): void {
+    this.automationSystem = system;
   }
 
   // ─── Board Operations ───────────────────────────────────────────────────
@@ -173,7 +180,7 @@ export class KanbanTools {
     });
 
     await this.taskStore.save(task);
-    this.emitCreatedCardTransition(board, column, task);
+    await this.triggerCreatedCardAutomation(board, column, task);
     this.notifyWorkspaceChanged(task.workspaceId, "task", "created", task.id);
 
     return successResult(this.taskToCard(task));
@@ -620,7 +627,7 @@ export class KanbanTools {
         labels: item.labels,
       });
       await this.taskStore.save(task);
-      this.emitCreatedCardTransition(board, column, task);
+      await this.triggerCreatedCardAutomation(board, column, task);
       createdCards.push(this.taskToCard(task));
     }
     this.notifyWorkspaceChanged(board.workspaceId, "task", "created");
@@ -761,21 +768,29 @@ export class KanbanTools {
     return await this.kanbanBoardStore.getDefault(workspaceId);
   }
 
-  private emitCreatedCardTransition(board: { id: string; workspaceId: string }, column: KanbanColumn, task: Task) {
-    if (!this.eventBus || !column.automation?.enabled) {
+  private async triggerCreatedCardAutomation(
+    board: { id: string; workspaceId: string },
+    column: KanbanColumn,
+    task: Task,
+  ): Promise<void> {
+    if (!column.automation?.enabled) {
       return;
     }
 
-    // Lazy-load to avoid circular dependency issues.
-    // Import the module first, then access the function to handle potential circular dependency timing.
-    const routaSystemModule = require("../routa-system") as typeof import("../routa-system");
-    const orchestratorModule = require("../kanban/workflow-orchestrator-singleton") as typeof import("../kanban/workflow-orchestrator-singleton");
+    if (this.automationSystem && this.isAutomationSystemCompatible()) {
+      const orchestratorModule = await import("../kanban/workflow-orchestrator-singleton");
+      orchestratorModule.startWorkflowOrchestrator(this.automationSystem);
+      const result = await orchestratorModule.enqueueKanbanTaskSession(this.automationSystem, {
+        task,
+        expectedColumnId: column.id,
+      });
+      if (result.error) {
+        console.warn(`[KanbanTools] Failed to enqueue automation for card ${task.id}: ${result.error}`);
+      }
+    }
 
-    // Defensive check: ensure the function is available before calling
-    if (typeof orchestratorModule.startWorkflowOrchestrator === "function") {
-      orchestratorModule.startWorkflowOrchestrator(routaSystemModule.getRoutaSystem());
-    } else {
-      console.warn("[KanbanTools] startWorkflowOrchestrator not available yet (circular dependency)");
+    if (!this.eventBus) {
+      return;
     }
 
     emitColumnTransition(this.eventBus, {
@@ -788,5 +803,13 @@ export class KanbanTools {
       fromColumnName: "Created",
       toColumnName: column.name,
     });
+  }
+
+  private isAutomationSystemCompatible(): boolean {
+    return Boolean(
+      this.automationSystem
+      && this.automationSystem.taskStore === this.taskStore
+      && this.automationSystem.kanbanBoardStore === this.kanbanBoardStore,
+    );
   }
 }

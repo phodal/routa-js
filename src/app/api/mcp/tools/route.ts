@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
     const { system } = createRoutaMcpServer({ workspaceId, toolMode });
     const kanbanTools = new KanbanTools(system.kanbanBoardStore, system.taskStore);
     kanbanTools.setEventBus(system.eventBus);
+    kanbanTools.setAutomationSystem(system);
     const result = await executeMcpTool(system.tools, name, args, system.noteTools, system.workspaceTools, kanbanTools);
     return NextResponse.json(result);
   } catch (error) {

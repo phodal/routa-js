@@ -1112,6 +1112,7 @@ export class OpencodeSdkDirectAdapter {
                 const { system } = createRoutaMcpServer({ workspaceId, toolMode: "essential" });
                 const kanbanTools = new KanbanTools(system.kanbanBoardStore, system.taskStore);
                 kanbanTools.setEventBus(system.eventBus);
+                kanbanTools.setAutomationSystem(system);
                 toolResult = await executeMcpTool(system.tools, tc.name, args, system.noteTools, system.workspaceTools, kanbanTools);
               } else {
                 toolResult = { content: [{ type: "text", text: JSON.stringify({ error: "workspaceId not available" }) }], isError: true };
