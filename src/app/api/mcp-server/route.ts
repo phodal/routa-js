@@ -13,7 +13,7 @@
  *   DELETE /api/mcp-server        - Stop the server
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   getOrStartMcpServer,
   getMcpServer,
@@ -21,6 +21,12 @@ import {
 } from "@/core/mcp/mcp-server-singleton";
 
 export const dynamic = "force-dynamic";
+
+function requireWorkspaceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
 
 /**
  * GET: Check the standalone MCP server status.
@@ -49,9 +55,16 @@ export async function GET() {
 /**
  * POST: Start the standalone MCP server.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const workspaceId = process.env.ROUTA_WORKSPACE_ID ?? "default";
+    const body = await request.json().catch(() => null);
+    const workspaceId =
+      requireWorkspaceId(request.nextUrl.searchParams.get("workspaceId")) ??
+      requireWorkspaceId(body?.workspaceId) ??
+      requireWorkspaceId(process.env.ROUTA_WORKSPACE_ID);
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+    }
     const server = await getOrStartMcpServer(workspaceId);
     return NextResponse.json({
       running: true,

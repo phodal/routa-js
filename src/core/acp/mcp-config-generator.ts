@@ -121,7 +121,7 @@ export function generateMultipleRoutaMcpConfigs(
  * it returns its URL directly (e.g. http://127.0.0.1:54321/mcp).
  * Otherwise, falls back to the Next.js /api/mcp route.
  *
- * @param workspaceId - Optional workspace ID (defaults to "default")
+ * @param workspaceId - Optional workspace ID; falls back to ROUTA_WORKSPACE_ID when set
  * @returns Default MCP configuration
  */
 export function getDefaultRoutaMcpConfig(
@@ -130,12 +130,12 @@ export function getDefaultRoutaMcpConfig(
   toolMode?: ToolMode,
   mcpProfile?: McpServerProfile,
 ): RoutaMcpConfig {
-  const effectiveWorkspaceId = workspaceId || process.env.ROUTA_WORKSPACE_ID || "default";
+  const effectiveWorkspaceId = workspaceId || process.env.ROUTA_WORKSPACE_ID || "";
 
   // Build query string with workspace and session context so MCP server can scope notes correctly
   const withContextParams = (url: string) => {
     const params: string[] = [];
-    if (effectiveWorkspaceId && effectiveWorkspaceId !== "default") {
+    if (effectiveWorkspaceId) {
       params.push(`wsId=${encodeURIComponent(effectiveWorkspaceId)}`);
     }
     if (sessionId) {

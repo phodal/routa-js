@@ -35,6 +35,40 @@ interface McpSession {
 
 const sessions = new Map<string, McpSession>();
 
+function requireWorkspaceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function resolveWorkspaceId(request: NextRequest): string | null {
+  const url = new URL(request.url);
+  return (
+    requireWorkspaceId(request.headers.get("routa-workspace-id")) ??
+    requireWorkspaceId(url.searchParams.get("wsId")) ??
+    requireWorkspaceId(process.env.ROUTA_WORKSPACE_ID)
+  );
+}
+
+function missingWorkspaceResponse(id: unknown = null) {
+  return withCorsHeaders(
+    Response.json(
+      {
+        jsonrpc: "2.0",
+        id,
+        error: {
+          code: -32602,
+          message: "workspaceId is required to initialize MCP session",
+        },
+      },
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      },
+    ),
+  );
+}
+
 /**
  * Create a new MCP session: transport + MCP server + tool registrations.
  * Returns the transport so it can handle the current request.
@@ -44,13 +78,12 @@ const sessions = new Map<string, McpSession>();
  *                              for clients that don't follow full MCP protocol
  */
 async function createSession(
-  workspaceId?: string,
+  workspaceId: string,
   enableStatelessMode = false,
   acpSessionId?: string,
   toolMode?: ToolMode,
   mcpProfile?: ReturnType<typeof resolveMcpServerProfile>,
 ): Promise<WebStandardStreamableHTTPServerTransport> {
-  const effectiveWorkspaceId = workspaceId || process.env.ROUTA_WORKSPACE_ID || "default";
   const sessionId = enableStatelessMode
     ? "mcp-stateless"
     : crypto.randomUUID();
@@ -62,15 +95,15 @@ async function createSession(
     // that may not send Accept: text/event-stream header (causing 406 errors).
     enableJsonResponse: true,
     onsessioninitialized: (sid: string) => {
-      sessions.set(sid, { transport, workspaceId: effectiveWorkspaceId });
+      sessions.set(sid, { transport, workspaceId });
       console.log(
-        `[MCP Route] Session created: ${sid} workspaceId=${effectiveWorkspaceId} (active: ${sessions.size})`,
+        `[MCP Route] Session created: ${sid} workspaceId=${workspaceId} (active: ${sessions.size})`,
       );
     },
   });
 
   const { server } = createRoutaMcpServer({
-    workspaceId: effectiveWorkspaceId,
+    workspaceId,
     toolMode: toolMode ?? getGlobalToolMode(),
     mcpProfile,
     sessionId: acpSessionId,
@@ -110,7 +143,7 @@ function resolveProfile(request: NextRequest) {
  */
 async function getOrCreateSession(
   request: NextRequest,
-): Promise<WebStandardStreamableHTTPServerTransport> {
+): Promise<WebStandardStreamableHTTPServerTransport | Response> {
   const sessionId = request.headers.get("mcp-session-id");
   const existing = sessionId ? sessions.get(sessionId) : undefined;
 
@@ -118,16 +151,12 @@ async function getOrCreateSession(
     return existing.transport;
   }
 
-  // Extract workspace ID from:
-  // 1. Custom header (browser client sends Routa-Workspace-Id)
-  // 2. URL query param (AI agents call via URL like /api/mcp?wsId=myWorkspace)
-  // 3. Environment variable (server-level default)
+  const workspaceId = resolveWorkspaceId(request);
+  if (!workspaceId) {
+    return missingWorkspaceResponse();
+  }
+
   const url = new URL(request.url);
-  const workspaceId =
-    request.headers.get("routa-workspace-id") ||
-    url.searchParams.get("wsId") ||
-    process.env.ROUTA_WORKSPACE_ID ||
-    "default";
 
   // ACP session ID embedded in URL by orchestrator (?sid=) so notes are scoped correctly
   const acpSessionId = url.searchParams.get("sid") ?? undefined;
@@ -221,6 +250,9 @@ export async function POST(request: NextRequest) {
     );
 
     const transport = await getOrCreateSession(patchedRequest);
+    if (transport instanceof Response) {
+      return transport;
+    }
     const response = await transport.handleRequest(patchedRequest);
 
     // Check if the SDK returned "Server not initialized" error
@@ -240,10 +272,10 @@ export async function POST(request: NextRequest) {
             );
 
             try {
-              // Extract workspace ID from the original request headers
-              const wsId = request.headers.get("routa-workspace-id") ||
-                process.env.ROUTA_WORKSPACE_ID ||
-                "default";
+              const wsId = resolveWorkspaceId(request);
+              if (!wsId) {
+                return missingWorkspaceResponse(requestBody?.id ?? null);
+              }
               const toolMode = resolveToolMode(request);
               const mcpProfile = resolveProfile(request);
 
