@@ -63,7 +63,7 @@ routa -p "Build user auth system"
 ## 7) Docs and API references
 
 - Architecture: [ARCHITECTURE](./ARCHITECTURE)
-- Fitness checks: [Fitness checklist](https://github.com/phodal/routa-js/blob/main/docs/fitness/README.md)
+- Fitness checks: [Fitness checklist](https://github.com/phodal/routa/blob/main/docs/fitness/README.md)
 - Product spec: [Feature tree](./product-specs/FEATURE_TREE)
 - Release notes: [v0.2.5 notes](./releases/v0.2.5-release-notes)
 
