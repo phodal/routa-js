@@ -14,6 +14,7 @@ Use these documents for:
 |---|---|---|
 | `core-beliefs.md` | Agent-first operating principles for how the repository should store knowledge | active |
 | `golden-rules.md` | Repository-level rules for documentation, architecture, and maintainability | active |
+| `workspace-centric-redesign.md` | Canonical summary of the workspace-first architecture, shipped surface, and remaining transition debt | active |
 
 ## Imported Or Indexed Legacy Specs
 
@@ -43,3 +44,4 @@ The repository still contains historical design material under `.kiro/specs/`. T
 - [FEATURE_TREE.md](/Users/phodal/ai/routa-js/docs/product-specs/FEATURE_TREE.md)
 - [core-beliefs.md](/Users/phodal/ai/routa-js/docs/design-docs/core-beliefs.md)
 - [golden-rules.md](/Users/phodal/ai/routa-js/docs/design-docs/golden-rules.md)
+- [workspace-centric-redesign.md](/Users/phodal/ai/routa-js/docs/design-docs/workspace-centric-redesign.md)
