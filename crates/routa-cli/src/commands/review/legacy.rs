@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::acp_runner::{wait_for_turn_complete_with_updates, wait_for_turn_complete_without_updates};
-use super::output::{print_pretty_json, print_review_result, truncate};
+use super::output::{
+    print_pretty_json, print_review_result, print_security_acp_runtime_diagnostics, truncate,
+};
 use super::stream_parser::{
     extract_agent_output_from_history, extract_agent_output_from_process_output,
     extract_text_from_prompt_result,
@@ -601,7 +603,14 @@ async fn call_security_specialist_via_acp(
         println!("║  CWD       : {:<40} ║", truncate(&cwd, 40));
         println!("╚══════════════════════════════════════════════════════════╝");
 
-        print_security_acp_runtime_diagnostics(provider, &cwd, verbose);
+        let runtime_binary = provider_runtime_binary(provider);
+        let runtime_in_path = find_command_in_path(&runtime_binary);
+        print_security_acp_runtime_diagnostics(
+            provider,
+            &cwd,
+            &runtime_binary,
+            runtime_in_path.as_deref(),
+        );
     }
 
     state
@@ -825,85 +834,6 @@ fn provider_runtime_binary(provider: &str) -> String {
         "codex" => "codex-acp".to_string(),
         _ => normalized,
     }
-}
-
-fn print_security_acp_runtime_diagnostics(provider: &str, cwd: &str, verbose: bool) {
-    if !verbose {
-        return;
-    }
-
-    let env_home = std::env::var("HOME").unwrap_or_else(|_| "<unset>".to_string());
-    let env_path = std::env::var("PATH").unwrap_or_else(|_| "<unset>".to_string());
-    let trimmed_path = if env_path.len() > 140 {
-        format!("{}...", &env_path[..137])
-    } else {
-        env_path
-    };
-
-    let binary = provider_runtime_binary(provider);
-    let resolved_binary =
-        routa_core::shell_env::which(&binary).unwrap_or_else(|| "<not found in PATH>".to_string());
-    let cfg_home = std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
-        if env_home == "<unset>" {
-            "<unset>".to_string()
-        } else {
-            format!("{}/.config", env_home)
-        }
-    });
-    let data_home = std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
-        if env_home == "<unset>" {
-            "<unset>".to_string()
-        } else {
-            format!("{}/.local/share", env_home)
-        }
-    });
-    let cache_home = std::env::var("XDG_CACHE_HOME").unwrap_or_else(|_| {
-        if env_home == "<unset>" {
-            "<unset>".to_string()
-        } else {
-            format!("{}/.cache", env_home)
-        }
-    });
-
-    println!("┌──────────────── ACP Runtime Diagnostics ────────────────┐");
-    println!("│ provider       = {:<34} │", truncate(provider, 34));
-    println!("│ runtime binary = {:<34} │", truncate(&binary, 34));
-    println!(
-        "│ resolved       = {:<34} │",
-        truncate(&resolved_binary, 34)
-    );
-    println!("│ HOME          = {:<34} │", truncate(&env_home, 34));
-    println!("│ XDG_CONFIG    = {:<34} │", truncate(&cfg_home, 34));
-    println!("│ XDG_DATA_HOME = {:<34} │", truncate(&data_home, 34));
-    println!("│ XDG_CACHE_HOME= {:<34} │", truncate(&cache_home, 34));
-    println!("│ CWD           = {:<34} │", truncate(cwd, 34));
-    println!("│ PATH          = {:<34} │", truncate(&trimmed_path, 34));
-    println!(
-        "│ OPENCODE_BIN  = {:<34} │",
-        truncate(
-            &std::env::var("OPENCODE_BIN").unwrap_or_else(|_| "-".to_string()),
-            34
-        )
-    );
-    println!(
-        "│ CODEX_ACP_BIN = {:<34} │",
-        truncate(
-            &std::env::var("CODEX_ACP_BIN").unwrap_or_else(|_| "-".to_string()),
-            34
-        )
-    );
-
-    let probe_path = PathBuf::from(&env_home).join(".config");
-    let probe_status = match fs::metadata(&probe_path) {
-        Ok(meta) if meta.is_dir() => match fs::create_dir_all(probe_path.join("routa-acp-debug")) {
-            Ok(()) => "ok".to_string(),
-            Err(err) => format!("write-failed: {}", err),
-        },
-        Ok(_) => "invalid-config-dir".to_string(),
-        Err(err) => format!("missing-config-dir: {}", err),
-    };
-    println!("│ $HOME/.config = {:<34} │", truncate(&probe_status, 34));
-    println!("└───────────────────────────────────────────────────────┘");
 }
 
 fn build_security_specialist_prompt(payload: &SecurityReviewPayload) -> Result<String, String> {
