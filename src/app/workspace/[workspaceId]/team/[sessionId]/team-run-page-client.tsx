@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { getToolEventLabel } from "@/client/components/chat-panel/tool-call-name";
+import { useAcp } from "@/client/hooks/use-acp";
 import { useNotes } from "@/client/hooks/use-notes";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
@@ -122,6 +123,14 @@ export function TeamRunPageClient() {
       ? (window.location.pathname.match(/^\/workspace\/[^/]+\/team\/([^/]+)/)?.[1] ?? rawSessionId)
       : rawSessionId;
 
+  const acp = useAcp();
+  const {
+    connected: acpConnected,
+    loading: acpLoading,
+    updates: acpUpdates,
+    connect: connectAcp,
+    selectSession,
+  } = acp;
   const workspacesHook = useWorkspaces();
   const notesHook = useNotes(workspaceId, sessionId);
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -129,6 +138,47 @@ export function TeamRunPageClient() {
   const [specialists, setSpecialists] = useState<SpecialistSummary[]>([]);
   const [historiesBySessionId, setHistoriesBySessionId] = useState<Record<string, SessionHistoryEntry[]>>({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastUpdateIndexRef = useRef(0);
+
+  useEffect(() => {
+    if (!acpConnected && !acpLoading) {
+      void connectAcp();
+    }
+  }, [acpConnected, acpLoading, connectAcp]);
+
+  useEffect(() => {
+    if (!acpConnected || sessionId === "__placeholder__") return;
+    selectSession(sessionId);
+  }, [acpConnected, selectSession, sessionId]);
+
+  useEffect(() => {
+    if (!acpUpdates.length) {
+      lastUpdateIndexRef.current = 0;
+      return;
+    }
+
+    const startIndex = lastUpdateIndexRef.current > acpUpdates.length ? 0 : lastUpdateIndexRef.current;
+    const pending = acpUpdates.slice(startIndex);
+    if (!pending.length) return;
+    lastUpdateIndexRef.current = acpUpdates.length;
+
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      setRefreshKey((current) => current + 1);
+      void notesHook.fetchNotes();
+    }, 350);
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [acpUpdates, notesHook]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -522,6 +572,8 @@ export function TeamRunPageClient() {
                     <span>{session.provider ?? "auto"}</span>
                     <span className="opacity-40">/</span>
                     <span>{session.specialistId ?? TEAM_LEAD_SPECIALIST_ID}</span>
+                    <span className="opacity-40">/</span>
+                    <span>{acpConnected ? "live" : "reconnecting"}</span>
                   </div>
                 </div>
               </div>
@@ -563,7 +615,7 @@ export function TeamRunPageClient() {
           <section className="min-h-0 overflow-hidden bg-desktop-bg-primary">
             <div className="border-b border-desktop-border px-4 py-3">
               <h2 className="text-sm font-semibold text-desktop-text-primary">Coordination Feed</h2>
-              <p className="mt-1 text-xs text-desktop-text-secondary">Session launches, spec updates, and task progression.</p>
+              <p className="mt-1 text-xs text-desktop-text-secondary">Live root-session updates, child-session progress, and planning context.</p>
             </div>
             <div className="h-[calc(100%-57px)] overflow-y-auto px-4 py-4">
               <div className="space-y-4">

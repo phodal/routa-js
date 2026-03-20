@@ -411,121 +411,94 @@ export function TeamPageClient() {
                 <div className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
                   Press `Ctrl/Cmd + Enter` to launch. New runs open directly into the Team run view.
                 </div>
-              </div>
-            </section>
 
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_320px]">
-              <div className="rounded-[26px] border border-desktop-border bg-desktop-bg-secondary p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
-                      Team Runs
-                    </div>
-                    <h2 className="mt-2 text-xl font-semibold text-desktop-text-primary">Top-level lead sessions only.</h2>
-                    <p className="mt-1 text-sm text-desktop-text-secondary">
-                      Open any run to inspect the task tree, coordination feed, and team panel.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRefresh}
-                    className="rounded-xl border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-                  >
-                    Refresh
-                  </button>
-                </div>
-
-                {teamRuns.length === 0 ? (
-                  <div className="mt-4 rounded-[22px] border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center dark:border-slate-700 dark:bg-slate-900/40">
-                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                      No Team runs yet.
-                    </div>
-                    <div className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                      Launch a lead session above.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                    {teamRuns.map((run) => (
-                      <button
-                        key={run.session.sessionId}
-                        type="button"
-                        onClick={() => router.push(`/workspace/${workspaceId}/team/${run.session.sessionId}`)}
-                        className="group rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-[0_18px_45px_-30px_rgba(14,116,144,0.38)] dark:border-slate-800 dark:bg-slate-950/30 dark:hover:border-cyan-800"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-lg font-semibold text-slate-900 transition-colors group-hover:text-cyan-700 dark:text-slate-100 dark:group-hover:text-cyan-300">
-                              {run.session.name ?? "Unnamed Team run"}
-                            </div>
-                            <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                              {formatRelativeTime(run.session.createdAt)}
-                            </div>
-                          </div>
-                          <StatusPill status={run.session.acpStatus} />
-                        </div>
-
-                        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                          <RunMetric label="Direct delegates" value={run.directDelegates} />
-                          <RunMetric label="Total sub-sessions" value={run.descendants} />
-                          <RunMetric label="Provider" value={run.session.provider ?? "auto"} />
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-                            {run.session.specialistId ?? TEAM_LEAD_SPECIALIST_ID}
-                          </span>
-                          {run.session.branch && (
-                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70">
-                              {run.session.branch}
-                            </span>
-                          )}
-                          <span className="truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70" title={run.session.cwd}>
-                            {run.session.cwd}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-[26px] border border-desktop-border bg-desktop-bg-secondary p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
-                      Team Roster
-                    </div>
-                    <h2 className="mt-2 text-lg font-semibold text-desktop-text-primary">Compact member list.</h2>
-                  </div>
-                  <div className="rounded-full border border-desktop-border bg-desktop-bg-active px-2.5 py-1 text-[11px] font-semibold text-desktop-text-secondary">
-                    {teamSpecialists.length}
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                   {teamSpecialists.map((specialist) => (
-                    <div
+                    <span
                       key={specialist.id}
-                      className="rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/30"
+                      className={`rounded-full border px-2.5 py-1 font-semibold uppercase tracking-[0.16em] ${getRoleTone(specialist.role)}`}
+                      title={specialist.description ?? specialist.id}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {specialist.name}
-                          </div>
-                          <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                            {specialist.description ?? specialist.id}
-                          </div>
-                        </div>
-                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getRoleTone(specialist.role)}`}>
-                          {specialist.role ?? "agent"}
-                        </span>
-                      </div>
-                    </div>
+                      {specialist.name}
+                    </span>
                   ))}
                 </div>
               </div>
+            </section>
+
+            <section className="rounded-[26px] border border-desktop-border bg-desktop-bg-secondary p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                    Team Runs
+                  </div>
+                  <h2 className="mt-2 text-xl font-semibold text-desktop-text-primary">Top-level lead sessions only.</h2>
+                  <p className="mt-1 text-sm text-desktop-text-secondary">
+                    Open any run to inspect the task tree, coordination feed, and team panel.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  className="rounded-xl border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {teamRuns.length === 0 ? (
+                <div className="mt-4 rounded-[22px] border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center dark:border-slate-700 dark:bg-slate-900/40">
+                  <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    No Team runs yet.
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                    Launch a lead session above.
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                  {teamRuns.map((run) => (
+                    <button
+                      key={run.session.sessionId}
+                      type="button"
+                      onClick={() => router.push(`/workspace/${workspaceId}/team/${run.session.sessionId}`)}
+                      className="group rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-[0_18px_45px_-30px_rgba(14,116,144,0.38)] dark:border-slate-800 dark:bg-slate-950/30 dark:hover:border-cyan-800"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-lg font-semibold text-slate-900 transition-colors group-hover:text-cyan-700 dark:text-slate-100 dark:group-hover:text-cyan-300">
+                            {run.session.name ?? "Unnamed Team run"}
+                          </div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                            {formatRelativeTime(run.session.createdAt)}
+                          </div>
+                        </div>
+                        <StatusPill status={run.session.acpStatus} />
+                      </div>
+
+                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                        <RunMetric label="Direct delegates" value={run.directDelegates} />
+                        <RunMetric label="Total sub-sessions" value={run.descendants} />
+                        <RunMetric label="Provider" value={run.session.provider ?? "auto"} />
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                          {run.session.specialistId ?? TEAM_LEAD_SPECIALIST_ID}
+                        </span>
+                        {run.session.branch && (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70">
+                            {run.session.branch}
+                          </span>
+                        )}
+                        <span className="truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70" title={run.session.cwd}>
+                          {run.session.cwd}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
         </div>
