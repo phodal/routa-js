@@ -147,6 +147,13 @@ def test_parser_no_command():
     assert args.command is None
 
 
+def test_parser_help_formats_without_error():
+    parser = build_parser()
+    help_text = parser.format_help()
+    assert "routa-fitness" in help_text
+    assert "validate" in help_text
+
+
 def test_domains_from_files():
     domains = _domains_from_files(
         [

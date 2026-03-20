@@ -539,7 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.set_defaults(func=cmd_run)
 
-    validate_parser = subparsers.add_parser("validate", help="Check dimension weights sum to 100%")
+    validate_parser = subparsers.add_parser("validate", help="Check dimension weights sum to 100%%")
     validate_parser.set_defaults(func=cmd_validate)
 
     review_trigger_parser = subparsers.add_parser(

@@ -2,12 +2,16 @@
 
 **Guardrails Embedded in the Change Lifecycle**
 
-`routa-fitness` is the Python package behind Routa's fitness and review-trigger workflow.
-It is designed to keep architectural checks close to the change lifecycle instead of treating them as an afterthought at the end of CI.
+`routa-fitness` is the Python package behind Routa's fitness orchestration.
+It is built to keep verification close to the lifecycle of a change, not only at the tail end of CI.
 
-## The Idea
+This package currently powers three kinds of decisions:
 
-Routa treats quality control as a staged guardrail flow:
+- should the change pass baseline quality gates?
+- how much confidence do we have in the current change?
+- should a human reviewer be pulled in because the change is risky?
+
+## Lifecycle View
 
 ```text
 The further to the right, the higher the fix cost,
@@ -21,18 +25,18 @@ and the more human judgment is required.
      |                      |                           |                             |                        |
      |                      |                           |                             |                        |
      |- metrics?            |- compile?                |- API/schema?                |- API parity?          |- merge / release
-     |- thresholds?         |- lint?                   |- impact radius?             |- E2E / visual?        |- write back rules
-     |- hard gates?         |- tests?                  |- suspicious expansion?      |- semgrep / audit?     |- adjust thresholds
+     |- thresholds?         |- lint?                   |- impact radius?             |- E2E / visual?        |- update rules
+     |- hard gates?         |- tests?                  |- suspicious expansion?      |- semgrep / audit?     |- tune thresholds
      |- evidence?           |- coverage?               |- missing evidence?          |- need human review?   |- close the loop
 ```
 
-Outcomes:
+Possible outcomes:
 
-- Pass: continue to review, PR, merge, and release
-- Warn: strengthen evidence or escalate review depth
-- Block: do not merge
+- `PASS`: continue to review, merge, and release
+- `WARN`: strengthen evidence or escalate review depth
+- `BLOCK`: do not merge
 
-Under the flow:
+System foundation:
 
 ```text
 docs/fitness  ->  routa-fitness orchestration  ->  hard gates + weighted score + review triggers
@@ -41,61 +45,72 @@ docs/fitness  ->  routa-fitness orchestration  ->  hard gates + weighted score +
 Feedback loop:
 
 ```text
-Production issue / missed detection
+production issue / missed detection
     -> update docs/fitness
-    -> tune thresholds
-    -> add or refine verification templates
+    -> refine thresholds
+    -> add stronger verification templates
 ```
 
-## What the Package Does
+## What It Does
 
 Today the package provides:
 
 - architecture fitness checks grouped by dimension
 - fast / normal / deep execution tiers
-- change-aware execution for the current git diff
+- change-aware execution against the current git diff
 - hard-gate and weighted-score orchestration
-- review triggers that explicitly ask for human intervention on risky changes
+- `review-trigger` rules that ask for human review on risky changes
 
-This makes Routa useful both as:
+It is useful both as:
 
-- a repository-local fitness runner
-- a reusable base for a more general fitness engine
+- a repository-local fitness runner for Routa
+- the beginning of a more reusable fitness engine
 
-## Install
+## Installation
 
-Install from PyPI:
+### Install from PyPI with `uv`
+
+```bash
+uv tool install routa-fitness
+```
+
+Run without installing globally:
+
+```bash
+uvx routa-fitness --help
+uvx routa-fitness run --tier fast
+uvx routa-fitness review-trigger --base HEAD~1
+```
+
+### Install from PyPI with `pip`
 
 ```bash
 pip install routa-fitness
 ```
 
-For development inside the Routa repository:
+### Install in editable mode for development
+
+```bash
+uv pip install -e tools/routa-fitness
+```
+
+or:
 
 ```bash
 pip install -e tools/routa-fitness
 ```
 
-## CLI
+## Quick Start
 
-```bash
-routa-fitness run --tier fast
-routa-fitness run --changed-only --base HEAD~1
-routa-fitness validate
-routa-fitness review-trigger --base HEAD~1
-```
+### 1. Create a fitness spec
 
-## Fitness Specs
-
-By default, `routa-fitness run` loads executable fitness specs from:
+By default, `routa-fitness run` looks for specs under:
 
 ```text
 docs/fitness/*.md
 ```
 
-Each spec file uses YAML frontmatter to declare a dimension and its metrics.
-
-Minimal example:
+Example:
 
 ```yaml
 ---
@@ -109,23 +124,39 @@ metrics:
     command: npm run lint 2>&1
     hard_gate: true
     tier: fast
+    description: ESLint must pass
+
+  - name: unit_tests
+    command: npm run test:run 2>&1
+    pattern: "Tests\\s+\\d+\\s+passed"
+    hard_gate: true
+    tier: normal
+    description: unit tests must pass
 ---
+
+# Code Quality
+
+Narrative evidence, rules, and ownership notes can live below the frontmatter.
 ```
 
-## Review Triggers
+### 2. Run the checks
 
-`review-trigger` is intentionally different from score-based fitness metrics.
+```bash
+routa-fitness run --tier fast
+routa-fitness run --tier normal
+routa-fitness run --changed-only --base HEAD~1
+routa-fitness validate
+```
 
-- a normal metric answers: "did the automated check pass?"
-- a review trigger answers: "is this change still safe to trust to automation alone?"
+### 3. Add review triggers
 
-By default, review triggers are loaded from:
+By default, `review-trigger` loads:
 
 ```text
 docs/fitness/review-triggers.yaml
 ```
 
-Minimal example:
+Example:
 
 ```yaml
 review_triggers:
@@ -133,8 +164,25 @@ review_triggers:
     type: changed_paths
     paths:
       - src/core/acp/**
+      - src/core/orchestration/**
+      - crates/routa-server/src/api/**
     severity: high
     action: require_human_review
+
+  - name: oversized_change
+    type: diff_size
+    max_files: 12
+    max_added_lines: 600
+    max_deleted_lines: 400
+    severity: medium
+    action: require_human_review
+```
+
+Run it:
+
+```bash
+routa-fitness review-trigger --base HEAD~1
+routa-fitness review-trigger --base HEAD~1 --json
 ```
 
 Example output:
@@ -142,19 +190,103 @@ Example output:
 ```json
 {
   "human_review_required": true,
+  "base": "HEAD~1",
+  "changed_files": [
+    "crates/routa-server/src/api/acp_routes.rs"
+  ],
+  "diff_stats": {
+    "file_count": 13,
+    "added_lines": 936,
+    "deleted_lines": 20
+  },
   "triggers": [
     {
       "name": "high_risk_directory_change",
       "severity": "high",
+      "action": "require_human_review",
       "reasons": [
-        "changed path: src/core/acp/..."
+        "changed path: crates/routa-server/src/api/acp_routes.rs"
       ]
     }
   ]
 }
 ```
 
+## Commands
+
+### `routa-fitness run`
+
+Runs dimension-based fitness checks loaded from `docs/fitness/*.md`.
+
+Common flags:
+
+```bash
+routa-fitness run --tier fast
+routa-fitness run --parallel
+routa-fitness run --dry-run
+routa-fitness run --verbose
+routa-fitness run --changed-only --base HEAD~1
+```
+
+### `routa-fitness validate`
+
+Checks that dimension weights sum to `100%`.
+
+```bash
+routa-fitness validate
+```
+
+### `routa-fitness review-trigger`
+
+Evaluates governance-oriented trigger rules for risky changes.
+
+Common flags:
+
+```bash
+routa-fitness review-trigger --base HEAD~1
+routa-fitness review-trigger --json
+routa-fitness review-trigger --fail-on-trigger
+routa-fitness review-trigger --config docs/fitness/review-triggers.yaml
+```
+
+### `routa-fitness graph ...`
+
+Graph-backed commands support impact analysis, test radius, and AI-friendly review context.
+
+Examples:
+
+```bash
+routa-fitness graph impact --base HEAD~1
+routa-fitness graph test-radius --base HEAD~1
+routa-fitness graph review-context --base HEAD~1 --json
+```
+
+## AI-Friendly Authoring Notes
+
+If an AI agent is generating or updating fitness specs, these conventions work best:
+
+- keep one dimension per file
+- make the frontmatter executable and the body explanatory
+- prefer stable command outputs over fragile text matching
+- use `hard_gate: true` only when failure should really block progress
+- keep review-trigger rules separate from scoring metrics
+- treat markdown as the narrative layer, not the only source of structure
+
+Recommended file layout:
+
+```text
+docs/
+  fitness/
+    README.md
+    code-quality.md
+    security.md
+    rust-api-test.md
+    review-triggers.yaml
+```
+
 ## Python API
+
+### Review trigger example
 
 ```python
 from pathlib import Path
@@ -174,10 +306,42 @@ report = evaluate_review_triggers(rules, changed_files, diff_stats, base="HEAD~1
 print(report.to_dict())
 ```
 
+### Fitness spec loading example
+
+```python
+from pathlib import Path
+
+from routa_fitness.evidence import load_dimensions
+
+dimensions = load_dimensions(Path("docs/fitness"))
+for dimension in dimensions:
+    print(dimension.name, len(dimension.metrics))
+```
+
+## Recommended Hook Integration
+
+For local repositories, a practical pattern is:
+
+- `pre-commit`: run quick lint only
+- `pre-push`: run full checks, then print review-trigger warnings
+- CI: run `routa-fitness run` and publish JSON/report output
+
+That lets automation catch deterministic failures early while still escalating ambiguous risky changes to humans.
+
+## Known Constraints
+
+Current constraints to be aware of:
+
+- the package name on PyPI is `routa-fitness`
+- the default authoring format is still markdown frontmatter under `docs/fitness`
+- the project is evolving toward a cleaner core / adapter / preset split
+- `0.1.1` was publishable but had a `--help` formatting bug; use `0.1.2+` for clean CLI help behavior
+
 ## Status
 
 Current status:
 
 - stable for Routa-internal usage
-- ready to publish as a standalone PyPI package
-- evolving toward a reusable core / adapter / preset architecture
+- installable as a standalone PyPI package
+- suitable for AI-assisted project configuration
+- evolving toward a reusable fitness engine architecture
