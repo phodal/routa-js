@@ -309,15 +309,12 @@ pub async fn security(state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
     final_payload.pre_merged_findings = pre_merged_findings;
 
     let prompt = build_security_specialist_prompt(&final_payload)?;
+    let provider = resolve_security_provider(&specialist);
 
     if options.verbose {
         println!(
             "── Security Review Specialist: {} (provider: {}) ──",
-            specialist.id,
-            specialist
-                .default_provider
-                .clone()
-                .unwrap_or_else(|| "opencode".to_string())
+            specialist.id, provider
         );
     }
 
@@ -326,6 +323,7 @@ pub async fn security(state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
         &specialist,
         &prompt,
         options.verbose,
+        &provider,
         &final_payload.repo_root,
     )
     .await?
@@ -386,13 +384,9 @@ async fn call_security_specialist_via_acp(
     specialist: &SpecialistDef,
     user_request: &str,
     verbose: bool,
+    provider: &str,
     cwd: &str,
 ) -> Result<String, String> {
-    let provider = std::env::var("ROUTA_REVIEW_PROVIDER")
-        .ok()
-        .or_else(|| specialist.default_provider.clone())
-        .unwrap_or_else(|| "opencode".to_string());
-
     let session_id = uuid::Uuid::new_v4().to_string();
     let workspace_id = "default".to_string();
     let cwd = cwd.to_string();
@@ -415,7 +409,7 @@ async fn call_security_specialist_via_acp(
             session_id.clone(),
             cwd.clone(),
             workspace_id.clone(),
-            Some(provider.clone()),
+            Some(provider.to_string()),
             Some(specialist.role.clone()),
             specialist.default_model.clone(),
             None,
@@ -541,6 +535,13 @@ async fn wait_for_turn_complete_with_updates(
             return Ok(());
         }
     }
+}
+
+fn resolve_security_provider(specialist: &SpecialistDef) -> String {
+    std::env::var("ROUTA_REVIEW_PROVIDER")
+        .ok()
+        .or_else(|| specialist.default_provider.clone())
+        .unwrap_or_else(|| "opencode".to_string())
 }
 
 async fn wait_for_turn_complete_without_updates(
