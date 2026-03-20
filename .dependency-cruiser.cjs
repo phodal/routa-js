@@ -9,6 +9,28 @@ module.exports = {
         circular: true,
       },
     },
+    {
+      name: "no-core-to-app",
+      comment: "Core domain logic must not depend on Next.js app routes or route handlers.",
+      severity: "error",
+      from: {
+        path: "^src/core",
+      },
+      to: {
+        path: "^src/app",
+      },
+    },
+    {
+      name: "no-core-to-client",
+      comment: "Core domain logic must not depend on client presentation components or hooks.",
+      severity: "error",
+      from: {
+        path: "^src/core",
+      },
+      to: {
+        path: "^src/client",
+      },
+    },
   ],
   options: {
     tsConfig: {
