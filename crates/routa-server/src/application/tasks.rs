@@ -718,7 +718,10 @@ mod tests {
             .expect("update task plan");
 
         assert_eq!(plan.task.column_id.as_deref(), Some("dev"));
-        assert_eq!(plan.task.trigger_session_id.as_deref(), Some("session-todo"));
+        assert_eq!(
+            plan.task.trigger_session_id.as_deref(),
+            Some("session-todo")
+        );
         assert!(plan.should_trigger_agent);
 
         let _ = fs::remove_file(db_path);

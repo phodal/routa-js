@@ -17,6 +17,18 @@ impl TaskStore {
 
     pub async fn save(&self, task: &Task) -> Result<(), ServerError> {
         let t = task.clone();
+        tracing::info!(
+            target: "routa_task_save",
+            task_id = %t.id,
+            title = %t.title,
+            column_id = ?t.column_id,
+            trigger_session_id = ?t.trigger_session_id,
+            assigned_provider = ?t.assigned_provider,
+            assigned_role = ?t.assigned_role,
+            status = %t.status.as_str(),
+            updated_at = %t.updated_at,
+            "task_store.save"
+        );
         self.db
             .with_conn_async(move |conn| {
                 conn.execute(
