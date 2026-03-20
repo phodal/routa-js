@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
+import { ChatPanel } from "@/client/components/chat-panel";
 import { getToolEventLabel } from "@/client/components/chat-panel/tool-call-name";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useNotes } from "@/client/hooks/use-notes";
@@ -166,34 +167,6 @@ function sessionBadge(session: SessionInfo): string {
   return session.specialistId ?? session.role ?? session.provider ?? "session";
 }
 
-function transcriptEventLabel(update?: SessionHistoryEntry["update"]): string {
-  const updateType = update?.sessionUpdate;
-  switch (updateType) {
-    case "user_message":
-      return "User request";
-    case "agent_message":
-      return "Agent message";
-    case "agent_thought":
-      return "Agent thought";
-    case "tool_call":
-      return getToolEventLabel(update as Record<string, unknown>);
-    case "tool_call_update":
-      return `${getToolEventLabel(update as Record<string, unknown>)} · ${update?.status ?? "update"}`;
-    case "task_completion":
-      return "Task completion";
-    case "session_renamed":
-      return "Session renamed";
-    case "acp_status":
-      return `ACP ${update?.status ?? "status"}`;
-    case "completed":
-    case "ended":
-    case "turn_complete":
-      return "Turn complete";
-    default:
-      return updateType ?? "Update";
-  }
-}
-
 export function TeamRunPageClient() {
   const params = useParams();
   const router = useRouter();
@@ -217,6 +190,13 @@ export function TeamRunPageClient() {
     prompt: acpPrompt,
     selectSession,
   } = acp;
+  const modalAcp = useAcp();
+  const {
+    connected: modalAcpConnected,
+    loading: modalAcpLoading,
+    connect: connectModalAcp,
+    selectSession: selectModalSession,
+  } = modalAcp;
   const workspacesHook = useWorkspaces();
   const notesHook = useNotes(workspaceId, sessionId);
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -240,6 +220,18 @@ export function TeamRunPageClient() {
     if (!acpConnected || sessionId === "__placeholder__") return;
     selectSession(sessionId);
   }, [acpConnected, selectSession, sessionId]);
+
+  useEffect(() => {
+    if (!selectedSessionForModal) return;
+    if (!modalAcpConnected && !modalAcpLoading) {
+      void connectModalAcp();
+    }
+  }, [connectModalAcp, modalAcpConnected, modalAcpLoading, selectedSessionForModal]);
+
+  useEffect(() => {
+    if (!selectedSessionForModal || !modalAcpConnected) return;
+    selectModalSession(selectedSessionForModal);
+  }, [modalAcpConnected, selectedSessionForModal, selectModalSession]);
 
   useEffect(() => {
     if (!sessionId || !acpConnected || acpLoading) return;
@@ -638,14 +630,6 @@ export function TeamRunPageClient() {
     [selectedSessionForModal, sessionStreams],
   );
 
-  const selectedTranscriptEntries = useMemo(() => {
-    if (!selectedSessionStream) return [];
-    return (historiesBySessionId[selectedSessionStream.session.sessionId] ?? []).filter((entry) => {
-      const updateType = entry.update?.sessionUpdate;
-      return updateType && updateType !== "agent_message_chunk" && updateType !== "agent_thought_chunk";
-    });
-  }, [historiesBySessionId, selectedSessionStream]);
-
   if (!session) {
     return (
       <div className="desktop-theme flex h-screen items-center justify-center bg-desktop-bg-primary">
@@ -908,47 +892,76 @@ export function TeamRunPageClient() {
           onClose={() => setSelectedSessionForModal(null)}
           title={`${selectedSessionStream.actor} Session`}
         >
-          <div className="flex h-full flex-col bg-desktop-bg-primary">
-            <div className="border-b border-desktop-border px-4 py-3">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-desktop-text-secondary">
-                <span>{selectedSessionStream.session.name ?? selectedSessionStream.session.sessionId}</span>
-                <span className="opacity-40">/</span>
-                <span>{selectedSessionStream.badge}</span>
-                <span className="opacity-40">/</span>
-                <span>{selectedSessionStream.lastUpdatedLabel}</span>
-                <span className="opacity-40">/</span>
-                <Link
-                  href={`/workspace/${workspaceId}/sessions/${selectedSessionStream.session.sessionId}`}
-                  className="text-cyan-600 transition hover:text-cyan-500"
-                >
-                  Open raw session
-                </Link>
+          <div className="flex h-full min-h-0 bg-desktop-bg-primary">
+            <div className="flex w-80 shrink-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary">
+              <div className="border-b border-desktop-border px-4 py-3">
+                <div className="text-sm font-semibold text-desktop-text-primary">Run Sessions</div>
+                <div className="mt-1 text-xs text-desktop-text-secondary">Reuse the same session UI as kanban/chat.</div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <div className="space-y-2">
+                  {sessionStreams.map((stream) => {
+                    const active = stream.session.sessionId === selectedSessionForModal;
+                    return (
+                      <button
+                        key={stream.session.sessionId}
+                        type="button"
+                        onClick={() => setSelectedSessionForModal(stream.session.sessionId)}
+                        className={`w-full rounded-2xl border p-3 text-left transition ${
+                          active
+                            ? "border-cyan-300 bg-cyan-50/80 dark:border-cyan-800 dark:bg-cyan-950/20"
+                            : "border-desktop-border bg-desktop-bg-primary hover:border-cyan-300 hover:bg-desktop-bg-active/80"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-desktop-text-primary">{stream.actor}</div>
+                            <div className="mt-1 truncate text-[11px] text-desktop-text-secondary">{stream.session.name ?? stream.session.sessionId}</div>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-desktop-border px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-desktop-text-secondary">
+                            {stream.badge}
+                          </span>
+                        </div>
+                        <div className="mt-3 line-clamp-3 text-xs leading-5 text-desktop-text-secondary">
+                          {stream.preview ?? "No transcript content yet."}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              <div className="space-y-3">
-                {selectedTranscriptEntries.length === 0 ? (
-                  <EmptyPanel message="No transcript events yet." />
-                ) : (
-                  selectedTranscriptEntries.map((entry, index) => (
-                    <div key={`${selectedSessionStream.session.sessionId}-${index}`} className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-desktop-text-muted">
-                          {transcriptEventLabel(entry.update)}
-                        </div>
-                        <div className="text-[11px] text-desktop-text-muted">
-                          {selectedSessionStream.lastUpdatedLabel}
-                        </div>
-                      </div>
-                      <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-desktop-text-secondary">
-                        {extractHistoryText(entry.update) ??
-                          summarizeText(entry.update?.rawOutput?.output, 800) ??
-                          summarizeText(entry.update?.error, 800) ??
-                          "No textual payload."}
-                      </div>
-                    </div>
-                  ))
-                )}
+            <div className="min-h-0 flex-1">
+              <div className="border-b border-desktop-border px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-desktop-text-secondary">
+                  <span>{selectedSessionStream.session.name ?? selectedSessionStream.session.sessionId}</span>
+                  <span className="opacity-40">/</span>
+                  <span>{selectedSessionStream.badge}</span>
+                  <span className="opacity-40">/</span>
+                  <span>{selectedSessionStream.lastUpdatedLabel}</span>
+                  <span className="opacity-40">/</span>
+                  <Link
+                    href={`/workspace/${workspaceId}/sessions/${selectedSessionStream.session.sessionId}`}
+                    className="text-cyan-600 transition hover:text-cyan-500"
+                  >
+                    Open raw session
+                  </Link>
+                </div>
+              </div>
+              <div className="h-[calc(80vh-89px)]">
+                <ChatPanel
+                  acp={modalAcp}
+                  activeSessionId={selectedSessionForModal}
+                  onEnsureSession={async () => selectedSessionForModal}
+                  onSelectSession={async (nextSessionId) => {
+                    setSelectedSessionForModal(nextSessionId);
+                    selectModalSession(nextSessionId);
+                  }}
+                  repoSelection={null}
+                  onRepoChange={() => {}}
+                  activeWorkspaceId={workspaceId}
+                  agentRole={selectedSessionStream.session.role}
+                />
               </div>
             </div>
           </div>
