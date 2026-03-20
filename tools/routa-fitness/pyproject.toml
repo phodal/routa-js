@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "routa-fitness"
-version = "0.1.2"
+version = "0.1.3"
 description = "Routa guardrails for architecture fitness, change-aware checks, and human review triggers"
 readme = "README.md"
 license = { text = "MIT" }

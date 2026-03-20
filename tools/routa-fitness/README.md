@@ -88,15 +88,38 @@ uvx routa-fitness review-trigger --base HEAD~1
 pip install routa-fitness
 ```
 
-### Install in editable mode for development
+### Run in a project without global install
 
 ```bash
-uv pip install -e tools/routa-fitness
+uvx --from routa-fitness routa-fitness --help
+uvx --from routa-fitness routa-fitness run --tier fast
 ```
 
-or:
+### Develop the package itself from source
+
+If you are working on the `routa-fitness` package source, clone the Routa repository first and install from the package directory or from the repository root with an explicit relative path.
+
+From the repository root:
 
 ```bash
+git clone https://github.com/phodal/routa.git
+cd routa
+uv pip install -e ./tools/routa-fitness
+```
+
+From the package directory:
+
+```bash
+git clone https://github.com/phodal/routa.git
+cd routa/tools/routa-fitness
+uv pip install -e .
+```
+
+With `pip`:
+
+```bash
+git clone https://github.com/phodal/routa.git
+cd routa
 pip install -e tools/routa-fitness
 ```
 
@@ -104,13 +127,13 @@ pip install -e tools/routa-fitness
 
 ### 1. Create a fitness spec
 
-By default, `routa-fitness run` looks for specs under:
+By default, `routa-fitness run` looks for specs under the current project's:
 
 ```text
 docs/fitness/*.md
 ```
 
-Example:
+Example `docs/fitness/code-quality.md`:
 
 ```yaml
 ---
@@ -150,13 +173,13 @@ routa-fitness validate
 
 ### 3. Add review triggers
 
-By default, `review-trigger` loads:
+By default, `review-trigger` loads the current project's:
 
 ```text
 docs/fitness/review-triggers.yaml
 ```
 
-Example:
+Example `docs/fitness/review-triggers.yaml`:
 
 ```yaml
 review_triggers:
@@ -275,13 +298,38 @@ If an AI agent is generating or updating fitness specs, these conventions work b
 Recommended file layout:
 
 ```text
-docs/
-  fitness/
-    README.md
-    code-quality.md
-    security.md
-    rust-api-test.md
-    review-triggers.yaml
+your-project/
+  docs/
+    fitness/
+      README.md
+      code-quality.md
+      security.md
+      review-triggers.yaml
+```
+
+Minimal bootstrap flow for a new repository:
+
+```bash
+mkdir -p docs/fitness
+cat > docs/fitness/code-quality.md <<'EOF'
+---
+dimension: code_quality
+weight: 100
+threshold:
+  pass: 100
+  warn: 80
+metrics:
+  - name: lint
+    command: npm run lint 2>&1
+    hard_gate: true
+    tier: fast
+---
+
+# Code Quality
+EOF
+
+routa-fitness validate
+routa-fitness run --tier fast
 ```
 
 ## Python API
@@ -335,7 +383,7 @@ Current constraints to be aware of:
 - the package name on PyPI is `routa-fitness`
 - the default authoring format is still markdown frontmatter under `docs/fitness`
 - the project is evolving toward a cleaner core / adapter / preset split
-- `0.1.1` was publishable but had a `--help` formatting bug; use `0.1.2+` for clean CLI help behavior
+- graph commands require the optional graph dependency set
 
 ## Status
 
