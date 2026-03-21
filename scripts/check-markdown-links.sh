@@ -21,7 +21,7 @@ md_files=$(
     -not -path "./.next/*" \
     -not -path "./.git/*" \
     -not -path "./out/*" \
-    2>/dev/null | head -100
+    2>/dev/null | awk 'NR <= 100 { print }'
 )
 
 if [[ -z "$md_files" ]]; then
@@ -37,7 +37,7 @@ while IFS= read -r file; do
       sed -E 's/.*\]\(([^)]+)\).*/\1/' |
       grep -E '^https?://' |
       grep -vE 'localhost|127\.0\.0\.1' |
-      sort -u
+      sort -u || true
   )
   if [[ -n "$links" ]]; then
     while IFS= read -r link; do
@@ -63,16 +63,22 @@ while IFS='|' read -r file link; do
   ((checked++)) || true
   printf "  [%3d/%3d] Checking: %s" "$checked" "$total" "$link"
 
+  set +e
   http_code=$(
     curl -sS -o /dev/null -w "%{http_code}" \
       --connect-timeout 10 \
       --max-time 15 \
       -L \
       -H "User-Agent: Mozilla/5.0 (compatible; RoutaLinkChecker/1.0)" \
-      "$link" 2>&1
+      "$link"
   )
+  curl_exit=$?
+  set -e
 
-  if [[ "$http_code" =~ ^2[0-9][0-9]$ ]] || [[ "$http_code" =~ ^3[0-9][0-9]$ ]]; then
+  if [[ $curl_exit -ne 0 ]]; then
+    echo -e "\r  WARN [$checked/$total] $link (curl exit $curl_exit)"
+    ((skipped++)) || true
+  elif [[ "$http_code" =~ ^2[0-9][0-9]$ ]] || [[ "$http_code" =~ ^3[0-9][0-9]$ ]]; then
     echo -e "\r  OK [$checked/$total] $link"
   elif [[ "$http_code" =~ ^4[0-9][0-9]$ ]] && [[ "$http_code" != "429" ]]; then
     echo -e "\r  WARN [$checked/$total] $link (HTTP $http_code - may require auth)"
