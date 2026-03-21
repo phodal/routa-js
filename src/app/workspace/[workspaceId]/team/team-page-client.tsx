@@ -53,6 +53,21 @@ function buildTeamRunName(requirement: string): string {
   return normalized.length > 56 ? `Team - ${normalized.slice(0, 53)}...` : `Team - ${normalized}`;
 }
 
+function isTeamLeadRun(session: SessionInfo): boolean {
+  if (session.parentSessionId) return false;
+  if (session.specialistId === TEAM_LEAD_SPECIALIST_ID) return true;
+  if (session.role?.toUpperCase() !== "ROUTA") return false;
+
+  const normalizedName = (session.name ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!normalizedName) return false;
+
+  return (
+    normalizedName.startsWith("team -")
+    || normalizedName.startsWith("team run")
+    || normalizedName.includes("team lead")
+  );
+}
+
 function getRoleTone(role?: string): string {
   switch (role?.toUpperCase()) {
     case "ROUTA":
@@ -141,7 +156,7 @@ export function TeamPageClient() {
     };
 
     return sessions
-      .filter((session) => session.specialistId === TEAM_LEAD_SPECIALIST_ID && !session.parentSessionId)
+      .filter((session) => isTeamLeadRun(session))
       .map((session) => ({
         session,
         descendants: countDescendants(session.sessionId),
@@ -169,13 +184,39 @@ export function TeamPageClient() {
   }, []);
 
   const handleTeamSessionCreated = useCallback((sessionId: string, promptText: string) => {
+    const optimisticName = buildTeamRunName(promptText);
+    setSessions((current) => {
+      if (current.some((session) => session.sessionId === sessionId)) {
+        return current.map((session) => (
+          session.sessionId === sessionId
+            ? {
+              ...session,
+              name: optimisticName,
+              role: session.role ?? "ROUTA",
+              specialistId: session.specialistId ?? TEAM_LEAD_SPECIALIST_ID,
+            }
+            : session
+        ));
+      }
+
+      return [{
+        sessionId,
+        name: optimisticName,
+        cwd: "",
+        workspaceId,
+        role: "ROUTA",
+        specialistId: TEAM_LEAD_SPECIALIST_ID,
+        createdAt: new Date().toISOString(),
+      }, ...current];
+    });
+
     void desktopAwareFetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: buildTeamRunName(promptText) }),
+      body: JSON.stringify({ name: optimisticName }),
     }).catch(() => {});
     setRefreshKey((current) => current + 1);
-  }, []);
+  }, [workspaceId]);
 
   if (workspacesHook.loading && workspaceId !== "default") {
     return (
