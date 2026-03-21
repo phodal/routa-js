@@ -215,6 +215,7 @@ export function HomeInput({
           def ? def.modelName : modelAliasOrName,
           idempotencyKey,
           effectiveSpecialistId ?? undefined,
+          undefined,
           def?.baseUrl ?? conn.baseUrl,
           def?.apiKey ?? conn.apiKey,
           repoSelection?.branch,

@@ -1034,7 +1034,7 @@ export function SessionPageClient() {
         apiKey,
       } = resolveAgentConfig(role, provider, undefined, selectedSpec);
       console.log(`[handleCreateSession] Creating session: provider=${effectiveProvider}, model=${resolvedModel}, role=${role}, specialistId=${selectedSpecialistId}`);
-      const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId, resolvedModel, undefined, selectedSpecialistId ?? undefined, baseUrl, apiKey, branch);
+      const result = await acp.createSession(cwd, effectiveProvider, undefined, role, workspaceId, resolvedModel, undefined, selectedSpecialistId ?? undefined, undefined, baseUrl, apiKey, branch);
       if (result?.sessionId) {
         router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       }
@@ -1076,7 +1076,7 @@ export function SessionPageClient() {
     } = resolveAgentConfig(role, provider, model, selectedSpec);
     const branch = repoSelection?.branch || undefined;
     console.log(`[ensureSessionForChat] Creating session: provider=${effectiveProvider}, role=${role}, model=${effectiveModel}, specialistId=${selectedSpecialistId}`);
-    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, effectiveModel, undefined, selectedSpecialistId ?? undefined, baseUrl, apiKey, branch);
+    const result = await acp.createSession(cwd, effectiveProvider, modeId, role, workspaceId, effectiveModel, undefined, selectedSpecialistId ?? undefined, undefined, baseUrl, apiKey, branch);
     if (result?.sessionId) {
       router.push(`/workspace/${workspaceId}/sessions/${result.sessionId}`);
       return result.sessionId;
