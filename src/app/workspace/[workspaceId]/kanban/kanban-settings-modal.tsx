@@ -715,11 +715,52 @@ export function KanbanSettingsModal({
           </div>
 
           <div className="border-t border-slate-200/80 bg-slate-50/80 px-4 py-2.5 dark:border-slate-800 dark:bg-[#0a0f16] sm:px-5">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0 space-y-1">
-                <p className="text-xs leading-5 text-slate-500 dark:text-slate-400 lg:truncate">
-                  Changes apply to this board only. Hidden columns stay in data; automation changes only affect future transitions.
-                </p>
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+                  <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
+                    <input
+                      type="text"
+                      value={kanbanExportWorkspaceId}
+                      onChange={(event) => handleKanbanExportWorkspaceChange(event.target.value)}
+                      placeholder={board.workspaceId || "default"}
+                      className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100 sm:w-32"
+                      aria-label="Kanban YAML workspace ID"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleExportKanbanYaml()}
+                      disabled={isExportingKanbanYaml}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+                    >
+                      {isExportingKanbanYaml ? "Exporting…" : "Export YAML"}
+                    </button>
+                    <input
+                      ref={kanbanImportInputRef}
+                      type="file"
+                      accept=".yaml,.yml,text/yaml,application/yaml"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          void handleImportKanbanYaml(file);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => kanbanImportInputRef.current?.click()}
+                      disabled={isImportingKanbanYaml}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+                    >
+                      {isImportingKanbanYaml ? "Importing…" : "Import YAML"}
+                    </button>
+                  </div>
+                  <div className="hidden h-6 w-px shrink-0 bg-slate-200 dark:bg-slate-700 lg:block" aria-hidden="true" />
+                  <p className="min-w-0 text-xs leading-5 text-slate-500 dark:text-slate-400 lg:flex-1 lg:truncate">
+                    Changes apply to this board only. Hidden columns stay in data; automation changes only affect future transitions.
+                  </p>
+                </div>
                 {kanbanYamlError ? (
                   <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300">
                     {kanbanYamlError}
@@ -732,60 +773,21 @@ export function KanbanSettingsModal({
                 ) : null}
               </div>
 
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <input
-                  type="text"
-                  value={kanbanExportWorkspaceId}
-                  onChange={(event) => handleKanbanExportWorkspaceChange(event.target.value)}
-                  placeholder={board.workspaceId || "default"}
-                  className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100 sm:w-36"
-                  aria-label="Kanban YAML workspace ID"
-                />
+              <div className="flex items-center justify-end gap-2">
                 <button
-                  type="button"
-                  onClick={() => void handleExportKanbanYaml()}
-                  disabled={isExportingKanbanYaml}
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+                  onClick={onClose}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-200 px-4 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#111722]"
                 >
-                  {isExportingKanbanYaml ? "Exporting…" : "Export YAML"}
+                  Cancel
                 </button>
-                <input
-                  ref={kanbanImportInputRef}
-                  type="file"
-                  accept=".yaml,.yml,text/yaml,application/yaml"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleImportKanbanYaml(file);
-                    }
-                  }}
-                />
                 <button
-                  type="button"
-                  onClick={() => kanbanImportInputRef.current?.click()}
-                  disabled={isImportingKanbanYaml}
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+                  onClick={() => void handleSave()}
+                  disabled={saving}
+                  className="rounded-xl bg-slate-900 px-5 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
                 >
-                  {isImportingKanbanYaml ? "Importing…" : "Import YAML"}
+                  {saving ? "Saving..." : "Save board settings"}
                 </button>
-                <div className="w-full sm:hidden" />
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    onClick={onClose}
-                    disabled={saving}
-                    className="rounded-xl border border-slate-200 px-4 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#111722]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => void handleSave()}
-                    disabled={saving}
-                    className="rounded-xl bg-slate-900 px-5 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
-                  >
-                    {saving ? "Saving..." : "Save board settings"}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
