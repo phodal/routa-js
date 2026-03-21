@@ -49,13 +49,13 @@ describe("specialist-file-loader", () => {
   it("loads yaml specialists recursively while skipping locale directories in the base scan", () => {
     const rootDir = createTempDir();
     writeYamlSpecialist(path.join(rootDir, "core", "developer.yaml"), "developer", "Developer", "Developer body");
-    writeYamlSpecialist(path.join(rootDir, "team", "qa.yaml"), "qa", "QA", "QA body");
+    writeYamlSpecialist(path.join(rootDir, "team", "qa.yaml"), "team-qa", "QA", "QA body");
     writeYamlOverlay(path.join(rootDir, "zh-CN", "developer.yaml"), "developer", "开发者", "开发者 body");
-    writeYamlOverlay(path.join(rootDir, "locales", "zh-CN", "qa.yaml"), "qa", "测试", "测试 body");
+    writeYamlOverlay(path.join(rootDir, "locales", "zh-CN", "team", "qa.yaml"), "team-qa", "测试", "测试 body");
 
     const loaded = loadSpecialistsFromDirectory(rootDir, "bundled");
 
-    expect(loaded.map((entry) => entry.id).sort()).toEqual(["developer", "qa"]);
+    expect(loaded.map((entry) => entry.id).sort()).toEqual(["developer", "team-qa"]);
     expect(loaded.every((entry) => entry.locale === undefined)).toBe(true);
   });
 
@@ -114,6 +114,26 @@ describe("specialist-file-loader", () => {
     const loaded = loadSpecialistsFromDirectory(rootDir, "bundled");
 
     expect(loaded.map((entry) => entry.id)).toEqual(["team-frontend-dev"]);
+  });
+
+  it("skips bundled team directory files even when they use non-team ids", () => {
+    const rootDir = createTempDir();
+    writeYamlSpecialist(
+      path.join(rootDir, "team", "backend-dev.yaml"),
+      "team-backend-dev",
+      "Backend Dev",
+      "Backend body"
+    );
+    writeYamlSpecialist(
+      path.join(rootDir, "team", "backend-dev-bill.yaml"),
+      "backend-dev-bill",
+      "Backend Dev Bill",
+      "Bill body"
+    );
+
+    const loaded = loadSpecialistsFromDirectory(rootDir, "bundled");
+
+    expect(loaded.map((entry) => entry.id)).toEqual(["team-backend-dev"]);
   });
 
   it("allows non-canonical team ids in user specialist directories", () => {
@@ -223,7 +243,7 @@ markdown prompt
   it("fails when a runtime directory contains duplicate ids", () => {
     const rootDir = createTempDir();
     writeYamlSpecialist(path.join(rootDir, "core", "developer.yaml"), "developer", "Developer", "first");
-    writeYamlSpecialist(path.join(rootDir, "team", "developer.yaml"), "developer", "Developer Duplicate", "second");
+    writeYamlSpecialist(path.join(rootDir, "review", "developer.yaml"), "developer", "Developer Duplicate", "second");
 
     expect(() => loadSpecialistsFromDirectory(rootDir, "bundled")).toThrowError(
       expect.objectContaining({

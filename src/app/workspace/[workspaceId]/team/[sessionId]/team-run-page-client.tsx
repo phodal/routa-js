@@ -98,6 +98,7 @@ interface SessionLaneSnippet {
   id: string;
   label: string;
   text: string;
+  kind: "user" | "message" | "tool" | "report" | "error";
   tone: "default" | "tool" | "complete" | "blocked";
 }
 
@@ -529,6 +530,15 @@ function laneSnippetTone(update?: SessionHistoryEntry["update"]): SessionLaneSni
   return "default";
 }
 
+function laneSnippetKind(update?: SessionHistoryEntry["update"]): SessionLaneSnippet["kind"] {
+  if (update?.sessionUpdate === "user_message") return "user";
+  if (update?.sessionUpdate === "agent_message") return "message";
+  if (update?.sessionUpdate === "tool_call_update") return "tool";
+  if (update?.sessionUpdate === "task_completion") return "report";
+  if (update?.sessionUpdate === "acp_status" && update.status === "error") return "error";
+  return "message";
+}
+
 function laneSnippetLabel(update?: SessionHistoryEntry["update"]): string {
   if (!update?.sessionUpdate) return "Update";
   if (update.sessionUpdate === "tool_call_update") {
@@ -565,6 +575,7 @@ function buildLaneSnippets(history: SessionHistoryEntry[], maxSnippets = 5): Ses
         id: `${entry.sessionId}-${index}`,
         label: laneSnippetLabel(update),
         text,
+        kind: laneSnippetKind(update),
         tone: laneSnippetTone(update),
       } satisfies SessionLaneSnippet;
     })
@@ -746,6 +757,15 @@ export function TeamRunPageClient() {
       }
     };
   }, [acpUpdates, notesHook]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      setRefreshKey((current) => current + 1);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1388,7 +1408,7 @@ export function TeamRunPageClient() {
     const leadSnippets = buildLaneSnippets(rootHistory.filter((entry) => {
       const type = entry.update?.sessionUpdate;
       return type === "user_message" || type === "agent_message" || type === "tool_call_update" || type === "task_completion";
-    }), 6);
+    }), 4);
 
     const leadLane: SessionLaneItem = {
       id: `lane-${sessionId}`,
@@ -1420,6 +1440,7 @@ export function TeamRunPageClient() {
             id: `${stream.session.sessionId}-report-back`,
             label: "Report back",
             text: completion.completionSummary,
+            kind: "report",
             tone: normalizeTaskStatus(completion.taskStatus) === "blocked" ? "blocked" : "complete",
           });
         }
@@ -1434,7 +1455,7 @@ export function TeamRunPageClient() {
           lastUpdatedLabel: stream.lastUpdatedLabel,
           provider: stream.session.provider,
           eventCount: stream.eventCount,
-          snippets: snippets.slice(-5),
+          snippets: snippets.slice(-6),
           completionSummary: completion?.completionSummary,
           pendingQuestion: pendingQuestionsBySessionId.get(stream.session.sessionId) ?? null,
         } satisfies SessionLaneItem;
@@ -1601,7 +1622,7 @@ export function TeamRunPageClient() {
                 <div>
                   <h2 className="text-base font-semibold text-desktop-text-primary">Live Sessions</h2>
                   <p className="mt-0.5 text-xs leading-5 text-desktop-text-secondary">
-                    Lead decisions plus live member session lanes. Members report back here when they finish.
+                    Auto-refreshing lead and member transcripts. Reports back and pending questions stay inline with the lane.
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
@@ -1916,6 +1937,28 @@ function SessionStatusPill({ status }: { status: TeamMemberStatus }) {
   );
 }
 
+function snippetDotClass(snippet: SessionLaneSnippet): string {
+  if (snippet.kind === "report") {
+    return snippet.tone === "blocked" ? "bg-rose-500" : "bg-emerald-500";
+  }
+  if (snippet.kind === "tool") return "bg-cyan-500";
+  if (snippet.kind === "error") return "bg-rose-500";
+  if (snippet.kind === "user") return "bg-slate-500";
+  return "bg-slate-300";
+}
+
+function snippetBodyClass(snippet: SessionLaneSnippet): string {
+  if (snippet.kind === "report") {
+    return snippet.tone === "blocked"
+      ? "border-rose-200 bg-rose-50/90 dark:border-rose-500/20 dark:bg-rose-500/10"
+      : "border-emerald-200 bg-emerald-50/90 dark:border-emerald-500/20 dark:bg-emerald-500/10";
+  }
+  if (snippet.kind === "tool") return "border-cyan-200 bg-cyan-50/90 dark:border-cyan-500/20 dark:bg-cyan-500/10";
+  if (snippet.kind === "error") return "border-rose-200 bg-rose-50/90 dark:border-rose-500/20 dark:bg-rose-500/10";
+  if (snippet.kind === "user") return "border-slate-200 bg-slate-50/90 dark:border-slate-600 dark:bg-slate-800/50";
+  return "border-desktop-border bg-desktop-bg-primary";
+}
+
 function SessionLaneCard({
   lane,
   activeSessionId,
@@ -1948,8 +1991,8 @@ function SessionLaneCard({
   } satisfies ChatMessage : null;
 
   return (
-    <div className={`rounded-[16px] border p-3 ${isActive ? "border-cyan-300 bg-cyan-50/60 dark:border-cyan-800 dark:bg-cyan-950/20" : "border-desktop-border bg-desktop-bg-secondary"}`}>
-      <div className="flex items-start justify-between gap-3">
+    <div className={`rounded-[12px] border ${isActive ? "border-cyan-300 bg-cyan-50/50 dark:border-cyan-800 dark:bg-cyan-950/20" : "border-desktop-border bg-desktop-bg-secondary"}`}>
+      <div className="flex items-start justify-between gap-2.5 px-3 py-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
             <button
@@ -1973,61 +2016,70 @@ function SessionLaneCard({
               </>
             )}
           </div>
-          <div className="mt-2 truncate text-sm font-semibold text-desktop-text-primary">{lane.sessionName}</div>
-          {lane.completionSummary && (
-            <div className="mt-2 rounded-[12px] border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] leading-5 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-              <span className="mr-1 font-semibold uppercase tracking-[0.12em]">Report back</span>
-              {lane.completionSummary}
-            </div>
-          )}
+          <div className="mt-1 truncate text-[13px] font-semibold text-desktop-text-primary">{lane.sessionName}</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={onOpenViewer}
-            className="rounded-[12px] border border-desktop-border bg-desktop-bg-primary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+            className="rounded-[10px] border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[10px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
           >
             Open viewer
           </button>
           <Link
             href={`/workspace/${workspaceId}/sessions/${lane.sessionId}`}
-            className="rounded-[12px] bg-desktop-accent px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+            className="rounded-[10px] bg-desktop-accent px-2 py-1 text-[10px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
           >
             Raw session
           </Link>
         </div>
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="border-t border-desktop-border/80 px-3 py-2">
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-muted">
+          <span>Transcript</span>
+          <span>{lane.snippets.length} items</span>
+        </div>
         {lane.snippets.length === 0 ? (
-          <div className="rounded-[12px] border border-dashed border-desktop-border px-3 py-2 text-[11px] text-desktop-text-secondary">
+          <div className="rounded-[10px] border border-dashed border-desktop-border px-3 py-2 text-[11px] text-desktop-text-secondary">
             No transcript content yet.
           </div>
         ) : (
-          lane.snippets.map((snippet) => (
-            <div
-              key={snippet.id}
-              className={`rounded-[12px] border px-3 py-2 ${
-                snippet.tone === "complete"
-                  ? "border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/20 dark:bg-emerald-500/10"
-                  : snippet.tone === "blocked"
-                    ? "border-rose-200 bg-rose-50/80 dark:border-rose-500/20 dark:bg-rose-500/10"
-                    : snippet.tone === "tool"
-                      ? "border-cyan-200 bg-cyan-50/80 dark:border-cyan-500/20 dark:bg-cyan-500/10"
-                      : "border-desktop-border bg-desktop-bg-primary"
-              }`}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-muted">
-                {snippet.label}
+          <div className="max-h-24 space-y-1.5 overflow-y-auto pr-1">
+            {lane.snippets.map((snippet) => (
+              <div
+                key={snippet.id}
+                className={`flex gap-2 ${snippet.kind === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {snippet.kind !== "user" && (
+                  <div className="flex w-14 shrink-0 flex-col items-end pt-0.5 text-right">
+                    <span className={`h-2 w-2 rounded-full ${snippetDotClass(snippet)}`} />
+                    <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-desktop-text-muted">
+                      {snippet.label}
+                    </span>
+                  </div>
+                )}
+                <div className={`min-w-0 ${snippet.kind === "user" ? "max-w-[85%]" : "flex-1"}`}>
+                  {snippet.kind === "user" && (
+                    <div className="mb-0.5 text-right text-[9px] font-semibold uppercase tracking-[0.12em] text-desktop-text-muted">
+                      {snippet.label}
+                    </div>
+                  )}
+                  <div className={`rounded-[10px] border px-2.5 py-1.5 ${snippetBodyClass(snippet)}`}>
+                    <div className="line-clamp-1 text-[11px] leading-5 text-desktop-text-secondary">{snippet.text}</div>
+                  </div>
+                </div>
               </div>
-              <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{snippet.text}</div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
       {pendingQuestionMessage && onSubmitQuestion && lane.pendingQuestion && (
-        <div className="mt-3">
+        <div className="border-t border-desktop-border/80 px-3 py-2">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-muted">
+            Awaiting input
+          </div>
           <AskUserQuestionBubble
             message={pendingQuestionMessage}
             onSubmit={(toolCallId, response) => onSubmitQuestion(lane.pendingQuestion!.sessionId, toolCallId, response)}

@@ -204,9 +204,6 @@ function shouldSkipBundledTeamSpecialist(filePath: string, id: string): boolean 
   if (!filePath.includes(`${path.sep}team${path.sep}`)) {
     return false;
   }
-  if (!id.startsWith("team-")) {
-    return false;
-  }
   return !isCanonicalTeamSpecialistId(id);
 }
 

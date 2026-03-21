@@ -175,6 +175,9 @@ function buildTeamLeadFirstTurnContract(): string {
     "3. Do not create placeholder teammates or idle agents just to mirror the roster.",
     "4. If codebase context is unknown, your first action must be `create_task` plus `delegate_task_to_agent` for a real `researcher` child session.",
     "5. After delegating, stop and wait for child updates unless the user must answer a blocking question.",
+    "6. Never create teammate-specific specialist files like `frontend-dev-lee.yaml` or `backend-dev-bill.yaml`.",
+    "7. The team specialist catalog is one canonical file per role under `resources/specialists/team/`.",
+    "8. Teammate names belong in roster text, prompts, or runtime labels, not in new YAML filenames or specialist ids.",
     "",
     "Use Team UI motion as the source of truth: visible child sessions first, lead-side exploration later.",
   ].join("\n");
