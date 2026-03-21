@@ -17,7 +17,7 @@ export default function HomePage() {
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<"agents" | undefined>(undefined);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"providers" | "roles" | "specialists" | undefined>(undefined);
 
   const [showWorkspacesMenu, setShowWorkspacesMenu] = useState(false);
   const workspacesMenuRef = useRef<HTMLDivElement>(null);
