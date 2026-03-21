@@ -59,11 +59,17 @@ import { getTerminalManager } from "@/core/acp/terminal-manager";
 import { createWorkspaceSessionSandbox } from "@/core/sandbox/permissions";
 import {
   buildExecutionBinding,
-  getAcpRunnerUrl,
   refreshExecutionBinding,
   requiresRunnerProxy,
   shouldUseRunnerForProvider,
 } from "@/core/acp/execution-backend";
+import {
+  getRequiredRunnerUrl,
+  getSessionRoutingRecord,
+  isForwardedAcpRequest,
+  proxyRequestToRunner,
+  runnerUnavailableResponse,
+} from "@/core/acp/runner-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -300,52 +306,6 @@ function requireWorkspaceId(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-const ACP_FORWARDED_HEADER = "x-routa-acp-forwarded";
-
-function isForwardedAcpRequest(request: NextRequest): boolean {
-  return request.headers.get(ACP_FORWARDED_HEADER) === "1";
-}
-
-async function proxyAcpGetToRunner(request: NextRequest, runnerUrl: string): Promise<Response> {
-  const targetUrl = new URL("/api/acp", runnerUrl);
-  targetUrl.search = request.nextUrl.search;
-
-  const response = await fetch(targetUrl, {
-    method: "GET",
-    headers: {
-      [ACP_FORWARDED_HEADER]: "1",
-    },
-  });
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: response.headers,
-  });
-}
-
-async function proxyAcpPostToRunner(
-  runnerUrl: string,
-  body: Record<string, unknown>
-): Promise<Response> {
-  const targetUrl = new URL("/api/acp", runnerUrl);
-  const response = await fetch(targetUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      [ACP_FORWARDED_HEADER]: "1",
-    },
-    body: JSON.stringify(body),
-  });
-
-  return response;
-}
-
-async function getSessionRoutingRecord(sessionId: string) {
-  const store = getHttpSessionStore();
-  await store.hydrateFromDb();
-  return store.getSession(sessionId);
-}
-
 // ─── GET: SSE stream for session/update ────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -359,15 +319,10 @@ export async function GET(request: NextRequest) {
 
   if (!isForwardedAcpRequest(request)) {
     const session = await getSessionRoutingRecord(sessionId);
-    const runnerUrl = getAcpRunnerUrl();
+    const runnerUrl = getRequiredRunnerUrl();
     if (session?.executionMode === "runner") {
-      if (!runnerUrl) {
-        return NextResponse.json(
-          { error: "ACP runner is required for this session but ROUTA_ACP_RUNNER_URL is not configured" },
-          { status: 503 }
-        );
-      }
-      return proxyAcpGetToRunner(request, runnerUrl);
+      if (!runnerUrl) return runnerUnavailableResponse();
+      return proxyRequestToRunner(request, { runnerUrl, path: "/api/acp" });
     }
   }
 
@@ -489,14 +444,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isForwardedAcpRequest(request)) {
-      const runnerUrl = getAcpRunnerUrl();
+      const runnerUrl = getRequiredRunnerUrl();
 
       if (method === "session/new") {
         const provider = ((params ?? {}) as Record<string, unknown>).provider as string | undefined;
         const defaultProvider = isServerlessEnvironment() ? "claude-code-sdk" : "opencode";
         const effectiveProvider = provider ?? defaultProvider;
         if (runnerUrl && shouldUseRunnerForProvider(effectiveProvider)) {
-          const forwardedResponse = await proxyAcpPostToRunner(runnerUrl, body as Record<string, unknown>);
+          const forwardedResponse = await proxyRequestToRunner(request, {
+            runnerUrl,
+            path: "/api/acp",
+            method: "POST",
+            body: body as Record<string, unknown>,
+          });
           const forwardedPayload = await forwardedResponse.json() as Record<string, unknown>;
 
           const result = forwardedPayload.result as Record<string, unknown> | undefined;
@@ -567,7 +527,12 @@ export async function POST(request: NextRequest) {
         if (sessionId) {
           const session = await getSessionRoutingRecord(sessionId);
           if (requiresRunnerProxy(session?.executionMode)) {
-            return proxyAcpPostToRunner(runnerUrl, body as Record<string, unknown>);
+            return proxyRequestToRunner(request, {
+              runnerUrl,
+              path: "/api/acp",
+              method: "POST",
+              body: body as Record<string, unknown>,
+            });
           }
         }
       }

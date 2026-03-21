@@ -26,6 +26,7 @@
   "scripts": {
     "postinstall": "patch-package",
     "dev": "next dev",
+    "acp:runner": "tsx scripts/start-acp-runner.ts",
     "build": "next build",
     "tauri:dev": "npm --prefix apps/desktop run dev",
     "tauri:build": "npm --prefix apps/desktop run build",

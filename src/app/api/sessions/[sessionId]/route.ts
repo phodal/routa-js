@@ -10,6 +10,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
 import { renameSessionInDb, deleteSessionFromDb } from "@/core/acp/session-db-persister";
+import {
+  getRequiredRunnerUrl,
+  isForwardedAcpRequest,
+  proxyRequestToRunner,
+  runnerUnavailableResponse,
+} from "@/core/acp/runner-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +75,27 @@ export async function PATCH(
   }
 
   const store = getHttpSessionStore();
+  await store.hydrateFromDb();
+  const session = store.getSession(sessionId);
+
+  if (!session) {
+    return NextResponse.json(
+      { error: "Session not found" },
+      { status: 404 }
+    );
+  }
+
+  if (!isForwardedAcpRequest(request) && session.executionMode === "runner") {
+    const runnerUrl = getRequiredRunnerUrl();
+    if (!runnerUrl) return runnerUnavailableResponse();
+    return proxyRequestToRunner(request, {
+      runnerUrl,
+      path: `/api/sessions/${encodeURIComponent(sessionId)}`,
+      method: "PATCH",
+      body: { name: name.trim() },
+    });
+  }
+
   const success = store.renameSession(sessionId, name.trim());
 
   if (!success) {
@@ -84,11 +111,31 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const { sessionId } = await params;
   const store = getHttpSessionStore();
+  await store.hydrateFromDb();
+  const session = store.getSession(sessionId);
+
+  if (!session) {
+    return NextResponse.json(
+      { error: "Session not found" },
+      { status: 404 }
+    );
+  }
+
+  if (!isForwardedAcpRequest(request) && session.executionMode === "runner") {
+    const runnerUrl = getRequiredRunnerUrl();
+    if (!runnerUrl) return runnerUnavailableResponse();
+    return proxyRequestToRunner(request, {
+      runnerUrl,
+      path: `/api/sessions/${encodeURIComponent(sessionId)}`,
+      method: "DELETE",
+    });
+  }
+
   const success = store.deleteSession(sessionId);
 
   if (!success) {

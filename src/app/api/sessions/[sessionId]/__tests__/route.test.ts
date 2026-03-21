@@ -1,22 +1,58 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const hydrateFromDb = vi.fn();
-const getSession = vi.fn();
+const {
+  hydrateFromDb,
+  getSession,
+  deleteSession,
+  renameSessionInDb,
+  deleteSessionFromDb,
+  proxyRequestToRunner,
+  getRequiredRunnerUrl,
+  isForwardedAcpRequest,
+} = vi.hoisted(() => ({
+  hydrateFromDb: vi.fn(),
+  getSession: vi.fn(),
+  deleteSession: vi.fn(),
+  renameSessionInDb: vi.fn(),
+  deleteSessionFromDb: vi.fn(),
+  proxyRequestToRunner: vi.fn(),
+  getRequiredRunnerUrl: vi.fn(),
+  isForwardedAcpRequest: vi.fn(),
+}));
 
 vi.mock("@/core/acp/http-session-store", () => ({
   getHttpSessionStore: () => ({
     hydrateFromDb,
     getSession,
+    deleteSession,
   }),
 }));
 
-import { GET } from "../route";
+vi.mock("@/core/acp/session-db-persister", () => ({
+  renameSessionInDb,
+  deleteSessionFromDb,
+}));
+
+vi.mock("@/core/acp/runner-routing", () => ({
+  getRequiredRunnerUrl,
+  isForwardedAcpRequest,
+  proxyRequestToRunner,
+  runnerUnavailableResponse: () => new Response(JSON.stringify({ error: "runner unavailable" }), { status: 503 }),
+}));
+
+import { DELETE, GET, PATCH } from "../route";
 
 describe("/api/sessions/[sessionId] GET", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hydrateFromDb.mockResolvedValue(undefined);
+    deleteSession.mockReturnValue(true);
+    renameSessionInDb.mockResolvedValue(undefined);
+    deleteSessionFromDb.mockResolvedValue(undefined);
+    proxyRequestToRunner.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    getRequiredRunnerUrl.mockReturnValue("http://runner.internal");
+    isForwardedAcpRequest.mockReturnValue(false);
   });
 
   it("returns ACP runtime status fields for Kanban session backfill", async () => {
@@ -53,5 +89,46 @@ describe("/api/sessions/[sessionId] GET", () => {
       executionMode: "runner",
       ownerInstanceId: "runner",
     });
+  });
+
+  it("proxies DELETE to the runner for runner-owned sessions", async () => {
+    getSession.mockReturnValue({
+      sessionId: "session-123",
+      cwd: "/tmp/project",
+      workspaceId: "workspace-1",
+      executionMode: "runner",
+    });
+
+    const response = await DELETE(
+      new NextRequest("http://localhost/api/sessions/session-123", { method: "DELETE" }),
+      { params: Promise.resolve({ sessionId: "session-123" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(proxyRequestToRunner).toHaveBeenCalledTimes(1);
+    expect(deleteSession).not.toHaveBeenCalled();
+    expect(deleteSessionFromDb).not.toHaveBeenCalled();
+  });
+
+  it("proxies PATCH rename to the runner for runner-owned sessions", async () => {
+    getSession.mockReturnValue({
+      sessionId: "session-123",
+      cwd: "/tmp/project",
+      workspaceId: "workspace-1",
+      executionMode: "runner",
+    });
+
+    const response = await PATCH(
+      new NextRequest("http://localhost/api/sessions/session-123", {
+        method: "PATCH",
+        body: JSON.stringify({ name: "Renamed session" }),
+        headers: { "Content-Type": "application/json" },
+      }),
+      { params: Promise.resolve({ sessionId: "session-123" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(proxyRequestToRunner).toHaveBeenCalledTimes(1);
+    expect(renameSessionInDb).not.toHaveBeenCalled();
   });
 });
