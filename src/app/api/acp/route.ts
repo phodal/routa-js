@@ -163,10 +163,28 @@ function buildCoordinatorContextPrompt(input: {
     `## User Request\n\n${input.userRequest}\n`;
 }
 
+function buildTeamLeadFirstTurnContract(): string {
+  return [
+    "## First-Turn Operating Contract",
+    "",
+    "You are the team lead for a live Team Run.",
+    "",
+    "On your first working turn:",
+    "1. Do not browse the repository yourself with read/glob/grep/search tools.",
+    "2. Keep the active wave small. Spawn at most 3 real child sessions at once.",
+    "3. Do not create placeholder teammates or idle agents just to mirror the roster.",
+    "4. If codebase context is unknown, your first action must be `create_task` plus `delegate_task_to_agent` for a real `researcher` child session.",
+    "5. After delegating, stop and wait for child updates unless the user must answer a blocking question.",
+    "",
+    "Use Team UI motion as the source of truth: visible child sessions first, lead-side exploration later.",
+  ].join("\n");
+}
+
 function buildCoordinatorFirstPrompt(input: {
   agentId: string;
   workspaceId: string;
   userRequest: string;
+  specialistId?: string;
   specialistSystemPrompt?: string;
   provider?: string;
 }): string {
@@ -175,20 +193,23 @@ function buildCoordinatorFirstPrompt(input: {
     workspaceId: input.workspaceId,
     userRequest: input.userRequest,
   });
+  const teamLeadFirstTurnContract = input.specialistId === "team-agent-lead"
+    ? `\n\n---\n\n${buildTeamLeadFirstTurnContract()}`
+    : "";
 
   if (input.provider === "claude-code-sdk" && input.specialistSystemPrompt) {
-    return contextPrompt;
+    return `${contextPrompt}${teamLeadFirstTurnContract}`;
   }
 
   if (input.specialistSystemPrompt) {
-    return `${input.specialistSystemPrompt}\n\n---\n\n${contextPrompt}`;
+    return `${input.specialistSystemPrompt}\n\n---\n\n${contextPrompt}${teamLeadFirstTurnContract}`;
   }
 
-  return buildCoordinatorPrompt({
+  return `${buildCoordinatorPrompt({
     agentId: input.agentId,
     workspaceId: input.workspaceId,
     userRequest: input.userRequest,
-  });
+  })}${teamLeadFirstTurnContract}`;
 }
 
 // ─── Idempotency cache for session/new requests ─────────────────────────
@@ -370,7 +391,12 @@ export async function POST(request: NextRequest) {
 
       // Determine default provider based on environment
       const defaultProvider = isServerlessEnvironment() ? "claude-code-sdk" : "opencode";
-      const provider = (p.provider as string | undefined) ?? specialist?.defaultProvider ?? defaultProvider;
+      const requestedProvider = (p.provider as string | undefined);
+      const provider = specialistId === "team-agent-lead" &&
+        (requestedProvider ?? specialist?.defaultProvider ?? defaultProvider) === "opencode" &&
+        isClaudeCodeSdkConfigured()
+        ? "claude-code-sdk"
+        : requestedProvider ?? specialist?.defaultProvider ?? defaultProvider;
 
       const modeId = (p.modeId as string | undefined) ?? (p.mode as string | undefined);
       const role = (p.role as string | undefined)?.toUpperCase() ?? specialist?.role;
@@ -1100,6 +1126,7 @@ export async function POST(request: NextRequest) {
                 agentId: agent.id,
                 workspaceId: sessionRecord.workspaceId,
                 userRequest: promptText,
+                specialistId: sessionRecord.specialistId,
                 specialistSystemPrompt: sessionRecord.specialistSystemPrompt,
                 provider: sessionRecord.provider,
               });
