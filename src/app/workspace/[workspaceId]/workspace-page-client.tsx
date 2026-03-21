@@ -176,6 +176,8 @@ export function WorkspacePageClient({
   const runningBgTasks = bgTasks.filter((t) => t.status === "RUNNING").length;
   const activeBoard = boards.find((board) => board.isDefault) ?? boards[0];
   const latestSession = sessions[0];
+  const generalNotes = notesHook.notes.filter((note) => note.metadata?.type === "general");
+  const taskNotes = notesHook.notes.filter((note) => note.metadata?.type === "task");
 
   const handleDeleteAllGeneralNotes = async () => {
     await Promise.all(
@@ -203,6 +205,143 @@ export function WorkspacePageClient({
     await notesHook.updateNote(noteId, { metadata });
   };
 
+  const overviewContent = (
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-12">
+        <OverviewCard
+          className="xl:col-span-7"
+          eyebrow="Primary surface"
+          title={activeBoard?.name ?? "Kanban board"}
+          description="Kanban is the canonical work surface for routing, queue supervision, and lane-based execution."
+          meta={[
+            `${boards.length} board${boards.length === 1 ? "" : "s"}`,
+            `${pendingTasks.length} active tasks`,
+            `${runningBgTasks} background runs`,
+          ]}
+          actionLabel="Go to board"
+          onAction={() => router.push(`/workspace/${workspaceId}/kanban`)}
+        />
+        <OverviewCard
+          className="xl:col-span-5"
+          eyebrow="Latest recovery point"
+          title={latestSession?.name ?? latestSession?.sessionId ?? "No recent session"}
+          description={latestSession
+            ? "Recover the latest session from this workspace or continue task execution from the board."
+            : "Create a new requirement from the homepage launcher, then return here for context and recovery."}
+          meta={[
+            `${sessions.length} recent sessions`,
+            `${notesHook.notes.length} notes`,
+            `${agentsHook.agents.length} agents`,
+          ]}
+          actionLabel={latestSession ? "Open latest session" : "Back to launcher"}
+          onAction={() => {
+            if (latestSession?.sessionId) {
+              router.push(`/workspace/${workspaceId}/sessions/${latestSession.sessionId}`);
+              return;
+            }
+            router.push("/");
+          }}
+        />
+      </div>
+
+      {sessions.length > 0 && (
+        <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                Recent sessions
+              </div>
+              <div className="mt-1 text-sm text-desktop-text-secondary">
+                Recover execution context without reopening the Kanban surface.
+              </div>
+            </div>
+          </div>
+          <SessionsOverview
+            sessions={sessions}
+            workspaceId={workspaceId}
+            onNavigate={(sessionId) => router.push(`/workspace/${workspaceId}/sessions/${sessionId}`)}
+            onRefresh={handleRefresh}
+          />
+        </section>
+      )}
+    </div>
+  );
+
+  const notesContent = (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          onClick={() => setNotesSubFilter("general")}
+          className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+            notesSubFilter === "general"
+            ? "bg-desktop-bg-active text-desktop-accent"
+            : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+          }`}
+        >
+          Workspace Notes
+          {generalNotes.length > 0 && (
+            <span className="ml-1 opacity-60">({generalNotes.length})</span>
+          )}
+        </button>
+        <button
+          onClick={() => setNotesSubFilter("tasks")}
+          className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+            notesSubFilter === "tasks"
+            ? "bg-desktop-bg-active text-desktop-accent"
+            : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+          }`}
+        >
+          Task Notes
+          {taskNotes.length > 0 && (
+            <span className="ml-1 opacity-60">({taskNotes.length})</span>
+          )}
+        </button>
+      </div>
+
+      {notesSubFilter === "general" && (
+        <NotesTab
+          notes={generalNotes}
+          loading={notesHook.loading}
+          workspaceId={workspaceId}
+          sessions={sessions}
+          onCreateNote={async (title, content, sessionId) => {
+            await notesHook.createNote({ title, content, type: "general", sessionId });
+          }}
+          onUpdateNote={async (noteId, update) => {
+            await notesHook.updateNote(noteId, update);
+          }}
+          onDeleteNote={async (noteId) => {
+            await notesHook.deleteNote(noteId);
+          }}
+          onDeleteAllNotes={handleDeleteAllGeneralNotes}
+        />
+      )}
+
+      {notesSubFilter === "tasks" && (
+        <NoteTasksTab
+          notes={notesHook.notes}
+          loading={notesHook.loading}
+          workspaceId={workspaceId}
+          sessions={sessions}
+          onDeleteNote={async (noteId) => {
+            await notesHook.deleteNote(noteId);
+          }}
+          onUpdateNoteMetadata={handleUpdateNoteMetadata}
+          onDeleteAllTaskNotes={handleDeleteAllTaskNotes}
+        />
+      )}
+    </div>
+  );
+
+  const activityContent = (
+    <BgTasksTab
+      bgTasks={bgTasks}
+      workspaceId={workspaceId}
+      workspaces={workspacesHook.workspaces}
+      onRefresh={handleRefresh}
+    />
+  );
+
   return (
     <DesktopLayout
       workspaceId={workspaceId}
@@ -213,205 +352,126 @@ export function WorkspacePageClient({
       onWorkspaceCreate={handleWorkspaceCreate}
     >
       <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary" data-testid="workspace-page-shell">
-        {/* Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-4 py-4">
-            {/* Compact Stat Row */}
-            <div className="flex items-center gap-4 mb-4 px-1">
+          <div className="w-full px-4 py-4">
+            <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-desktop-border pb-3" data-testid="workspace-page-header">
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <svg className="h-4 w-4 shrink-0 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25h16.5m-16.5 0A2.25 2.25 0 0 0 1.5 7.5v9A2.25 2.25 0 0 0 3.75 18.75h16.5A2.25 2.25 0 0 0 22.5 16.5v-9a2.25 2.25 0 0 0-2.25-2.25m-16.5 0V3.75A2.25 2.25 0 0 1 6 1.5h12a2.25 2.25 0 0 1 2.25 2.25v1.5" />
+                  </svg>
+                  <h1 className="truncate text-[14px] font-semibold text-desktop-text-primary">
+                    {workspace?.title ?? (isDefaultWorkspace ? "Default Workspace" : "Workspace")}
+                  </h1>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
+                    <span>Workspace:</span>
+                    <code className="font-mono text-desktop-text-primary">{workspaceId}</code>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
+                    <span>{activeBoard?.name ?? "No board"}</span>
+                    <span className="opacity-40">/</span>
+                    <span>{latestSession?.name ?? "No recent session"}</span>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
+                    <span>{activeAgents.length > 0 ? `${activeAgents.length} active agents` : "Standby"}</span>
+                    <span className="opacity-40">/</span>
+                    <span>{pendingTasks.length > 0 ? `${pendingTasks.length} in flight` : "No pending tasks"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/workspace/${workspaceId}/team`)}
+                  className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+                >
+                  Team
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/workspace/${workspaceId}/kanban`)}
+                  className="rounded-md bg-desktop-accent px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+                >
+                  Kanban
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/traces")}
+                  className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+                >
+                  Traces
+                </button>
+              </div>
+            </header>
+
+            <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <CompactStat label="Sessions" value={sessions.length} color="blue" />
               <CompactStat label="Agents" value={agentsHook.agents.length} sub={activeAgents.length > 0 ? `${activeAgents.length} active` : undefined} color="violet" />
               <CompactStat label="Tasks" value={tasks.length} sub={pendingTasks.length > 0 ? `${pendingTasks.length} pending` : undefined} color="emerald" />
               <CompactStat label="BG Tasks" value={bgTasks.length} sub={runningBgTasks > 0 ? `${runningBgTasks} running` : undefined} color="amber" />
             </div>
 
-            {/* Tab Bar - VS Code style */}
-            <div className="mb-4 flex items-center gap-0 border-b border-desktop-border" data-testid="workspace-tab-bar">
-              <DesktopTabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>
-                Overview
-              </DesktopTabButton>
-              <DesktopTabButton active={activeTab === "notes"} onClick={() => setActiveTab("notes")}>
-                Notes {notesHook.notes.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({notesHook.notes.length})</span>}
-              </DesktopTabButton>
-              <DesktopTabButton active={activeTab === "activity"} onClick={() => setActiveTab("activity")}>
-                Activity {bgTasks.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({bgTasks.length})</span>}
-              </DesktopTabButton>
-            </div>
+            <div className="hidden xl:grid xl:grid-cols-12 xl:gap-4">
+              <section className="xl:col-span-7 rounded-[24px] border border-desktop-border bg-desktop-bg-secondary p-4">
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-desktop-border pb-3">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">Overview</div>
+                    <div className="mt-1 text-sm text-desktop-text-secondary">Recovery, routing, and workspace context.</div>
+                  </div>
+                </div>
+                {overviewContent}
+              </section>
 
-            {/* Tab Content */}
-            {activeTab === "overview" && (
-              <div className="space-y-4">
-                <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="max-w-2xl">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
-                        Workspace overview
-                      </div>
-                      <h1 className="mt-2 text-xl font-semibold text-desktop-text-primary">
-                        {workspace?.title ?? (isDefaultWorkspace ? "Default Workspace" : "Workspace")}
-                      </h1>
-                      <p className="mt-2 text-sm leading-6 text-desktop-text-secondary">
-                        This page now stays focused on context and recovery. Use the dedicated Kanban route as the primary operating surface for active task execution.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/workspace/${workspaceId}/team`)}
-                        className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15"
-                      >
-                        Open Team
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/workspace/${workspaceId}/kanban`)}
-                        className="rounded-md bg-desktop-accent px-3 py-2 text-[12px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
-                      >
-                        Open Kanban
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push("/traces")}
-                        className="rounded-md border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-                      >
-                        Open traces
-                      </button>
+              <div className="xl:col-span-5 flex min-h-0 flex-col gap-4">
+                <section className="rounded-[24px] border border-desktop-border bg-desktop-bg-secondary p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-desktop-border pb-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">Activity</div>
+                      <div className="mt-1 text-sm text-desktop-text-secondary">Background runs and workspace-level execution telemetry.</div>
                     </div>
                   </div>
+                  {activityContent}
                 </section>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <OverviewCard
-                    eyebrow="Primary surface"
-                    title={activeBoard?.name ?? "Kanban board"}
-                    description="Kanban is the canonical work surface for routing, queue supervision, and lane-based execution."
-                    meta={[
-                      `${boards.length} board${boards.length === 1 ? "" : "s"}`,
-                      `${pendingTasks.length} active tasks`,
-                      `${runningBgTasks} background runs`,
-                    ]}
-                    actionLabel="Go to board"
-                    onAction={() => router.push(`/workspace/${workspaceId}/kanban`)}
-                  />
-                  <OverviewCard
-                    eyebrow="Latest recovery point"
-                    title={latestSession?.name ?? latestSession?.sessionId ?? "No recent session"}
-                    description={latestSession
-                      ? "Recover the latest session from this workspace or continue task execution from the board."
-                      : "Create a new requirement from the homepage launcher, then return here for context and recovery."}
-                    meta={[
-                      `${sessions.length} recent sessions`,
-                      `${notesHook.notes.length} notes`,
-                      `${agentsHook.agents.length} agents`,
-                    ]}
-                    actionLabel={latestSession ? "Open latest session" : "Back to launcher"}
-                    onAction={() => {
-                      if (latestSession?.sessionId) {
-                        router.push(`/workspace/${workspaceId}/sessions/${latestSession.sessionId}`);
-                        return;
-                      }
-                      router.push("/");
-                    }}
-                  />
-                </div>
-
-                {sessions.length > 0 && (
-                  <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
-                          Recent sessions
-                        </div>
-                        <div className="mt-1 text-sm text-desktop-text-secondary">
-                          Recover execution context without reopening the Kanban surface.
-                        </div>
-                      </div>
+                <section className="rounded-[24px] border border-desktop-border bg-desktop-bg-secondary p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-desktop-border pb-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">Notes</div>
+                      <div className="mt-1 text-sm text-desktop-text-secondary">Workspace memory and task-level notes in parallel.</div>
                     </div>
-                    <SessionsOverview
-                      sessions={sessions}
-                      workspaceId={workspaceId}
-                      onNavigate={(sessionId) => router.push(`/workspace/${workspaceId}/sessions/${sessionId}`)}
-                      onRefresh={handleRefresh}
-                    />
-                  </section>
-                )}
+                  </div>
+                  {notesContent}
+                </section>
               </div>
-            )}
+            </div>
 
-            {activeTab === "notes" && (
-              <div>
-                <div className="mb-3 flex items-center gap-2">
-                  <button
-                    onClick={() => setNotesSubFilter("general")}
-                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-                      notesSubFilter === "general"
-                      ? "bg-desktop-bg-active text-desktop-accent"
-                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-                    }`}
-                  >
-                    Workspace Notes
-                    {notesHook.notes.filter(n => n.metadata?.type === "general").length > 0 && (
-                      <span className="ml-1 opacity-60">({notesHook.notes.filter(n => n.metadata?.type === "general").length})</span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setNotesSubFilter("tasks")}
-                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-                      notesSubFilter === "tasks"
-                      ? "bg-desktop-bg-active text-desktop-accent"
-                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-                    }`}
-                  >
-                    Task Notes
-                    {notesHook.notes.filter(n => n.metadata?.type === "task").length > 0 && (
-                      <span className="ml-1 opacity-60">({notesHook.notes.filter(n => n.metadata?.type === "task").length})</span>
-                    )}
-                  </button>
-                </div>
-
-                {notesSubFilter === "general" && (
-                  <NotesTab
-                    notes={notesHook.notes.filter(n => n.metadata?.type === "general")}
-                    loading={notesHook.loading}
-                    workspaceId={workspaceId}
-                    sessions={sessions}
-                    onCreateNote={async (title, content, sessionId) => {
-                      await notesHook.createNote({ title, content, type: "general", sessionId });
-                    }}
-                    onUpdateNote={async (noteId, update) => {
-                      await notesHook.updateNote(noteId, update);
-                    }}
-                    onDeleteNote={async (noteId) => {
-                      await notesHook.deleteNote(noteId);
-                    }}
-                    onDeleteAllNotes={handleDeleteAllGeneralNotes}
-                  />
-                )}
-
-                {notesSubFilter === "tasks" && (
-                  <NoteTasksTab
-                    notes={notesHook.notes}
-                    loading={notesHook.loading}
-                    workspaceId={workspaceId}
-                    sessions={sessions}
-                    onDeleteNote={async (noteId) => {
-                      await notesHook.deleteNote(noteId);
-                    }}
-                    onUpdateNoteMetadata={handleUpdateNoteMetadata}
-                    onDeleteAllTaskNotes={handleDeleteAllTaskNotes}
-                  />
-                )}
+            <div className="xl:hidden">
+              <div className="mb-4 flex items-center gap-0 border-b border-desktop-border" data-testid="workspace-tab-bar">
+                <DesktopTabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>
+                  Overview
+                </DesktopTabButton>
+                <DesktopTabButton active={activeTab === "notes"} onClick={() => setActiveTab("notes")}>
+                  Notes {notesHook.notes.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({notesHook.notes.length})</span>}
+                </DesktopTabButton>
+                <DesktopTabButton active={activeTab === "activity"} onClick={() => setActiveTab("activity")}>
+                  Activity {bgTasks.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({bgTasks.length})</span>}
+                </DesktopTabButton>
               </div>
-            )}
 
-            {activeTab === "activity" && (
-              <BgTasksTab
-                bgTasks={bgTasks}
-                workspaceId={workspaceId}
-                workspaces={workspacesHook.workspaces}
-                onRefresh={handleRefresh}
-              />
-            )}
+              {activeTab === "overview" && overviewContent}
+              {activeTab === "notes" && notesContent}
+              {activeTab === "activity" && activityContent}
+            </div>
           </div>
         </div>
       </div>
@@ -455,24 +515,27 @@ function CompactStat({
   color: "blue" | "violet" | "emerald" | "amber";
 }) {
   const colorMap = {
-    blue: "text-blue-400",
-    violet: "text-violet-400",
-    emerald: "text-emerald-400",
-    amber: "text-amber-400",
+    blue: "text-blue-400 border-blue-500/18 bg-blue-500/6",
+    violet: "text-violet-400 border-violet-500/18 bg-violet-500/6",
+    emerald: "text-emerald-400 border-emerald-500/18 bg-emerald-500/6",
+    amber: "text-amber-400 border-amber-500/18 bg-amber-500/6",
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <span className={`text-sm font-semibold tabular-nums ${colorMap[color]}`}>{value}</span>
-      <span className="text-[11px] text-desktop-text-muted">
-        {label}
-        {sub && <span className="ml-1 text-desktop-text-muted">· {sub}</span>}
-      </span>
+    <div className={`rounded-xl border px-3 py-2.5 ${colorMap[color]}`}>
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">{label}</div>
+        <div className="text-lg font-semibold tabular-nums">{value}</div>
+      </div>
+      <div className="mt-1 text-[10px] leading-4 text-desktop-text-secondary">
+        {sub ?? "Workspace aggregate"}
+      </div>
     </div>
   );
 }
 
 function OverviewCard({
+  className,
   eyebrow,
   title,
   description,
@@ -480,6 +543,7 @@ function OverviewCard({
   actionLabel,
   onAction,
 }: {
+  className?: string;
   eyebrow: string;
   title: string;
   description: string;
@@ -488,21 +552,21 @@ function OverviewCard({
   onAction: () => void;
 }) {
   return (
-    <section className="rounded-xl border border-desktop-border bg-desktop-bg-secondary p-4">
+    <section className={`rounded-[24px] border border-desktop-border bg-desktop-bg-secondary p-5 ${className ?? ""}`}>
       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
         {eyebrow}
       </div>
-      <div className="mt-2 text-lg font-semibold text-desktop-text-primary">
+      <div className="mt-3 text-xl font-semibold tracking-tight text-desktop-text-primary">
         {title}
       </div>
       <div className="mt-2 text-sm leading-6 text-desktop-text-secondary">
         {description}
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-wrap gap-2">
         {meta.map((item) => (
           <span
             key={item}
-            className="rounded-full border border-desktop-border px-2 py-1 text-[11px] text-desktop-text-secondary"
+            className="rounded-full border border-desktop-border bg-desktop-bg-primary/50 px-2.5 py-1 text-[11px] text-desktop-text-secondary"
           >
             {item}
           </span>
@@ -511,7 +575,7 @@ function OverviewCard({
       <button
         type="button"
         onClick={onAction}
-        className="mt-4 rounded-md border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+        className="mt-5 rounded-md border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
       >
         {actionLabel}
       </button>

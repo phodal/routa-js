@@ -120,6 +120,19 @@ interface SessionLaneItem {
   isLead?: boolean;
 }
 
+interface SessionTimelineItem {
+  id: string;
+  sessionId: string;
+  title: string;
+  actor: string;
+  actorRoleId?: string;
+  timestamp: string;
+  summary?: string;
+  tone?: "default" | "tool" | "complete" | "blocked";
+  memberLane?: SessionLaneItem;
+  pendingQuestion?: PendingSessionQuestion | null;
+}
+
 interface DeliverableItem {
   id: string;
   label: string;
@@ -570,7 +583,7 @@ function laneSnippetLabel(update?: SessionHistoryEntry["update"]): string {
 }
 
 function buildLaneSnippets(history: SessionHistoryEntry[], maxSnippets = 5): SessionLaneSnippet[] {
-  return history
+  const snippets = history
     .map((entry, index) => {
       const update = entry.update;
       const updateType = update?.sessionUpdate;
@@ -598,7 +611,12 @@ function buildLaneSnippets(history: SessionHistoryEntry[], maxSnippets = 5): Ses
       } satisfies SessionLaneSnippet;
     })
     .filter((snippet): snippet is SessionLaneSnippet => Boolean(snippet))
-    .slice(-maxSnippets);
+    .filter((snippet, index, all) => {
+      const previous = all[index - 1];
+      return !previous || previous.label !== snippet.label || previous.text !== snippet.text;
+    });
+
+  return snippets.slice(-maxSnippets);
 }
 
 function extractGoalFromPrompt(text?: string): string | undefined {
@@ -677,6 +695,7 @@ export function TeamRunPageClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string>(sessionId);
   const [selectedSessionForModal, setSelectedSessionForModal] = useState<string | null>(null);
+  const sessionBlockRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastUpdateIndexRef = useRef(0);
   const pendingPromptSentRef = useRef<Set<string>>(new Set());
@@ -708,6 +727,13 @@ export function TeamRunPageClient() {
   useEffect(() => {
     setSelectedSessionId(sessionId);
   }, [sessionId]);
+
+  const focusSessionBlock = useCallback((targetSessionId: string) => {
+    setSelectedSessionId(targetSessionId);
+    const node = sessionBlockRefs.current[targetSessionId];
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
 
   useEffect(() => {
     if (!sessionId || !acpConnected || acpLoading) return;
@@ -1479,7 +1505,7 @@ export function TeamRunPageClient() {
           lastUpdatedLabel: stream.lastUpdatedLabel,
           provider: stream.session.provider,
           eventCount: stream.eventCount,
-          snippets: snippets.slice(-6),
+          snippets: snippets.slice(-4),
           completionSummary: completion?.completionSummary,
           pendingQuestion: pendingQuestionsBySessionId.get(stream.session.sessionId) ?? null,
         } satisfies SessionLaneItem;
@@ -1487,11 +1513,136 @@ export function TeamRunPageClient() {
       .sort((a, b) => {
         if (a.status === "working" && b.status !== "working") return -1;
         if (b.status === "working" && a.status !== "working") return 1;
-        return a.actor.localeCompare(b.actor);
+        const aStream = sessionStreams.find((stream) => stream.session.sessionId === a.sessionId);
+        const bStream = sessionStreams.find((stream) => stream.session.sessionId === b.sessionId);
+        return (bStream?.lastUpdatedAt ?? 0) - (aStream?.lastUpdatedAt ?? 0) || a.actor.localeCompare(b.actor);
       });
 
     return [leadLane, ...childLanes];
   }, [agentsById, completionByAgentId, historiesBySessionId, pendingQuestionsBySessionId, rootHistory, selectedSessionStream, session, sessionId, sessionStreams, specialistsById, teamMembers]);
+
+  const sessionTimeline = useMemo<SessionTimelineItem[]>(() => {
+    const leadName = specialistsById.get(TEAM_LEAD_SPECIALIST_ID)?.name ?? "Agent Lead";
+
+    const items = rootHistory.flatMap((entry, index) => {
+      const update = entry.update;
+      const updateType = update?.sessionUpdate;
+      if (!updateType || !session) return [];
+
+      const timestamp = formatRelativeTime(session.createdAt);
+      if (updateType === "user_message") {
+        const text = extractGoalFromPrompt(extractHistoryText(update)) ?? extractHistoryText(update);
+        return text
+          ? [{
+            id: `${sessionId}-objective-${index}`,
+            sessionId,
+            title: "Objective set",
+            actor: "User",
+            actorRoleId: "user",
+            timestamp,
+            summary: text,
+          } satisfies SessionTimelineItem]
+          : [];
+      }
+
+      if (updateType === "agent_message") {
+        const text = summarizeText(extractHistoryText(update), 260);
+        return text
+          ? [{
+            id: `${sessionId}-lead-message-${index}`,
+            sessionId,
+            title: "Lead update",
+            actor: leadName,
+            actorRoleId: TEAM_LEAD_SPECIALIST_ID,
+            timestamp,
+            summary: text,
+          } satisfies SessionTimelineItem]
+          : [];
+      }
+
+      if (updateType === "task_completion") {
+        const linkedStream = typeof update.agentId === "string" ? sessionStreamByAgentId.get(update.agentId) : undefined;
+        const actor = linkedStream?.actor ?? "Team member";
+        return [{
+          id: `${sessionId}-report-${index}`,
+          sessionId,
+          title: `Report back from ${actor}`,
+          actor,
+          actorRoleId: linkedStream
+            ? (resolveRosterSpecialistId(linkedStream.session, agentsById) ?? linkedStream.session.specialistId)
+            : undefined,
+          timestamp,
+          summary: summarizeText(update.completionSummary ?? extractHistoryText(update), 260),
+          tone: normalizeTaskStatus(update.taskStatus) === "blocked" ? "blocked" : "complete",
+        } satisfies SessionTimelineItem];
+      }
+
+      if (updateType === "acp_status" && update.status === "error") {
+        return [{
+          id: `${sessionId}-lead-error-${index}`,
+          sessionId,
+          title: "Lead hit a runtime error",
+          actor: leadName,
+          actorRoleId: TEAM_LEAD_SPECIALIST_ID,
+          timestamp,
+          summary: summarizeText(update.error, 260),
+          tone: "blocked",
+        } satisfies SessionTimelineItem];
+      }
+
+      if (updateType !== "tool_call_update") return [];
+      const toolLabel = getToolEventLabel(update as Record<string, unknown>);
+
+      if (toolLabel.includes("delegate_task")) {
+        const target = resolveDelegationTarget(update) ?? "team member";
+        const targetRosterId = resolveDelegationRosterSpecialistId(update);
+        const linkedStream = targetRosterId ? latestChildSessionByRosterId.get(targetRosterId) : undefined;
+        const memberLane = linkedStream
+          ? sessionLanes.find((lane) => lane.sessionId === linkedStream.session.sessionId)
+          : undefined;
+        const displayTarget = memberLane?.actor ?? linkedStream?.actor ?? target;
+        return [{
+          id: `${sessionId}-delegate-${index}`,
+          sessionId: memberLane?.sessionId ?? sessionId,
+          title: `Lead assigned work to ${displayTarget}`,
+          actor: leadName,
+          actorRoleId: TEAM_LEAD_SPECIALIST_ID,
+          timestamp,
+          summary: summarizeText(
+            typeof update.rawInput?.additionalInstructions === "string"
+              ? update.rawInput.additionalInstructions
+              : update.rawOutput?.output,
+            260,
+          ),
+          tone: update.status === "failed" ? "blocked" : "tool",
+          memberLane,
+          pendingQuestion: memberLane?.pendingQuestion ?? null,
+        } satisfies SessionTimelineItem];
+      }
+
+      if (toolLabel.includes("create_agent")) {
+        const target = typeof update.rawInput?.name === "string" ? update.rawInput.name : "teammate";
+        const targetRole = typeof update.rawInput?.role === "string" ? update.rawInput.role : undefined;
+        return [{
+          id: `${sessionId}-create-agent-${index}`,
+          sessionId,
+          title: `Lead created teammate ${target}`,
+          actor: leadName,
+          actorRoleId: TEAM_LEAD_SPECIALIST_ID,
+          timestamp,
+          summary: summarizeText(targetRole ? `${target} joined as ${targetRole}` : undefined, 220),
+          tone: "tool",
+        } satisfies SessionTimelineItem];
+      }
+
+      return [];
+    });
+
+    return items.filter((item, index, all) => {
+      const previous = all[index - 1];
+      return !previous || previous.title !== item.title || previous.summary !== item.summary;
+    });
+  }, [agentsById, latestChildSessionByRosterId, rootHistory, session, sessionId, sessionLanes, sessionStreamByAgentId, specialistsById]);
 
   if (!session) {
     return (
@@ -1523,48 +1674,53 @@ export function TeamRunPageClient() {
       )}
     >
       <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary">
-        <header className="shrink-0 border-b border-desktop-border bg-desktop-bg-secondary/95">
-          <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between gap-3 px-4 py-2.5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5">
-                <Link
-                  href={`/workspace/${workspaceId}/team`}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-desktop-border px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                  </svg>
-                  Team
-                </Link>
-                <div className="h-4 w-px bg-desktop-border" />
-                <div className="min-w-0">
-                  <h1 className="truncate text-sm font-semibold text-desktop-text-primary">
-                    {session.name ?? "Team run"}
-                  </h1>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-desktop-text-secondary">
-                    <span>{formatRelativeTime(session.createdAt)}</span>
-                    <span className="opacity-40">/</span>
-                    <span>{session.provider ?? "auto"}</span>
-                    <span className="opacity-40">/</span>
-                    <span>{session.specialistId ?? TEAM_LEAD_SPECIALIST_ID}</span>
-                    <span className="opacity-40">/</span>
-                    <span>{acpConnected ? "live" : "reconnecting"}</span>
-                  </div>
-                </div>
+        <header className="shrink-0 border-b border-desktop-border px-4 py-3" data-testid="team-run-page-header">
+          <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <svg className="h-4 w-4 shrink-0 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-2.844.813a1.125 1.125 0 0 0 0 2.124l2.844.813.813 2.844a1.125 1.125 0 0 0 2.124 0l.813-2.844 2.844-.813a1.125 1.125 0 0 0 0-2.124l-2.844-.813-.813-2.844a1.125 1.125 0 0 0-2.124 0ZM18.259 8.715 18 9.75l-1.035.259a.75.75 0 0 0 0 1.482L18 11.75l.259 1.035a.75.75 0 0 0 1.482 0L20 11.75l1.035-.259a.75.75 0 0 0 0-1.482L20 9.75l-.259-1.035a.75.75 0 0 0-1.482 0ZM16.894 20.567 16.5 22.125l-1.558.394a.562.562 0 0 0 0 1.081l1.558.394.394 1.558a.562.562 0 0 0 1.081 0l.394-1.558 1.558-.394a.562.562 0 0 0 0-1.081l-1.558-.394-.394-1.558a.562.562 0 0 0-1.081 0Z" />
+              </svg>
+              <div className="min-w-0">
+                <h1 className="truncate text-[13px] font-semibold text-desktop-text-primary">
+                  {session.name ?? "Team run"}
+                </h1>
+                <p className="text-[11px] text-desktop-text-secondary">
+                  Follow the lead session, spawned member sessions, and inline reports back to lead
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded border border-desktop-border px-2 py-1 text-[10px] text-desktop-text-secondary">
+                <span>Session:</span>
+                <code className="font-mono text-desktop-text-primary">{sessionId.slice(0, 8)}…</code>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded border border-desktop-border px-2 py-1 text-[10px] text-desktop-text-secondary">
+                <span>{formatRelativeTime(session.createdAt)}</span>
+                <span className="opacity-40">/</span>
+                <span>{session.provider ?? "auto"}</span>
+                <span className="opacity-40">/</span>
+                <span>{acpConnected ? "live" : "reconnecting"}</span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              <Link
+                href={`/workspace/${workspaceId}/team`}
+                className="inline-flex items-center gap-1.5 rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+                Team
+              </Link>
               <button
                 type="button"
                 onClick={() => setRefreshKey((current) => current + 1)}
-                className="rounded-lg border border-desktop-border px-3 py-1.5 text-sm font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                className="rounded-md bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
               >
                 Refresh
               </button>
               <Link
                 href={`/workspace/${workspaceId}/sessions/${sessionId}`}
-                className="rounded-lg bg-desktop-accent px-3 py-1.5 text-sm font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+                className="rounded-md bg-desktop-accent px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
               >
                 Open raw session
               </Link>
@@ -1609,10 +1765,10 @@ export function TeamRunPageClient() {
                   ) : (
                     <div className="divide-y divide-desktop-border rounded-[14px] border border-desktop-border bg-desktop-bg-primary">
                       {deliverables.map((item) => (
-                        <button
+                      <button
                           key={item.id}
                           type="button"
-                          onClick={() => item.sessionId && setSelectedSessionId(item.sessionId)}
+                          onClick={() => item.sessionId && focusSessionBlock(item.sessionId)}
                           disabled={!item.sessionId}
                           className={`flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition ${
                             item.sessionId ? "hover:bg-desktop-bg-active/70" : "cursor-default"
@@ -1644,35 +1800,38 @@ export function TeamRunPageClient() {
             <div className="border-b border-desktop-border px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <div>
-                  <h2 className="text-base font-semibold text-desktop-text-primary">Coordination Feed</h2>
+                  <h2 className="text-base font-semibold text-desktop-text-primary">Session Timeline</h2>
                   <p className="mt-0.5 text-xs leading-5 text-desktop-text-secondary">
-                    Auto-refreshing lead and member transcripts. Reports back to lead and pending questions stay inline with each lane.
+                    Lead decisions stay on the main line. Member sessions appear inline when delegated, then report back into the lead flow.
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
                   <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
-                    {sessionLanes.length} lanes
+                    {sessionTimeline.length} events
                   </span>
                   <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
-                    {sessionStreams.length} sessions
+                    {Math.max(sessionLanes.length - 1, 0)} members
                   </span>
                 </div>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {sessionLanes.length === 0 ? (
-                  <EmptyPanel message="No coordination lanes yet." />
+              {sessionTimeline.length === 0 ? (
+                  <EmptyPanel message="No lead timeline yet." />
               ) : (
                 <div className="space-y-3">
-                  {sessionLanes.map((lane) => (
-                    <SessionLaneCard
-                      key={lane.id}
-                      lane={lane}
+                  {sessionTimeline.map((item) => (
+                    <SessionTimelineCard
+                      key={item.id}
+                      item={item}
                       activeSessionId={selectedSessionId}
                       workspaceId={workspaceId}
-                      onSelectSession={() => setSelectedSessionId(lane.sessionId)}
-                      onOpenViewer={() => setSelectedSessionForModal(lane.sessionId)}
+                      sessionBlockRef={item.memberLane ? (node) => {
+                        sessionBlockRefs.current[item.memberLane!.sessionId] = node;
+                      } : undefined}
+                      onSelectSession={item.memberLane ? () => focusSessionBlock(item.memberLane!.sessionId) : undefined}
+                      onOpenViewer={() => setSelectedSessionForModal(item.memberLane?.sessionId ?? sessionId)}
                       onSubmitQuestion={handleSubmitSessionQuestion}
                     />
                   ))}
@@ -1698,7 +1857,7 @@ export function TeamRunPageClient() {
                       <button
                         key={member.id}
                         type="button"
-                        onClick={() => member.sessionId && setSelectedSessionId(member.sessionId)}
+                        onClick={() => member.sessionId && focusSessionBlock(member.sessionId)}
                         disabled={!member.sessionId}
                         className={`flex w-full items-start gap-2.5 px-3 py-2 text-left transition ${
                           isSelected
@@ -1983,64 +2142,62 @@ function snippetBodyClass(snippet: SessionLaneSnippet): string {
   return "border-desktop-border bg-desktop-bg-primary";
 }
 
-function SessionLaneCard({
-  lane,
+function SessionTimelineCard({
+  item,
   activeSessionId,
   workspaceId,
+  sessionBlockRef,
   onSelectSession,
   onOpenViewer,
   onSubmitQuestion,
 }: {
-  lane: SessionLaneItem;
+  item: SessionTimelineItem;
   activeSessionId?: string;
   workspaceId: string;
-  onSelectSession: () => void;
+  sessionBlockRef?: (node: HTMLDivElement | null) => void;
+  onSelectSession?: () => void;
   onOpenViewer: () => void;
   onSubmitQuestion?: (sessionId: string, toolCallId: string, response: Record<string, unknown>) => Promise<void>;
 }) {
-  const isActive = lane.sessionId === activeSessionId;
-  const pendingQuestionMessage = lane.pendingQuestion ? {
-    id: `${lane.pendingQuestion.sessionId}-${lane.pendingQuestion.toolCallId}`,
+  const lane = item.memberLane;
+  const isActive = lane?.sessionId === activeSessionId;
+  const pendingQuestionMessage = item.pendingQuestion ? {
+    id: `${item.pendingQuestion.sessionId}-${item.pendingQuestion.toolCallId}`,
     role: "tool",
     content: "AskUserQuestion",
     timestamp: new Date(),
     toolName: "AskUserQuestion",
     toolStatus: "awaiting_input",
-    toolCallId: lane.pendingQuestion.toolCallId,
+    toolCallId: item.pendingQuestion.toolCallId,
     toolKind: "ask-user-question",
     toolRawInput: {
-      questions: lane.pendingQuestion.questions,
-      answers: lane.pendingQuestion.answers,
+      questions: item.pendingQuestion.questions,
+      answers: item.pendingQuestion.answers,
     },
   } satisfies ChatMessage : null;
 
   return (
-    <div className={`rounded-[12px] border ${isActive ? "border-cyan-300 bg-cyan-50/50 dark:border-cyan-800 dark:bg-cyan-950/20" : "border-desktop-border bg-desktop-bg-secondary"}`}>
+    <div className="rounded-[12px] border border-desktop-border bg-desktop-bg-secondary">
       <div className="flex items-start justify-between gap-2.5 px-3 py-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onSelectSession}
-              className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] transition ${roleChipClass(lane.roleId, lane.isLead ? "strong" : "soft")}`}
-            >
-              {lane.actor}
-            </button>
-            <span className="rounded-full border border-desktop-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-desktop-text-secondary">
-              {lane.badge}
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] ${roleChipClass(item.actorRoleId, item.actorRoleId === TEAM_LEAD_SPECIALIST_ID ? "strong" : "soft")}`}>
+              {item.actor}
             </span>
-            <SessionStatusPill status={lane.status} />
-            <span className="text-[10px] text-desktop-text-muted">{lane.lastUpdatedLabel}</span>
-            <span className="text-[10px] text-desktop-text-muted opacity-40">/</span>
-            <span className="text-[10px] text-desktop-text-muted">{lane.eventCount} updates</span>
-            {lane.provider && (
-              <>
-                <span className="text-[10px] text-desktop-text-muted opacity-40">/</span>
-                <span className="text-[10px] text-desktop-text-muted">{lane.provider}</span>
-              </>
-            )}
+            <span className="text-[10px] text-desktop-text-muted">{item.timestamp}</span>
           </div>
-          <div className="mt-1 truncate text-[13px] font-semibold text-desktop-text-primary">{lane.sessionName}</div>
+          <div className="mt-1 text-[13px] font-semibold text-desktop-text-primary">
+            {item.title}
+          </div>
+          {item.summary && (
+            <div className={`mt-1 text-[12px] leading-5 ${
+              item.tone === "blocked"
+                ? "text-rose-700 dark:text-rose-300"
+                : "text-desktop-text-secondary"
+            }`}>
+              {item.summary}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -2051,7 +2208,7 @@ function SessionLaneCard({
             Open viewer
           </button>
           <Link
-            href={`/workspace/${workspaceId}/sessions/${lane.sessionId}`}
+            href={`/workspace/${workspaceId}/sessions/${item.sessionId}`}
             className="rounded-[10px] bg-desktop-accent px-2 py-1 text-[10px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
           >
             Raw session
@@ -2059,54 +2216,98 @@ function SessionLaneCard({
         </div>
       </div>
 
-      <div className="border-t border-desktop-border/80 px-3 py-2">
-        <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-muted">
-          <span>Transcript</span>
-          <span>{lane.snippets.length} items</span>
-        </div>
-        {lane.snippets.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-desktop-border px-3 py-2 text-[11px] text-desktop-text-secondary">
-            No transcript content yet.
-          </div>
-        ) : (
-          <div className="max-h-24 space-y-1.5 overflow-y-auto pr-1">
-            {lane.snippets.map((snippet) => (
-              <div
-                key={snippet.id}
-                className={`flex gap-2 ${snippet.kind === "user" ? "justify-end" : "justify-start"}`}
-              >
-                {snippet.kind !== "user" && (
-                  <div className="flex w-14 shrink-0 flex-col items-end pt-0.5 text-right">
-                    <span className={`h-2 w-2 rounded-full ${snippetDotClass(snippet)}`} />
-                    <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-desktop-text-muted">
-                      {snippet.label}
-                    </span>
-                  </div>
-                )}
-                <div className={`min-w-0 ${snippet.kind === "user" ? "max-w-[85%]" : "flex-1"}`}>
-                  {snippet.kind === "user" && (
-                    <div className="mb-0.5 text-right text-[9px] font-semibold uppercase tracking-[0.12em] text-desktop-text-muted">
-                      {snippet.label}
-                    </div>
-                  )}
-                  <div className={`rounded-[10px] border px-2.5 py-1.5 ${snippetBodyClass(snippet)}`}>
-                    <div className="line-clamp-1 text-[11px] leading-5 text-desktop-text-secondary">{snippet.text}</div>
-                  </div>
-                </div>
+      {lane && (
+        <div
+          ref={sessionBlockRef}
+          className={`mx-3 mb-3 rounded-[10px] border ${isActive ? "border-cyan-300 bg-cyan-50/50 dark:border-cyan-800 dark:bg-cyan-950/20" : "border-desktop-border bg-desktop-bg-primary"}`}
+        >
+          <div className="flex items-start justify-between gap-2.5 px-3 py-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onSelectSession}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] transition ${roleChipClass(lane.roleId, "soft")}`}
+                >
+                  {lane.actor}
+                </button>
+                <span className="rounded-full border border-desktop-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-desktop-text-secondary">
+                  member session
+                </span>
+                <SessionStatusPill status={lane.status} />
+                <span className="text-[10px] text-desktop-text-muted">{lane.lastUpdatedLabel}</span>
+                <span className="text-[10px] text-desktop-text-muted opacity-40">/</span>
+                <span className="text-[10px] text-desktop-text-muted">{lane.eventCount} updates</span>
               </div>
-            ))}
+              <div className="mt-1 truncate text-[13px] font-semibold text-desktop-text-primary">{lane.sessionName}</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onOpenViewer}
+                className="rounded-[10px] border border-desktop-border bg-desktop-bg-secondary px-2 py-1 text-[10px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+              >
+                Open viewer
+              </button>
+              <Link
+                href={`/workspace/${workspaceId}/sessions/${lane.sessionId}`}
+                className="rounded-[10px] bg-desktop-accent px-2 py-1 text-[10px] font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+              >
+                Raw session
+              </Link>
+            </div>
           </div>
-        )}
-      </div>
 
-      {pendingQuestionMessage && onSubmitQuestion && lane.pendingQuestion && (
+          <div className="border-t border-desktop-border/80 px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-muted">
+              <span>Recent transcript</span>
+              <span>{lane.snippets.length} items</span>
+            </div>
+            {lane.snippets.length === 0 ? (
+              <div className="rounded-[10px] border border-dashed border-desktop-border px-3 py-2 text-[11px] text-desktop-text-secondary">
+                No transcript content yet.
+              </div>
+            ) : (
+              <div className="h-[120px] space-y-1.5 overflow-y-auto pr-1">
+                {lane.snippets.map((snippet) => (
+                  <div
+                    key={snippet.id}
+                    className={`flex gap-2 ${snippet.kind === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    {snippet.kind !== "user" && (
+                      <div className="flex w-14 shrink-0 flex-col items-end pt-0.5 text-right">
+                        <span className={`h-2 w-2 rounded-full ${snippetDotClass(snippet)}`} />
+                        <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-desktop-text-muted">
+                          {snippet.label}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`min-w-0 ${snippet.kind === "user" ? "max-w-[85%]" : "flex-1"}`}>
+                      {snippet.kind === "user" && (
+                        <div className="mb-0.5 text-right text-[9px] font-semibold uppercase tracking-[0.12em] text-desktop-text-muted">
+                          {snippet.label}
+                        </div>
+                      )}
+                      <div className={`rounded-[10px] border px-2.5 py-1.5 ${snippetBodyClass(snippet)}`}>
+                        <div className="line-clamp-1 text-[11px] leading-5 text-desktop-text-secondary">{snippet.text}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {pendingQuestionMessage && onSubmitQuestion && item.pendingQuestion && (
         <div className="border-t border-desktop-border/80 px-3 py-2">
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-muted">
             Awaiting input
           </div>
           <AskUserQuestionBubble
             message={pendingQuestionMessage}
-            onSubmit={(toolCallId, response) => onSubmitQuestion(lane.pendingQuestion!.sessionId, toolCallId, response)}
+            onSubmit={(toolCallId, response) => onSubmitQuestion(item.pendingQuestion!.sessionId, toolCallId, response)}
           />
         </div>
       )}
