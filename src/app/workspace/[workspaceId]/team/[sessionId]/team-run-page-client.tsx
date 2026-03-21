@@ -397,6 +397,19 @@ function extractHistoryText(update?: SessionHistoryEntry["update"]): string | un
   return summarizeText(joined || undefined);
 }
 
+function extractFullHistoryText(update?: SessionHistoryEntry["update"]): string | undefined {
+  if (!update?.content) return undefined;
+  if (!Array.isArray(update.content)) {
+    return update.content.text?.trim() || undefined;
+  }
+
+  const joined = update.content
+    .map((item) => item.text ?? item.content?.text ?? "")
+    .join(" ")
+    .trim();
+  return joined || undefined;
+}
+
 function resolveDelegationTarget(update?: SessionHistoryEntry["update"]): string | undefined {
   const rawInput = update?.rawInput;
   if (!rawInput) return undefined;
@@ -1547,7 +1560,7 @@ export function TeamRunPageClient() {
       }
 
       if (updateType === "agent_message") {
-        const text = summarizeText(extractHistoryText(update), 260);
+        const text = extractFullHistoryText(update);
         return text
           ? [{
             id: `${sessionId}-lead-message-${index}`,
