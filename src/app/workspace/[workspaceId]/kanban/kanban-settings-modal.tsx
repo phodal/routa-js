@@ -42,6 +42,7 @@ export interface KanbanSettingsModalProps {
   specialists: SpecialistOption[];
   specialistLanguage: KanbanSpecialistLanguage;
   onClose: () => void;
+  onClearAll: () => Promise<void>;
   onSave: (
     columns: KanbanBoardInfo["columns"],
     columnAutomation: Record<string, ColumnAutomationConfig>,
@@ -314,6 +315,7 @@ export function KanbanSettingsModal({
   specialists,
   specialistLanguage,
   onClose,
+  onClearAll,
   onSave,
 }: KanbanSettingsModalProps) {
   const initialEditableColumns = useMemo(
@@ -331,6 +333,7 @@ export function KanbanSettingsModal({
   );
   const [selectedColumnId, setSelectedColumnId] = useState<string>(board.columns[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
   const [showRuntimeSettings, setShowRuntimeSettings] = useState(false);
   const [specialistCategory, setSpecialistCategory] = useState<SpecialistCategory>("kanban");
   const [kanbanExportWorkspaceId, setKanbanExportWorkspaceId] = useState<string>(() =>
@@ -557,6 +560,15 @@ export function KanbanSettingsModal({
       );
     } finally {
       setSaving(false);
+    }
+  };
+  const handleClearAll = async () => {
+    if (!window.confirm("Clear all cards from this workspace board?")) return;
+    setClearingAll(true);
+    try {
+      await onClearAll();
+    } finally {
+      setClearingAll(false);
     }
   };
 
@@ -878,7 +890,6 @@ export function KanbanSettingsModal({
                 </SectionCard>
               </div>
             </aside>
-
             <main className="min-h-0 overflow-y-auto bg-white p-2 dark:bg-[#0d1118] sm:p-2.5 xl:p-3">
               {selectedColumn ? (
                 <div className="space-y-3">
@@ -899,7 +910,6 @@ export function KanbanSettingsModal({
                         className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100"
                       />
                     </label>
-
                     <label className="w-40 shrink-0 space-y-1 text-sm font-medium">
                       <span className="text-slate-700 dark:text-slate-300">Stage type</span>
                       <SelectControl
@@ -915,7 +925,6 @@ export function KanbanSettingsModal({
                         ))}
                       </SelectControl>
                     </label>
-
                     <label className="w-40 shrink-0 space-y-1 text-sm font-medium">
                       <span className="text-slate-700 dark:text-slate-300">Column Width</span>
                       <SelectControl
@@ -932,7 +941,6 @@ export function KanbanSettingsModal({
                         <option value="wide">Wide</option>
                       </SelectControl>
                     </label>
-
                     <label className="flex h-10 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-300">
                       <input
                         type="checkbox"
@@ -1034,18 +1042,24 @@ export function KanbanSettingsModal({
                   </div>
                 ) : null}
               </div>
-
               <div className="flex items-center justify-end gap-2">
                 <button
+                  onClick={() => void handleClearAll()}
+                  disabled={saving || clearingAll}
+                  className="mr-auto rounded-xl border border-rose-200 px-4 py-1.5 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                >
+                  {clearingAll ? "Clearing..." : "Clear all cards"}
+                </button>
+                <button
                   onClick={onClose}
-                  disabled={saving}
+                  disabled={saving || clearingAll}
                   className="rounded-xl border border-slate-200 px-4 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#111722]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => void handleSave()}
-                  disabled={saving}
+                  disabled={saving || clearingAll}
                   className="rounded-xl bg-slate-900 px-5 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
                 >
                   {saving ? "Saving..." : "Save board settings"}
@@ -1235,7 +1249,6 @@ function ColumnAutomationWorkspace({
                                   ))))}
                                 />
                               </ConfigField>
-
                               <ConfigField label={`Role ${index + 1}`}>
                                 <SelectControl
                                   aria-label={index === 0 ? "Role" : `Role ${index + 1}`}
@@ -1425,17 +1438,7 @@ function StatPill({ label, value, tone }: { label: string; value: string; tone: 
   );
 }
 
-function SectionCard({
-  eyebrow,
-  title,
-  description,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
+function SectionCard({ eyebrow, title, description, children }: { eyebrow: string; title: string; description?: string; children: ReactNode }) {
   return (
     <section className="border-b border-slate-200/80 pb-2.5 last:border-b-0 dark:border-slate-800">
       <div className="mb-1.5 space-y-0.5">
@@ -1448,13 +1451,7 @@ function SectionCard({
   );
 }
 
-function ConfigField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function ConfigField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block min-w-0 space-y-1">
       <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300">{label}</span>

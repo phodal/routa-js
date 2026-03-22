@@ -47,6 +47,7 @@ describe("KanbanSettingsModal", () => {
         specialists={[{ id: "kanban-review-guard", name: "Review Guard", role: "GATE" }]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={onSave}
       />,
     );
@@ -92,6 +93,7 @@ describe("KanbanSettingsModal", () => {
         specialists={[{ id: "verify", name: "Verifier", role: "GATE" }]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={vi.fn(async () => {})}
       />,
     );
@@ -118,6 +120,7 @@ describe("KanbanSettingsModal", () => {
         ]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={vi.fn(async () => {})}
       />,
     );
@@ -141,12 +144,40 @@ describe("KanbanSettingsModal", () => {
         specialists={[{ id: "kanban-review-guard", name: "Review Guard", role: "GATE" }]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={vi.fn(async () => {})}
       />,
     );
 
     expect(screen.queryByText("Column workspace")).toBeNull();
     expect(screen.queryByText("Configure in stage map")).toBeNull();
+  });
+
+  it("clears all cards after confirmation", async () => {
+    const onClearAll = vi.fn(async () => {});
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <KanbanSettingsModal
+        board={board}
+        columnAutomation={{}}
+        availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[]}
+        specialistLanguage="en"
+        onClose={vi.fn()}
+        onClearAll={onClearAll}
+        onSave={vi.fn(async () => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /clear all cards/i }));
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith("Clear all cards from this workspace board?");
+      expect(onClearAll).toHaveBeenCalledTimes(1);
+    });
+
+    confirmSpy.mockRestore();
   });
 
   it("treats blocked as a manual-only lane when saving", async () => {
@@ -164,6 +195,7 @@ describe("KanbanSettingsModal", () => {
         specialists={[]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={onSave}
       />,
     );
@@ -198,6 +230,7 @@ describe("KanbanSettingsModal", () => {
         specialists={[]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={onSave}
       />,
     );
@@ -235,6 +268,7 @@ describe("KanbanSettingsModal", () => {
         specialists={[]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={vi.fn(async () => {})}
       />,
     );
@@ -256,6 +290,7 @@ describe("KanbanSettingsModal", () => {
         specialists={[]}
         specialistLanguage="en"
         onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
         onSave={onSave}
       />,
     );
