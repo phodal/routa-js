@@ -2,6 +2,7 @@
 title: "Kanban session history still lacks durable lane metadata"
 date: "2026-03-15"
 status: "open"
+area: kanban
 labels: ["Agent", "Kanban", "UX"]
 ---
 

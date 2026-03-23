@@ -1,7 +1,8 @@
 ---
 title: "Issue #100 实现状态分析 - Kanban Agent 多任务创建与列转换自动化"
 date: 2026-03-09
-status: analysis
+status: investigating
+area: kanban
 issue: https://github.com/phodal/routa/issues/100
 language: zh-CN
 ---
@@ -203,4 +204,3 @@ language: zh-CN
 5. 构建 agent 活动 UI 面板
 
 详细分析见: `docs/issues/2026-03-09-issue-100-implementation-analysis.md`
-

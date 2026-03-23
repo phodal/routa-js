@@ -1,7 +1,9 @@
 ---
+title: "Card Detail Rerun Mechanism Issues"
 date: 2026-03-11
 status: resolved
 severity: high
+area: kanban
 components: [kanban, mcp-tools, agent-trigger]
 resolved_date: 2026-03-11
 ---

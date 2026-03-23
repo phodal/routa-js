@@ -2,6 +2,7 @@
 date: 2026-03-15
 title: Kanban Repository Lifecycle Fix
 status: resolved
+area: kanban
 labels: [bug, kanban, ux]
 ---
 
@@ -116,4 +117,3 @@ Manual testing confirmed:
 commit 2a1b788
 fix(kanban): add inline RepoPicker for empty repository state
 ```
-

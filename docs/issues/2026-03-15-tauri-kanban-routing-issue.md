@@ -1,8 +1,10 @@
 ---
+title: "Tauri Kanban Routing Issue"
 date: 2026-03-15
 agent: Augment Agent (Claude Sonnet 4.5)
 status: resolved
 severity: high
+area: desktop
 component: tauri-frontend
 ---
 
@@ -93,4 +95,3 @@ The issue was resolved by updating the Rust backend's static file serving logic 
 - ✅ Kanban page loads correctly on Tauri backend (port 3210)
 - ✅ No more workspace detail page showing when navigating to kanban
 - ✅ Correct page content: Kanban columns, task input, no HomeInput component
-

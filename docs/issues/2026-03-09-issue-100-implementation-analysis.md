@@ -1,7 +1,8 @@
 ---
 title: "Issue #100 Implementation Analysis - Kanban Agent Multi-task Creation and Column Transition Automation"
 date: 2026-03-09
-status: analysis
+status: investigating
+area: kanban
 issue: https://github.com/phodal/routa/issues/100
 ---
 
@@ -289,5 +290,4 @@ provide_artifact: tool({
 3. Integrate screenshot capture
 4. Enforce artifact requirements in transitions
 5. Build agent activity UI panel
-
 
