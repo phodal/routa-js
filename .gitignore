@@ -99,6 +99,7 @@ logs
 # pnpm-lock.yaml
 test-results
 .routa
+.entrix/
 apps/desktop/src-tauri/icons/android/
 apps/desktop/src-tauri/icons/ios/
 .next-desktop/
