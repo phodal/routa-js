@@ -12,6 +12,7 @@ import { getKanbanAutomationSteps, type KanbanAutomationStep } from "@/core/mode
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import { KanbanCardActivityPanel } from "./kanban-card-activity";
 import { KanbanDescriptionEditor } from "./kanban-description-editor";
+import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import {
   createKanbanSpecialistResolver,
   getOrderedSessionIds,
@@ -212,6 +213,32 @@ export function KanbanCardDetail({
                 }
               }}
             />
+          </DetailSection>
+
+          <DetailSection
+            title="Progress Notes"
+            description={compactMode ? undefined : "Read-only notes appended by downstream stages after the story description is frozen."}
+            compact={compactMode}
+          >
+            <div className="rounded-2xl border border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-[#0d1018]">
+              <div className={`border-b border-gray-200/70 dark:border-gray-700 ${compactMode ? "px-3 py-2" : "px-4 py-2.5"}`}>
+                <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  Appended comments
+                </div>
+              </div>
+              {task.comment?.trim() ? (
+                <div className={compactMode ? "px-3 py-2.5" : "px-4 py-3"}>
+                  <MarkdownViewer
+                    content={task.comment}
+                    className="prose prose-sm max-w-none text-gray-800 dark:prose-invert dark:text-gray-200"
+                  />
+                </div>
+              ) : (
+                <div className={`text-sm text-gray-500 dark:text-gray-400 ${compactMode ? "px-3 py-2.5" : "px-4 py-3"}`}>
+                  No progress notes yet.
+                </div>
+              )}
+            </div>
           </DetailSection>
 
           <DetailSection
