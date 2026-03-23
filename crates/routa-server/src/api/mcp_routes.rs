@@ -326,7 +326,12 @@ fn inject_workspace_id(args: &mut serde_json::Value, workspace_id: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::inject_workspace_id;
+    use std::sync::Arc;
+
+    use super::{
+        build_tool_list_public, execute_tool_public, inject_workspace_id,
+        normalize_tool_name_public,
+    };
 
     #[test]
     fn inject_workspace_id_sets_for_non_object_args() {
@@ -353,5 +358,43 @@ mod tests {
             args,
             serde_json::json!({ "workspaceId": "existing", "name": "demo" })
         );
+    }
+
+    #[test]
+    fn build_tool_list_public_contains_expected_tool() {
+        let tools = build_tool_list_public();
+        let has_delegate_tool = tools.iter().any(|tool| {
+            tool.get("name").and_then(|v| v.as_str()) == Some("delegate_task_to_agent")
+        });
+        assert!(
+            has_delegate_tool,
+            "delegate_task_to_agent should exist in MCP tool list"
+        );
+    }
+
+    #[test]
+    fn normalize_tool_name_public_handles_aliases() {
+        assert_eq!(
+            normalize_tool_name_public("routa-coordination_list_agents"),
+            "list_agents"
+        );
+        assert_eq!(
+            normalize_tool_name_public("kanban-planning-mcp_create_card"),
+            "create_card"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_tool_public_returns_error_for_unknown_tool() {
+        let db = crate::db::Database::open(":memory:").expect("open in-memory database");
+        let state: crate::state::AppState = Arc::new(crate::state::AppStateInner::new(db));
+        state
+            .workspace_store
+            .ensure_default()
+            .await
+            .expect("ensure default workspace");
+
+        let result = execute_tool_public(&state, "unknown_tool_name", &serde_json::json!({})).await;
+        assert_eq!(result.get("isError").and_then(|v| v.as_bool()), Some(true));
     }
 }
