@@ -19,6 +19,7 @@ import { useAgentsRpc } from "@/client/hooks/use-agents-rpc";
 import { useNotes } from "@/client/hooks/use-notes";
 import { DesktopLayout } from "@/client/components/desktop-layout";
 import { AgentInstallPanel } from "@/client/components/agent-install-panel";
+import { WorkspaceTabBar } from "@/client/components/workspace-tab-bar";
 import { SessionsOverview } from "@/app/workspace/[workspaceId]/sessions-overview";
 import { BackgroundTaskInfo, TaskInfo, SessionInfo, KanbanBoardInfo } from "@/app/workspace/[workspaceId]/types";
 import { NoteTasksTab } from "@/app/workspace/[workspaceId]/note-tasks-tab";
@@ -510,17 +511,13 @@ export function WorkspacePageClient({
             </div>
 
             <div className="xl:hidden">
-              <div className="mb-4 flex items-center gap-0 border-b border-desktop-border" data-testid="workspace-tab-bar">
-                <DesktopTabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>
-                  Overview
-                </DesktopTabButton>
-                <DesktopTabButton active={activeTab === "notes"} onClick={() => setActiveTab("notes")}>
-                  Notes {notesHook.notes.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({notesHook.notes.length})</span>}
-                </DesktopTabButton>
-                <DesktopTabButton active={activeTab === "activity"} onClick={() => setActiveTab("activity")}>
-                  Activity {bgTasks.length > 0 && <span className="ml-1 text-[10px] opacity-60" data-testid="workspace-tab-count">({bgTasks.length})</span>}
-                </DesktopTabButton>
-              </div>
+              <WorkspaceTabBar
+                className="mb-4"
+                activeTab={activeTab}
+                notesCount={notesHook.notes.length}
+                activityCount={bgTasks.length}
+                onTabChange={setActiveTab}
+              />
 
               {activeTab === "overview" && overviewContent}
               {activeTab === "notes" && notesContent}
@@ -541,21 +538,6 @@ export function WorkspacePageClient({
 }
 
 // ─── Desktop-optimized Sub-components ──────────────────────────────
-
-function DesktopTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-      <button
-      onClick={onClick}
-      className={`px-3 py-1.5 text-[12px] font-medium transition-colors ${
-        active
-          ? "border-b-2 border-b-desktop-accent bg-desktop-bg-active text-desktop-accent"
-          : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function CompactStat({
   label,

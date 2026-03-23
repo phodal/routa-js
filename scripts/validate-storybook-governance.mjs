@@ -25,6 +25,9 @@ const requiredStories = {
   "src/client/components/desktop-layout.stories.tsx": ["Default", "LoadingSwitcher", "DarkMode"],
   "src/client/components/desktop-sidebar.stories.tsx": ["OverviewActive", "KanbanActive", "FocusState", "DarkMode"],
   "src/client/components/desktop-nav-rail.stories.tsx": ["OverviewActive", "TracesActive", "FocusState", "DarkMode"],
+  "src/client/components/workspace-tab-bar.stories.tsx": ["OverviewActive", "NotesActive", "ActivityActive", "FocusState", "DarkMode"],
+  "src/client/components/traces-page-header.stories.tsx": ["Default", "NoSessionSelected", "FocusState", "DarkMode"],
+  "src/client/components/traces-view-tabs.stories.tsx": ["ChatActive", "TraceActive", "AgUiActive", "FocusState", "DarkMode"],
   "src/client/components/button.stories.tsx": ["Primary", "Secondary", "Danger", "FocusState", "DarkMode"],
 };
 

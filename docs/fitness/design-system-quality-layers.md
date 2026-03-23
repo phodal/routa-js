@@ -80,7 +80,7 @@ metrics:
   - `npm run storybook:governance`
   - `npm run test:e2e:desktop-shell`
 - 覆盖：
-  - `DesktopAppShell` / `DesktopLayout` / `DesktopSidebar` / `DesktopNavRail` / `Button` 的统一 Storybook story contract
+  - `DesktopAppShell` / `DesktopLayout` / `DesktopSidebar` / `DesktopNavRail` / `WorkspaceTabBar` / `TracesPageHeader` / `TracesViewTabs` / `Button` 的统一 Storybook story contract
   - `desktop-shell-header`
   - `desktop-shell-sidebar`
   - `workspace-tab-bar`
