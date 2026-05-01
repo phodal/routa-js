@@ -61,6 +61,77 @@ The delivery gate is a stacked decision path, not a single reviewer persona.
 - Entrix Fitness answers what should be true by enforcing hard gates, evidence requirements, and file budget or policy checks
 - Gate Specialist answers whether the card can move by verifying acceptance criteria and routing to Done, Dev, or human escalation
 
+### Kanban Automation Architecture
+
+```mermaid
+flowchart TB
+  subgraph UI["Workspace Kanban UI"]
+    Page["KanbanPageClient<br/>loads boards, tasks, sessions"]
+    BoardSurface["KanbanBoardSurface<br/>drag/drop and card detail"]
+    EventHook["useKanbanEvents<br/>SSE invalidation"]
+  end
+
+  subgraph Web["Web runtime: Next.js + TypeScript domain"]
+    BoardApi["/api/kanban/boards<br/>default board, runtime metadata"]
+    TaskApi["/api/tasks/[taskId]<br/>task update and transition path"]
+    McpTools["KanbanTools MCP surface<br/>create_card, move_card, update_card"]
+    GateEvaluator["Transition gates<br/>artifacts, story fields, contract, delivery"]
+    BoardStore["KanbanBoardStore<br/>memory, Postgres, or SQLite"]
+    TaskStore["TaskStore<br/>Task is the durable card"]
+    EventBus["EventBus<br/>COLUMN_TRANSITION and agent lifecycle"]
+    Orchestrator["KanbanWorkflowOrchestrator<br/>lane steps, fallback, dev watchdog"]
+    Queue["KanbanSessionQueue<br/>per-board concurrency and stale cleanup"]
+    AgentTrigger["agent-trigger<br/>prompt assembly and dispatch"]
+    AcpA2a["ACP or A2A session<br/>provider adapters"]
+    Broadcaster["KanbanEventBroadcaster<br/>/api/kanban/events"]
+  end
+
+  subgraph Desktop["Desktop runtime: Tauri + Axum/Rust"]
+    AxumApi["crates/routa-server<br/>/api/kanban and /api/tasks"]
+    Rpc["routa-core RPC<br/>kanban.* methods"]
+    RustStores["KanbanStore + TaskStore<br/>local SQLite"]
+    RustAutomation["tasks_automation<br/>ACP/A2A trigger and lane sessions"]
+    RustEvents["EventBus to SSE<br/>workspace kanban updates"]
+  end
+
+  Page --> BoardApi
+  Page --> TaskApi
+  Page --> EventHook
+  BoardSurface --> TaskApi
+  Broadcaster --> EventHook
+
+  BoardApi --> BoardStore
+  BoardApi --> Queue
+  TaskApi --> GateEvaluator
+  McpTools --> GateEvaluator
+  GateEvaluator --> TaskStore
+  GateEvaluator --> EventBus
+
+  EventBus --> Orchestrator
+  Orchestrator --> Queue
+  Queue --> AgentTrigger
+  AgentTrigger --> AcpA2a
+  AcpA2a --> EventBus
+  EventBus --> Broadcaster
+
+  AxumApi --> Rpc
+  Rpc --> RustStores
+  Rpc --> RustAutomation
+  RustAutomation --> AcpA2a
+  AxumApi --> RustEvents
+  RustEvents --> EventHook
+```
+
+Kanban is the coordination boundary where durable tasks, lane policy, and agent sessions meet.
+
+- A card is a `Task` with `boardId`, `columnId`, position, evidence, lane session history, and optional worktree context. A board is workspace-scoped and stores columns plus `automation` rules.
+- Default boards apply lane specialists to Backlog, Todo, Dev, Review, and Done. Blocked stays manual-only. Workspace metadata holds board-level runtime knobs such as auto provider, session concurrency, history memory, and dev session supervision.
+- UI drag/drop and API updates go through `/api/tasks/[taskId]`; MCP agents use the same board/card semantics through `KanbanTools`. The TypeScript path enforces remaining lane steps, required artifacts, required structured story fields, canonical story contracts, and delivery-readiness rules before a transition is accepted.
+- Accepted transitions persist the task, archive or clear the active lane session, emit `COLUMN_TRANSITION`, and notify `/api/kanban/events` so the board refreshes without polling.
+- The workflow orchestrator resolves entry or exit automation, applies ordered lane steps and card-level fallback agents, limits non-dev repeats, and hands session creation to `KanbanSessionQueue`. The queue defaults to one running card per board and drops stale jobs when a card has moved or already owns a session.
+- Session creation resolves provider precedence, creates a Dev worktree when needed, builds a lane-aware prompt with story readiness, artifacts, delivery gates, lane handoffs, memory, and flow guidance, then dispatches to ACP or A2A. Agent lifecycle events update lane history, start the next step, recover stalled Dev sessions, or auto-advance when configured.
+- The Rust/Axum desktop backend preserves the same board, card, RPC, SSE, store, and ACP/A2A trigger shape with local SQLite persistence. The TypeScript runtime currently carries the richer contract and delivery gate policy objects, while Rust mirrors the core automation and artifact/story-field gates.
+
 ## How It Works
 
 ```text
