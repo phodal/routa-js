@@ -83,3 +83,9 @@ Observed result:
   - `GET /api/feature-explorer/friction-profiles?workspaceId=default&repoPath=/Users/phodal/ai/routa-js` -> `200`
   - `POST /api/feature-explorer/friction-profiles?...` -> `200`
   - `entrix run --tier fast` -> `PASS`
+
+## Recurrence
+
+- 2026-05-01: the same cold-start symptom resurfaced on `GET /api/workspaces?status=active`.
+- Root cause was narrower than export-shape interop: Turbopack wrapped `workflow-orchestrator-singleton.ts` as an async module because it statically imported `agent-trigger.ts`; `getRoutaSystem()` requires the singleton synchronously during bootstrap, so the named export was not available.
+- Fixed by moving the `agent-trigger` import behind the already-async Kanban task-session start path. Cold-start `GET /api/workspaces?status=active` now returns `200` without the TypeError.

@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package routa.office.v1;
+
+message OfficeArtifact {
+  string source_kind = 1;
+  string title = 2;
+  repeated TextBlock text_blocks = 3;
+  repeated Sheet sheets = 4;
+  repeated Slide slides = 5;
+  repeated Diagnostic diagnostics = 6;
+  repeated MetadataEntry metadata = 7;
+  repeated ImageAsset images = 8;
+  repeated Table tables = 9;
+}
+
+message TextBlock {
+  string path = 1;
+  string text = 2;
+}
+
+message Sheet {
+  string name = 1;
+  repeated Row rows = 2;
+}
+
+message Table {
+  string path = 1;
+  repeated Row rows = 2;
+}
+
+message Row {
+  repeated Cell cells = 1;
+}
+
+message Cell {
+  string address = 1;
+  string text = 2;
+  string formula = 3;
+}
+
+message Slide {
+  uint32 index = 1;
+  string title = 2;
+  repeated TextBlock text_blocks = 3;
+}
+
+message Diagnostic {
+  string level = 1;
+  string message = 2;
+}
+
+message MetadataEntry {
+  string key = 1;
+  string value = 2;
+}
+
+message ImageAsset {
+  string id = 1;
+  string path = 2;
+  string content_type = 3;
+  bytes bytes = 4;
+}

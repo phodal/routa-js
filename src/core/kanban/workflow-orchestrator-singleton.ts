@@ -27,7 +27,6 @@ import {
   type AutomationSpecialistSummary,
 } from "./effective-task-automation";
 import { buildKanbanWorktreeNaming } from "./worktree-naming";
-import { getInternalApiOrigin, triggerAssignedTaskAgent } from "./agent-trigger";
 import { KanbanSessionQueue } from "./kanban-session-queue";
 import { getKanbanSessionConcurrencyLimit as getBoardSessionConcurrencyLimit } from "./board-session-limits";
 import { getKanbanDevSessionSupervision } from "./board-session-supervision";
@@ -246,6 +245,7 @@ async function startKanbanTaskSession(
     investValidation: buildTaskInvestValidation(taskForSession),
   };
 
+  const { getInternalApiOrigin, triggerAssignedTaskAgent } = await import("./agent-trigger");
   const triggerResult = await triggerAssignedTaskAgent({
     origin: getInternalApiOrigin(),
     workspaceId: nextTask.workspaceId,
