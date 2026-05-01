@@ -112,6 +112,32 @@ export interface TailTranslationDictionarySections {
     eventSourceDisconnected: string;
     historySnapshot: string;
     replayEvents: string;
+    officeWasmPocTitle: string;
+    officeWasmPocDescription: string;
+    officeWasmPocSelectFile: string;
+    officeWasmPocStatus: string;
+    officeWasmPocFile: string;
+    officeWasmPocArtifactType: string;
+    officeWasmPocNoResult: string;
+    officeWasmPocTopFields: string;
+    officeWasmPocParsedOutput: string;
+    unsupportedOfficeFormat: string;
+    officeWasmPocBytes: string;
+    officeWasmPocStatusIdle: string;
+    officeWasmPocStatusInitializing: string;
+    officeWasmPocStatusParsing: string;
+    officeWasmPocStatusReady: string;
+    officeWasmPocStatusError: string;
+    officeWasmPocVisualPreview: string;
+    officeWasmPocRawJson: string;
+    officeWasmPocSheet: string;
+    officeWasmPocSlide: string;
+    officeWasmPocNoSheets: string;
+    officeWasmPocNoSlides: string;
+    officeWasmPocNoDocumentBlocks: string;
+    officeWasmPocShowingFirstRows: string;
+    officeWasmPocShapes: string;
+    officeWasmPocTextRuns: string;
   };
 
   // UI components

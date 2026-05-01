@@ -75,6 +75,57 @@ xlsx -> Workbook.decode(Walnut.XlsxReader.ExtractXlsxProto(bytes, false))
 | `System.*.wasm` | 各 ~100-500KB | BCL 子集（约 20 个） |
 | 总计 | ~10-12MB | 完整运行时 |
 
+### 4.1. WASM bundle relationship
+
+`tmp/codex-app-analysis/extracted/webview/assets` 下共有 31 个 `.wasm` 文件。它们不是 31 个彼此直接调用的独立 WASM 模块，而是一套 manifest-driven 的 .NET browser-wasm/WebCIL bundle：
+
+- `dotnet.native.wfd2lrj4w6.wasm` 是唯一真正的 Mono/.NET native runtime WASM，导入 `env` 和 `wasi_snapshot_preview1`，导出 `memory`、`mono_wasm_add_assembly`、`mono_wasm_load_runtime`、`mono_wasm_invoke_jsexport`、`malloc`、`free` 等运行时 API。
+- 其余 30 个 `.wasm` 都是 WebCIL 包装的 .NET assembly。它们的 WASM import 都只有 `webcil`，export 也都是 `webcilVersion`、`webcilSize`、`getWebcilSize`、`getWebcilPayload`，由 .NET runtime 解包并作为 assembly 加载。
+- `artifact-tab-content.electron-DmcFg9h8.js` 内嵌启动清单，`mainAssemblyName` 是 `Walnut`；`resources.fingerprinting` 把哈希文件名映射回逻辑名，例如 `Walnut.nvqhqmqbjk.wasm -> Walnut.wasm`、`dotnet.native.wfd2lrj4w6.wasm -> dotnet.native.wasm`。
+- `resources.coreAssembly` 只包含 `System.Private.CoreLib` 和 `System.Runtime.InteropServices.JavaScript`；`resources.assembly` 包含 `Walnut`、`DocumentFormat.OpenXml*`、`Google.Protobuf` 和其余 `System.*` 依赖。
+
+```mermaid
+flowchart TD
+  A[Webview React/Vite bundle] --> B[artifact-tab-content.electron-DmcFg9h8.js]
+
+  B -->|docx / pptx / xlsx| C[Walnut reader loader]
+  B -->|csv / tsv| CSV[JS Workbook.fromCSV path]
+  B -->|pdf / tex| PDF[PDF/TeX preview path]
+
+  C --> D[dotnet.js]
+  D --> E[boot manifest<br/>mainAssemblyName = Walnut]
+  D --> F[dotnet.runtime.2hocyfcbj2.js]
+  D --> G[dotnet.native.lo0npp77z5.js]
+  D --> H[dotnet.native.wfd2lrj4w6.wasm<br/>Mono/.NET native runtime]
+
+  H -->|mono_wasm_add_assembly| I[Core assemblies<br/>WebCIL payload]
+  H -->|mono_wasm_add_assembly| J[Application assemblies<br/>WebCIL payload]
+
+  I --> I1[System.Private.CoreLib.wasm]
+  I --> I2[System.Runtime.InteropServices.JavaScript.wasm]
+
+  J --> W[Walnut.wasm<br/>main reader assembly]
+  J --> O[DocumentFormat.OpenXml*.wasm<br/>Open XML SDK]
+  J --> P[Google.Protobuf.wasm<br/>proto serialization]
+  J --> S[System.*.wasm<br/>XML / ZIP / LINQ / regex / crypto]
+
+  W --> X[DocxReader / PptxReader / XlsxReader]
+  X -->|ExtractDocxProto| DX[Document proto]
+  X -->|ExtractSlidesProto| PX[Presentation proto]
+  X -->|ExtractXlsxProto| WX[Workbook proto]
+```
+
+这意味着 Routa 如果参考这条路线，真正需要复制的架构不是“多个 WASM 模块互相依赖”，而是：
+
+```text
+JS artifact router
+  -> .NET browser-wasm loader
+  -> native runtime wasm
+  -> WebCIL assembly set
+  -> narrow reader ABI: bytes -> proto bytes
+  -> React artifact panels
+```
+
 ### 5. 渲染层
 
 解析后的 proto 交给三个 React panel：
@@ -311,6 +362,9 @@ Office binary <-> normalized proto artifact model <-> React panel/editor
 - `src/client/components/file-output-viewer.tsx` - 现有文件输出 viewer（仅代码/搜索）
 - `src/app/workspace/[workspaceId]/sessions/[sessionId]/use-session-canvas-artifacts.ts` - Canvas artifact 管理
 - `src/core/reposlide/deck-artifact.ts` - 现有 PPTX 下载（无预览）
+- `src/app/debug/office-wasm-poc/` - 当前本地 debug POC
+- `scripts/debug/check-office-wasm-poc-consistency.ts` - 校验 POC 和 Codex extracted bundle 的 ABI/manifest 一致性
+- `docs/references/office-document-viewer-wasm-reader/` - 后续参考实现目录和产品化拆分建议
 - `tmp/codex-app-analysis/` - Codex 逆向分析文件（ignored）
 
 ## Open Questions
@@ -320,6 +374,36 @@ Office binary <-> normalized proto artifact model <-> React panel/editor
 3. **Bundle 体积约束**: 桌面端 (Tauri) 对 WASM 体积容忍度高，Web 端是否需要按需加载？
 4. **Protobuf vs JSON**: Codex 用 protobuf 传输解析结果，我们是否需要这一层？还是直接用 JSON 更简单？
 5. **是否需要编辑能力**: Codex 的 Walnut 至少编译了 `ExportProtoToDocx` / `ExportProtoToPptx` / `ExportProtoToXlsx` 符号；Routa 是只需要预览，还是要预留 artifact 编辑与导出回 Office 的中间 schema？
+
+## Verification - 2026-05-01
+
+Implemented a debug proof-of-concept page at `/debug/office-wasm-poc` that loads Codex's extracted Walnut WASM reader assets from `tmp/codex-app-analysis/extracted/webview/assets`.
+
+Validated with local files from `~/Downloads`:
+
+- DOCX: `/Users/phodal/Downloads/office-wasm-poc-word-smoke.docx`
+- XLSX: `/Users/phodal/Downloads/test-file.xlsx`
+- PPTX: `/Users/phodal/Downloads/agentic_ui_proactive_agent_technical_blueprint.pptx`
+- PPTX with images/layout smoke: `/Users/phodal/Downloads/《此心安处》 方案 by GPT Pro.pptx`
+
+Checks run:
+
+```bash
+npm run debug:office-wasm:check
+npx eslint --max-warnings=0 'src/app/debug/office-wasm-poc/page-client.tsx'
+npx tsc --noEmit --pretty false
+```
+
+The consistency check validates that the POC runtime config, module filenames, reader ABI names, and panel contracts still match `tmp/codex-app-analysis/extracted/webview/assets/artifact-tab-content.electron-DmcFg9h8.js`.
+
+Additional browser smoke validation after adding the Codex-like PPTX split layout:
+
+- DOCX/DOCUMENT preview still renders expected text/table content.
+- XLSX/SPREADSHEET preview still renders sheet tabs and cells.
+- Existing PPTX preview still renders expected title content.
+- `《此心安处》` PPTX renders as left thumbnail rail plus right slide canvas, with scrollable page container, scrollable thumbnail rail, and 22 image-backed elements detected in the preview DOM.
+- Compared slide 12 against a LibreOffice-rasterized PPTX reference via `browser-use`; fixed alpha/background/line rendering and thumbnail font scaling so the thumbnail rail no longer shows oversized text or solid transparent shapes.
+- Removed the noisy debug copy above the preview; the POC now keeps only a compact upload/status bar and the folded raw proto JSON panel.
 
 ## References
 

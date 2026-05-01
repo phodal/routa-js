@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-browser</TargetFramework>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishTrimmed>true</PublishTrimmed>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <WasmMainJSPath>main.js</WasmMainJSPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" />
+    <PackageReference Include="DocumentFormat.OpenXml.Framework" />
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="System.IO.Packaging" />
+    <PackageReference Include="Microsoft.NET.Runtime.WebAssembly.Sdk" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="routa-office-artifact.proto" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
